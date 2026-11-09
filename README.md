@@ -1,6 +1,10 @@
 # DialyCare (دياكير)
 ### Clinical Adherence, Fluid & Diet Coaching Platform for ESRD Patients on Hemodialysis
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmohamedelsaadany-art%2FDialyCare)
+[![CI Build & Test](https://github.com/mohamedelsaadany-art/DialyCare/actions/workflows/ci.yml/badge.svg)](https://github.com/mohamedelsaadany-art/DialyCare/actions)
+[![GitHub release](https://img.shields.io/github/v/release/mohamedelsaadany-art/DialyCare?include_prereleases&color=1e6bb8)](https://github.com/mohamedelsaadany-art/DialyCare)
+
 DialyCare is a full-stack medical Progressive Web App (PWA) and clinical portal tailored specifically for End-Stage Renal Disease (ESRD) patients undergoing maintenance hemodialysis. It bridges the critical interdialytic gap between hospital sessions with automated reminders, adherence tracking, educational coaching, and real-time clinical broadcast & individual messaging from attending healthcare providers.
 
 ---
