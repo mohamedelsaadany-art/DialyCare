@@ -1,0 +1,50 @@
+[
+  {
+    "id": "diet_1",
+    "nameEn": "Low sodium meal",
+    "nameAr": "وجبة منخفضة الصوديوم",
+    "category": "sodium"
+  },
+  {
+    "id": "diet_2",
+    "nameEn": "Limited potassium",
+    "nameAr": "بوتاسيوم محدود",
+    "category": "potassium"
+  },
+  {
+    "id": "diet_3",
+    "nameEn": "Limited phosphorus",
+    "nameAr": "فوسفور محدود",
+    "category": "phosphorus"
+  },
+  {
+    "id": "diet_4",
+    "nameEn": "Adequate protein intake",
+    "nameAr": "كمية كافية من البروتين",
+    "category": "protein"
+  },
+  {
+    "id": "diet_5",
+    "nameEn": "Limited fluid in food",
+    "nameAr": "سوائل محدودة في الطعام",
+    "category": "fluid"
+  },
+  {
+    "id": "diet_6",
+    "nameEn": "Phosphate binder taken with meal",
+    "nameAr": "تناول مثبت الفوسفات مع الوجبة",
+    "category": "medication"
+  },
+  {
+    "id": "diet_7",
+    "nameEn": "Boiled / leached vegetables",
+    "nameAr": "خضروات منقوعة ومسلوقة مسبقاً",
+    "category": "potassium"
+  },
+  {
+    "id": "diet_8",
+    "nameEn": "Avoided processed meats and canned foods",
+    "nameAr": "تجنب اللحوم المصنعة والأغذية المعلبة",
+    "category": "sodium"
+  }
+]

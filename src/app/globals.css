@@ -1,26 +1,207 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Medical clinical color palette */
+  --color-primary: #1e6bb8;
+  --color-primary-hover: #175694;
+  --color-primary-light: #e0f2fe;
+  --color-primary-dark: #154f8a;
+
+  --color-teal: #0d9488;
+  --color-teal-light: #ccfbf1;
+
+  --color-success: #16a34a;
+  --color-success-light: #dcfce7;
+
+  --color-warning: #d97706;
+  --color-warning-light: #fef3c7;
+
+  --color-danger: #dc2626;
+  --color-danger-light: #fee2e2;
+
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8fafc;
+  --color-surface-muted: #f1f5f9;
+
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  --font-touch-min-height: 48px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-medical-blue: #1e6bb8;
+  --color-medical-blue-hover: #175694;
+  --color-medical-blue-light: #e0f2fe;
+  --color-medical-teal: #0d9488;
+  --color-medical-success: #16a34a;
+  --color-medical-warning: #d97706;
+  --color-medical-danger: #dc2626;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base Body Styles */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* RTL and LTR support */
+[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+  font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+}
+
+[dir="ltr"] {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Minimum accessible touch targets (at least 48px for patient ease) */
+button,
+a,
+input,
+select,
+textarea {
+  min-height: 48px;
+  touch-action: manipulation;
+}
+
+/* Custom Medical Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Form Input Medical Styles */
+.input-medical {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1.5px solid var(--color-border);
+  background-color: #ffffff;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.input-medical:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(30, 107, 184, 0.15);
+}
+
+.input-medical::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Card Component Styles */
+.card-medical {
+  background-color: #ffffff;
+  border-radius: 1rem;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease-in-out;
+}
+
+.card-medical:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.07);
+}
+
+/* Primary Medical Buttons */
+.btn-medical-primary {
+  min-height: 48px;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--color-primary);
+  transition: background-color 0.15s ease-in-out, transform 0.05s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-medical-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-medical-primary:active {
+  transform: scale(0.98);
+}
+
+/* Success Green Button */
+.btn-medical-success {
+  min-height: 48px;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--color-success);
+  transition: background-color 0.15s ease-in-out, transform 0.05s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-medical-success:hover {
+  background-color: #15803d;
+}
+
+.btn-medical-success:active {
+  transform: scale(0.98);
+}
+
+/* Danger Red Button */
+.btn-medical-danger {
+  min-height: 48px;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--color-danger);
+  transition: background-color 0.15s ease-in-out, transform 0.05s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-medical-danger:hover {
+  background-color: #b91c1c;
+}
+
+.btn-medical-danger:active {
+  transform: scale(0.98);
+}
+
+/* Accessible animations */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

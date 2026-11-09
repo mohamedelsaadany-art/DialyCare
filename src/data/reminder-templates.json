@@ -1,0 +1,92 @@
+[
+  {
+    "id": "tpl_ttt_morning",
+    "type": "ttt",
+    "titleEn": "Morning Medication",
+    "titleAr": "أدوية الصباح",
+    "messageEn": "Time to take your scheduled morning medications with water.",
+    "messageAr": "حان وقت تناول أدوية الصباح المحددة مع رشفة ماء محسوبة.",
+    "defaultTime": "08:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_ttt_afternoon",
+    "type": "ttt",
+    "titleEn": "Afternoon Medication",
+    "titleAr": "أدوية الظهيرة",
+    "messageEn": "Time to take your afternoon medications and phosphate binders.",
+    "messageAr": "حان وقت تناول أدوية الظهيرة ومثبتات الفوسفات المقررة.",
+    "defaultTime": "14:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_ttt_evening",
+    "type": "ttt",
+    "titleEn": "Evening Medication",
+    "titleAr": "أدوية المساء",
+    "messageEn": "Time to take your evening medications before sleeping.",
+    "messageAr": "حان وقت تناول أدوية المساء المقررة قبل موعد النوم.",
+    "defaultTime": "20:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_fluid_morning",
+    "type": "fluid",
+    "titleEn": "Morning Fluid Check",
+    "titleAr": "متابعة سوائل الصباح",
+    "messageEn": "Check and log your morning fluid intake. Pace your daily allowance.",
+    "messageAr": "تحقق من كمية سوائل الصباح وسجلها؛ وزع رشفاتك على مدار اليوم.",
+    "defaultTime": "10:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_fluid_afternoon",
+    "type": "fluid",
+    "titleEn": "Afternoon Fluid Check",
+    "titleAr": "متابعة سوائل الظهيرة",
+    "messageEn": "Afternoon fluid check: Track your cups or milliliters consumed.",
+    "messageAr": "متابعة الظهيرة: سجّل كمية الأكواب أو المليلترات التي تناولتها.",
+    "defaultTime": "15:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_fluid_evening",
+    "type": "fluid",
+    "titleEn": "Evening Fluid Check",
+    "titleAr": "متابعة سوائل المساء",
+    "messageEn": "Evening fluid review: Ensure you stay under your daily limit.",
+    "messageAr": "مراجعة المساء: تأكد من بقائك ضمن الحد اليومي الآمن للسوائل.",
+    "defaultTime": "20:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_diet_breakfast",
+    "type": "diet",
+    "titleEn": "Breakfast Diet Log",
+    "titleAr": "تسجيل إفطار الصباح",
+    "messageEn": "Log your breakfast items and confirm your phosphate binder dose.",
+    "messageAr": "سجّل وجبة الإفطار وتأكد من تناول مثبت الفوسفات مع الوجبة.",
+    "defaultTime": "09:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_diet_lunch",
+    "type": "diet",
+    "titleEn": "Lunch Diet Log",
+    "titleAr": "تسجيل وجبة الغداء",
+    "messageEn": "Log your lunch items: check low sodium and limited potassium.",
+    "messageAr": "سجّل وجبة الغداء وتأكد من الالتزام بالملح القليل والبوتاسيوم المحدود.",
+    "defaultTime": "13:00",
+    "isActive": true
+  },
+  {
+    "id": "tpl_diet_dinner",
+    "type": "diet",
+    "titleEn": "Dinner Diet Log",
+    "titleAr": "تسجيل وجبة العشاء",
+    "messageEn": "Log your dinner meal: track sodium, phosphorus, and liquids.",
+    "messageAr": "سجّل وجبة العشاء: راقب كمية الصوديوم والفوسفات والسوائل في الطعام.",
+    "defaultTime": "19:00",
+    "isActive": true
+  }
+]

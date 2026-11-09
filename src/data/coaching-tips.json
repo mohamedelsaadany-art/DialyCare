@@ -1,0 +1,302 @@
+[
+  {
+    "id": "tip_diet_001",
+    "category": "diet",
+    "titleEn": "Mastering Potassium Control",
+    "titleAr": "التحكم الذكي في مستوى البوتاسيوم",
+    "contentEn": "High potassium (hyperkalemia) can cause serious heart rhythm problems. Avoid high-potassium foods like bananas, oranges, dates, and tomatoes. Choose apples, berries, cucumbers, and grapes instead.",
+    "contentAr": "ارتفاع البوتاسيوم في الدم قد يؤدي لاضطرابات خطيرة في ضربات القلب. تجنب الأغذية الغنية بالبوتاسيوم كالموز، البرتقال، التمر، والطماطم، واستبدلها بالتفاح، التوت، الخيار، والعنب.",
+    "order": 1,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_002",
+    "category": "diet",
+    "titleEn": "Managing Phosphorus & Binders",
+    "titleAr": "السيطرة على الفوسفات ومثبتاته",
+    "contentEn": "Excess phosphorus pulls calcium from your bones and weakens blood vessels. Limit dark colas, processed meats, and hard cheeses. Take your phosphate binders with the very first bite of meals and snacks.",
+    "contentAr": "زيادة الفوسفات تسحب الكالسيوم من عظامك وتصلب الأوعية الدموية. ابتعد عن المشروبات الغازية الداكنة واللحوم المصنعة والأجبان المطبوخة، وتناول مثبتات الفوسفات مع أول لقمة من وجبتك.",
+    "order": 2,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_003",
+    "category": "diet",
+    "titleEn": "Reducing Sodium to Prevent Thirst",
+    "titleAr": "تقليل الصوديوم للسيطرة على العطش",
+    "contentEn": "Sodium causes severe thirst and fluid retention, straining your heart. Remove the salt shaker from your table. Enhance flavors with lemon juice, garlic, onion, cumin, and fresh herbs instead.",
+    "contentAr": "الملح يسبب عطشاً شديداً واحتباساً للسوائل يجهد القلب. تخلص من ملاحة الطعام واستعض عنها بعصير الليمون، الثوم، البصل، الكمون، والأعشاب العطرية الطازجة لإضافة نكهة شهية.",
+    "order": 3,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_004",
+    "category": "diet",
+    "titleEn": "Getting High-Quality Protein",
+    "titleAr": "تناول البروتين عالي الجودة للغسيل",
+    "contentEn": "Hemodialysis removes protein from your blood. You need adequate high-biological-value protein to prevent muscle wasting. Include egg whites, lean poultry, fresh fish, and tofu as advised by your renal dietitian.",
+    "contentAr": "تسحب جلسات الغسيل جزءاً من بروتين الدم، لذا تحتاج تعويضه لحماية عضلاتك من الضمور. احرص على تناول بياض البيض، الدواجن منزوعة الجلد، والأسماك الطازجة طبقاً لحصتك المحددة.",
+    "order": 4,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_005",
+    "category": "diet",
+    "titleEn": "Counting Fluids Hidden in Foods",
+    "titleAr": "حساب السوائل الخفية في الوجبات",
+    "contentEn": "Foods that melt at room temperature (gelatin, ice cream, popsicles) and watery foods like soups, watermelon, and gravies count toward your daily fluid limit. Always account for them.",
+    "contentAr": "الأطعمة التي تذوب في حرارة الغرفة (كالجيلي والآيس كريم) والأطعمة المائية كالشوربة والبطيخ واليخنات تُحسب مباشرة من حصتك المائية اليومية المسموحة دون إغفال.",
+    "order": 5,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_006",
+    "category": "diet",
+    "titleEn": "Leaching Vegetables Before Cooking",
+    "titleAr": "طريقة نقع وغلي الخضروات لسحب البوتاسيوم",
+    "contentEn": "Reduce potassium in potatoes and root vegetables by peeling, slicing thinly, soaking in warm water for at least 2 hours, draining, and boiling in a large pot with fresh water.",
+    "contentAr": "لتقليل البوتاسيوم في البطاطس والجذور: قشرها وقطعها شرائح رقيقة، وانقعها في ماء دافئ لساعتين على الأقل، ثم صفّها واغلها في كمية وفيرة من الماء العذب قبل الطهي.",
+    "order": 6,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_007",
+    "category": "diet",
+    "titleEn": "Smart Choices When Dining Out",
+    "titleAr": "خيارات ذكية عند تناول الطعام بالخارج",
+    "contentEn": "When ordering at restaurants, ask for dishes cooked without added salt, sauces, or MSG. Request dressings on the side, opt for grilled over fried, and skip salted appetizers.",
+    "contentAr": "عند ارتياد المطاعم، اطلب تحضير طعامك بدون ملح مضاف أو صلصات جاهزة، واطلب التتبيلات جانباً، وفضل الأطباق المشوية على المقلية مع تجنب المقبلات المملحة.",
+    "order": 7,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_008",
+    "category": "diet",
+    "titleEn": "Reading Food Labels for Hidden Phosphates",
+    "titleAr": "قراءة الملصقات لكشف الفوسفات المضاف",
+    "contentEn": "Look closely at the ingredients list for words containing 'PHOS' (like sodium phosphate, phosphoric acid). Food manufacturers use these additives extensively, and the body absorbs nearly 100% of them.",
+    "contentAr": "افحص قائمة المكونات جيداً بحثاً عن أي كلمة تحتوي مقطع (PHOS) مثل فوسفات الصوديوم أو حمض الفوسفوريك، حيث يمتص الجسم ما يقرب من 100% من هذا الفوسفات الصناعي.",
+    "order": 8,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_009",
+    "category": "diet",
+    "titleEn": "Kidney-Friendly Snack Alternatives",
+    "titleAr": "بدائل الوجبات الخفيفة الملائمة للكلى",
+    "contentEn": "Replace salty chips and nuts with unsalted air-popped popcorn, white rice cakes, crisp celery sticks with low-phosphorus cream cheese, or fresh sliced apples.",
+    "contentAr": "استبدل رقائق البطاطس والمكسرات المالحة بالفشار الطازج بدون ملح، كعك الأرز الهش، أو شرائح التفاح والخيار الطازجة لكسر الجوع بأمان.",
+    "order": 9,
+    "isActive": true
+  },
+  {
+    "id": "tip_diet_010",
+    "category": "diet",
+    "titleEn": "Navigating Ramadan & Fasting Safely",
+    "titleAr": "إرشادات الصيام الآمن وشهر رمضان",
+    "contentEn": "Fasting with end-stage renal disease requires close medical supervision. Long fasting hours can trigger hyperkalemia, dehydration, or dangerous blood pressure drops. Consult your nephrologist before deciding to fast.",
+    "contentAr": "يتطلب صيام مريض الغسيل الكلوي إذناً دقيقاً من طبيب الكلى المعالج لتفادي الجفاف الحاد أو التراكم المفاجئ للبوتاسيوم، مع ضرورة تعديل مواعيد جرعات الأدوية والوجبات بدقة.",
+    "order": 10,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_001",
+    "category": "fluid",
+    "titleEn": "Understanding Your Daily Fluid Allowance",
+    "titleAr": "فهم حصتك اليومية المحددة من السوائل",
+    "contentEn": "Most hemodialysis patients are limited to 500-1000 mL per day plus urine output. Measure your water bottle each morning so you can visually pace your consumption throughout the day.",
+    "contentAr": "عادة ما يُحدد لمريض الغسيل ما بين 500 إلى 1000 مل يومياً بالإضافة لحجم البول المتبقي. املأ زجاجة مرقمة صباحاً لتوزع رشفاتك بحكمة على مدار اليوم.",
+    "order": 11,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_002",
+    "category": "fluid",
+    "titleEn": "Relieving Dry Mouth with Ice Chips",
+    "titleAr": "ترطيب الفم الجاف بمكعبات الثلج",
+    "contentEn": "Sucking slowly on a small ice chip provides lasting moisture for dry mouth while consuming far less liquid volume than gulping a full glass of water. Remember: 1 cup of ice melts to half a cup of water.",
+    "contentAr": "مص مكعب ثلج صغير ببطء ينعش الفم الجاف ويرطبه لوقت أطول بكثير من شرب كأس ماء كامل، مع العلم أن كوب مكعبات الثلج يذوب إلى نصف كوب فقط من الماء.",
+    "order": 12,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_003",
+    "category": "fluid",
+    "titleEn": "Practical Thirst Management Tricks",
+    "titleAr": "حيل عملية ذكية للسيطرة على العطش",
+    "contentEn": "To beat stubborn thirst without drinking: chew sugar-free mint gum, rinse your mouth with cold water and spit it out, or apply a dab of lip balm to keep lips hydrated.",
+    "contentAr": "لتهدئة العطش الشديد دون شرب سوائل: امضغ علكة بالنعناع خالية من السكر، تمضمض بماء بارد واطرحه دون بلعه، أو استخدم مرطب الشفاه لمنع جفافها.",
+    "order": 13,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_004",
+    "category": "fluid",
+    "titleEn": "Beware of High-Fluid Fruits",
+    "titleAr": "الحذر من الفواكه الغنية بالسوائل",
+    "contentEn": "Summer favorites like watermelon, cantaloupe, oranges, and grapefruit are more than 90% water by weight. Treat these portions as part of your fluid budget, not free foods.",
+    "contentAr": "فواكه الصيف مثل البطيخ، الشمام، البرتقال، والجريب فروت تتكون من أكثر من 90% ماء. احتسب كل شريحة تتناولها ضمن رصيد سوائلك اليومي المتاح.",
+    "order": 14,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_005",
+    "category": "fluid",
+    "titleEn": "Daily Morning Weight Monitoring",
+    "titleAr": "الوزن اليومي الصباحي مفتاح سلامتك",
+    "contentEn": "Weigh yourself every morning after using the bathroom, wearing the same light clothing, on the same scale. Sudden daily weight increases are almost entirely fluid retention.",
+    "contentAr": "قس وزنك كل صباح بعد دخول الحمام مرتدياً نفس الملابس الخفيفة وعلى نفس الميزان؛ فأي زيادة مفاجئة بين يوم وآخر تعكس احتباس سوائل مباشرة.",
+    "order": 15,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_006",
+    "category": "fluid",
+    "titleEn": "Staying Cool in Hot Weather",
+    "titleAr": "التعامل الحذر مع حرارة الطقس في الصيف",
+    "contentEn": "Stay in shaded, air-conditioned spaces during peak heat hours. Sweating triggers intense thirst and cravings for large cold drinks. Use a fine cold water mist spray bottle on your face to cool down safely.",
+    "contentAr": "ابق في أماكن مظللة ومكيفة خلال ذروة حرارة الشمس؛ لأن التعرق يثير رغبة عارمة في شرب الماء البارد. يمكنك رش رذاذ ماء خفيف على وجهك لترطيب بشرتك دون شرب.",
+    "order": 16,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_007",
+    "category": "fluid",
+    "titleEn": "Targeting Safe Interdialytic Weight Gain",
+    "titleAr": "الحد الآمن لزيادة الوزن بين الجلسات",
+    "contentEn": "Keep your fluid weight gain between dialysis treatments under 2 to 2.5 kg (or under 4-5% of your target dry weight). Excessive gain forces aggressive fluid removal and dangerous muscle cramps.",
+    "contentAr": "حافظ على زيادة وزنك بين الجلسات دون 2 إلى 2.5 كجم (أو أقل من 4-5% من وزنك الجاف)، لأن السحب السريع للماء الزائد يسبب هبوطاً حاداً في الضغط وتقلصات عضلية مؤلمة.",
+    "order": 17,
+    "isActive": true
+  },
+  {
+    "id": "tip_fluid_008",
+    "category": "fluid",
+    "titleEn": "Recognizing Red-Flag Fluid Overload Signs",
+    "titleAr": "علامات إنذار تراكم السوائل الخطير",
+    "contentEn": "Shortness of breath while lying flat, severe swelling in ankles or eyelids, and spiking blood pressure indicate pulmonary fluid overload. Contact your dialysis unit or emergency team immediately.",
+    "contentAr": "الشعور بضيق التنفس عند الاستلقاء على الظهر، التورم الشديد في القدمين أو الجفون، والارتفاع الحاد في الضغط علامات لتراكم الماء على الرئة تستوجب التواصل الفوري مع وحدة الكلى.",
+    "order": 18,
+    "isActive": true
+  },
+  {
+    "id": "tip_med_001",
+    "category": "medication",
+    "titleEn": "Perfect Timing for Phosphate Binders",
+    "titleAr": "التوقيت الدقيق لتناول مثبتات الفوسفات",
+    "contentEn": "Phosphate binders (like calcium acetate, sevelamer, lanthanum) work like a sponge inside your digestive tract. Take them during the meal or within 10 minutes of finishing. If taken on an empty stomach, they are ineffective.",
+    "contentAr": "تعمل مثبتات الفوسفات كالإسفنج في الأمعاء لامتصاص الفوسفات من الطعام؛ لذا يجب تناولها أثناء الوجبة أو خلال 10 دقائق من الانتهاء، ولا فائدة منها إذا أُخذت على معدة فارغة.",
+    "order": 19,
+    "isActive": true
+  },
+  {
+    "id": "tip_med_002",
+    "category": "medication",
+    "titleEn": "Blood Pressure Meds on Dialysis Days",
+    "titleAr": "أدوية الضغط في أيام جلسة الغسيل",
+    "contentEn": "Some blood pressure medications should be withheld prior to your dialysis run to prevent severe hypotension during fluid removal. Always follow your nephrologist's precise morning dosage plan.",
+    "contentAr": "قد يوصيك الطبيب بتأجيل بعض أدوية الضغط لما بعد انتهاء جلسة الغسيل لمنع حدوث هبوط مفاجئ في الضغط أثناء سحب السوائل. اتبع دائماً خطة طبيبك الصباحية بدقة.",
+    "order": 20,
+    "isActive": true
+  },
+  {
+    "id": "tip_med_003",
+    "category": "medication",
+    "titleEn": "The Role of Erythropoietin (EPO) Injections",
+    "titleAr": "أهمية إبر الإريثروبويتين (EPO) لعلاج الأنيميا",
+    "contentEn": "Because kidneys naturally make EPO to stimulate red blood cell production, dialysis patients need scheduled EPO injections to prevent severe anemia, restore stamina, and protect their heart.",
+    "contentAr": "نظراً لأن الكلى السليمة تفرز هرمون الإريثروبويتين لتحفيز إنتاج كرات الدم الحمراء، فإن انتظامك في جرعات الإيبو بالوحدة يحميك من فقر الدم الشديد ويمنحك النشاط والحيوية.",
+    "order": 21,
+    "isActive": true
+  },
+  {
+    "id": "tip_med_004",
+    "category": "medication",
+    "titleEn": "Why Intravenous Iron Matters",
+    "titleAr": "دور مكملات الحديد الوريدية في الدم",
+    "contentEn": "EPO therapy cannot build red blood cells without sufficient iron stores. Periodic IV iron infusions during your treatment session keep ferritin levels optimal without causing oral stomach irritation.",
+    "contentAr": "لا يمكن لحقن الإيبو بناء كريات الدم دون مخزون كافٍ من الحديد؛ لذا تُعطى مكملات الحديد بالوريد خلال الجلسة للحفاظ على نسبة الفيريتين دون تهيج للمعدة.",
+    "order": 22,
+    "isActive": true
+  },
+  {
+    "id": "tip_med_005",
+    "category": "medication",
+    "titleEn": "Protecting Bones with Active Vitamin D",
+    "titleAr": "حماية العظام بفيتامين د النشط (كالسيتريول)",
+    "contentEn": "Failing kidneys cannot convert vitamin D into its active form. Prescription active vitamin D (calcitriol/paricalcitol) regulates parathyroid hormone (PTH) and keeps bones strong and pain-free.",
+    "contentAr": "تعجز الكلى المصابة عن تنشيط فيتامين د؛ لذلك يصف الطبيب فيتامين د النشط لتنظيم هرمون الغدد الجار درقية (PTH) وحماية عظامك من الهشاشة والآلام.",
+    "order": 23,
+    "isActive": true
+  },
+  {
+    "id": "tip_med_006",
+    "category": "medication",
+    "titleEn": "Managing Gastrointestinal Side Effects",
+    "titleAr": "التعامل مع الآثار الجانبية للأدوية ومثبتات الفوسفات",
+    "contentEn": "If phosphate binders cause constipation or nausea, speak with your dialysis team. Never stop taking them on your own; your doctor can switch formulations or adjust your regimen.",
+    "contentAr": "إذا سببت لك مثبتات الفوسفات إمساكاً أو غثياناً، استشر طبيبك فوراً لتبديل النوع أو تعديل الجرعة، وإياك والتوقف عن تناولها من تلقاء نفسك حتى لا يرتفع الفوسفات.",
+    "order": 24,
+    "isActive": true
+  },
+  {
+    "id": "tip_med_007",
+    "category": "medication",
+    "titleEn": "Never Skip or Delay Prescribed Doses",
+    "titleAr": "الالتزام الصارم بمواعيد الأدوية الموصوفة",
+    "contentEn": "Dialysis cleans your blood for a few hours, but your medications protect your heart, bones, and vascular system 24 hours a day. Use reminders to keep a 100% adherence streak.",
+    "contentAr": "ينقي جهاز الغسيل دمك لعدة ساعات، لكن أدويتك الموصوفة هي خط دفاعك الدائم لحماية قلبك وشرايينك على مدار الساعة؛ لذا واظب عليها دون أي تفويت.",
+    "order": 25,
+    "isActive": true
+  },
+  {
+    "id": "tip_gen_001",
+    "category": "general",
+    "titleEn": "Complete Every Minute of Every Dialysis Session",
+    "titleAr": "إكمال كل دقيقة من وقت جلسة الغسيل",
+    "contentEn": "Cutting a session short by even 15 or 30 minutes leaves toxic waste and extra fluid in your bloodstream. Honor your full treatment time to stay energized and out of the hospital.",
+    "contentAr": "تقصير وقت الجلسة ولو لـ 15 دقيقة يحرمك من التخلص الكامل من السموم والسوائل الزائدة؛ التزم بوقت جلستك كاملاً لتبقى نشيطاً وتتجنب دخول المستشفيات.",
+    "order": 26,
+    "isActive": true
+  },
+  {
+    "id": "tip_gen_002",
+    "category": "general",
+    "titleEn": "Vascular Access: Your Lifeline Care",
+    "titleAr": "العناية بالناسور الشرياني الوريدي (الفيستولا)",
+    "contentEn": "Feel the vibration ('thrill') of your fistula every morning and evening. Never allow blood pressure cuffs, blood draws, tight clothing, or heavy bags on your access arm.",
+    "contentAr": "تحسس نبض واهتزاز وصلتك الشريانية الوريدية (الفيستولا) صباحاً ومساءً للتأكد من سلامتها، وإياك وقياس الضغط أو سحب الدم أو حمل أشياء ثقيلة بالذراع التي بها الوصلة.",
+    "order": 27,
+    "isActive": true
+  },
+  {
+    "id": "tip_gen_003",
+    "category": "general",
+    "titleEn": "Safe Physical Activity & Walking",
+    "titleAr": "النشاط البدني الآمن والمشي المنتظم",
+    "contentEn": "Engaging in moderate physical activity like 15-20 minutes of daily walking on non-dialysis days boosts muscle strength, enhances blood circulation, improves mood, and supports sleep quality.",
+    "contentAr": "المشي المعتدل لمدة 15 إلى 20 دقيقة في الأيام التي لا يوجد بها غسيل يقوي عضلاتك، ينشط دورتك الدموية، يحسن مزاجك العام، ويساعدك على النوم الهادئ.",
+    "order": 28,
+    "isActive": true
+  },
+  {
+    "id": "tip_gen_004",
+    "category": "general",
+    "titleEn": "Prioritizing Mental Wellness & Hope",
+    "titleAr": "العناية بالصحة النفسية والدعم المعنوي",
+    "contentEn": "Managing kidney disease can feel emotionally exhausting. Share your feelings openly with loved ones, connect with fellow patients, and talk to your care team if you feel overwhelmed.",
+    "contentAr": "التعايش مع الغسيل الكلوي قد يسبب ضغوطاً نفسية، فاحرص على مشاركة مشاعرك مع أسرتك وتواصل مع زملائك في وحدة الكلى لتبادل التجارب واستمداد الدعم الإيجابي.",
+    "order": 29,
+    "isActive": true
+  },
+  {
+    "id": "tip_gen_005",
+    "category": "general",
+    "titleEn": "When to Contact Your Doctor Immediately",
+    "titleAr": "علامات الخطر التي تستدعي الرعاية الطارئة فوراً",
+    "contentEn": "Seek emergency medical care if you develop chest pain, severe shortness of breath, sudden fever or chills, vomiting that prevents medication intake, or if you can no longer feel your access thrill.",
+    "contentAr": "توجه للطوارئ فوراً إذا شعرت بألم في الصدر، ضيق تنفس حاد، حمى ورجفة، قيء مستمر يمنعك من تناول الأدوية، أو في حال توقف نبض واهتزاز وصلة الغسيل الشريانية.",
+    "order": 30,
+    "isActive": true
+  }
+]

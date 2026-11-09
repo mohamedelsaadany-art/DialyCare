@@ -1,0 +1,9 @@
+{
+  "appId": "com.dialycare.app",
+  "appName": "DialyCare",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
