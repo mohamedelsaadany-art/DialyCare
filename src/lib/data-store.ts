@@ -10,6 +10,9 @@ import type {
   ReminderTemplate,
   DietChecklistItem,
   ReminderType,
+  PatientMedication,
+  DialysisSession,
+  PatientLabRecord,
 } from './types';
 
 import defaultCoachingTips from '@/data/coaching-tips.json';
@@ -27,6 +30,9 @@ export const STORAGE_KEYS = {
   REMINDERS: 'DIALYCARE_REMINDERS',
   REMINDER_TEMPLATES: 'DIALYCARE_REMINDER_TEMPLATES',
   DIET_CHECKLIST: 'DIALYCARE_DIET_CHECKLIST',
+  PATIENT_MEDICATIONS: 'DIALYCARE_PATIENT_MEDICATIONS',
+  DIALYSIS_SESSIONS: 'DIALYCARE_DIALYSIS_SESSIONS',
+  LAB_RESULTS: 'DIALYCARE_LAB_RESULTS',
 } as const;
 
 // Safe LocalStorage helpers with deep copy to prevent in-memory mutation
@@ -69,6 +75,7 @@ const INITIAL_DEMO_PATIENTS: Patient[] = [
     phone: '+201012345678',
     dialysisSchedule: 'MWF', // Monday, Wednesday, Friday
     reminderSchedule: 'standard',
+    dryWeightKg: 70,
     isActive: true,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
@@ -79,8 +86,148 @@ const INITIAL_DEMO_PATIENTS: Patient[] = [
     phone: '+201098765432',
     dialysisSchedule: 'TTS', // Tuesday, Thursday, Saturday
     reminderSchedule: 'standard',
+    dryWeightKg: 65,
     isActive: true,
     createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+// Initial demo medications for patient-1
+export const INITIAL_DEMO_MEDICATIONS: PatientMedication[] = [
+  {
+    id: 'demo-med-1',
+    patientId: 'patient-1',
+    name: 'Sevelamer Carbonate (Renvela)',
+    nameAr: 'سيفيلامير كربونات (رينفيلا)',
+    dose: '800 mg (1 tablet)',
+    scheduleTime: '08:00',
+    scheduleTimes: ['08:00', '14:00', '20:00'],
+    instructions: 'Take with meals to bind dietary phosphorus',
+    instructionsAr: 'يؤخذ مع الوجبة لربط الفوسفات في الطعام',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'demo-med-2',
+    patientId: 'patient-1',
+    name: 'Amlodipine (Norvasc)',
+    nameAr: 'أملوديبين (نورفاسك)',
+    dose: '5 mg',
+    scheduleTime: '08:00',
+    scheduleTimes: ['08:00'],
+    instructions: 'Antihypertensive medication - take every morning',
+    instructionsAr: 'دواء خافض لضغط الدم - يؤخذ صباحاً',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'demo-med-3',
+    patientId: 'patient-1',
+    name: 'Alfacalcidol (One-Alpha)',
+    nameAr: 'ألفاكالسيدول (وان-ألفا)',
+    dose: '0.5 mcg',
+    scheduleTime: '20:00',
+    scheduleTimes: ['20:00'],
+    instructions: 'Active Vitamin D analog for renal bone management',
+    instructionsAr: 'فيتامين د النشط للحفاظ على توازن الكالسيوم والعظام',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+// Initial demo dialysis sessions for patient-1 with all 14 clinical fields
+export const INITIAL_DEMO_SESSIONS: DialysisSession[] = [
+  {
+    id: 'demo-session-1',
+    patientId: 'patient-1',
+    sessionDate: '2026-03-02',
+    recordedBy: 'admin-1',
+    recordedAt: '2026-03-02T13:30:00.000Z',
+    complianceRating: 5,
+    preWeightKg: 72,
+    preWeightGrams: 500,
+    postWeightKg: 70,
+    postWeightGrams: 200,
+    vitals: {
+      preSession: { systolic: 140, diastolic: 85, heartRate: 74 },
+      after1hr: { systolic: 135, diastolic: 82, heartRate: 72 },
+      after2hr: { systolic: 130, diastolic: 80, heartRate: 75 },
+      after3hr: { systolic: 125, diastolic: 78, heartRate: 76 },
+      endSession: { systolic: 128, diastolic: 79, heartRate: 72 },
+    },
+    temperatureC: 36.6,
+    fluidStatus: {
+      legEdema: 'mild',
+      lungCrackles: 'none',
+      dyspnea: 'none',
+    },
+    accessInfectionSigns: false,
+    durationHours: 4,
+    ultrafiltrationVolumeMl: 2300,
+    bloodFlowRateMlMin: 350,
+    dialysateFlowRateMlMin: 500,
+    accessType: 'AVF',
+    machineSodiumMeqL: 138,
+    notes: 'Smooth 4-hour hemodialysis treatment. Target dry weight achieved without intradialytic hypotension.',
+  },
+  {
+    id: 'demo-session-2',
+    patientId: 'patient-1',
+    sessionDate: '2026-03-04',
+    recordedBy: 'admin-1',
+    recordedAt: '2026-03-04T13:45:00.000Z',
+    complianceRating: 4,
+    preWeightKg: 72,
+    preWeightGrams: 100,
+    postWeightKg: 70,
+    postWeightGrams: 0,
+    vitals: {
+      preSession: { systolic: 142, diastolic: 88, heartRate: 76 },
+      after1hr: { systolic: 138, diastolic: 84, heartRate: 74 },
+      after2hr: { systolic: 132, diastolic: 80, heartRate: 72 },
+      after3hr: { systolic: 126, diastolic: 78, heartRate: 78 },
+      endSession: { systolic: 130, diastolic: 80, heartRate: 74 },
+    },
+    temperatureC: 36.7,
+    fluidStatus: {
+      legEdema: 'none',
+      lungCrackles: 'none',
+      dyspnea: 'none',
+    },
+    accessInfectionSigns: false,
+    durationHours: 4,
+    ultrafiltrationVolumeMl: 2100,
+    bloodFlowRateMlMin: 350,
+    dialysateFlowRateMlMin: 500,
+    accessType: 'AVF',
+    machineSodiumMeqL: 138,
+    notes: 'Good dialysis session. Left radiocephalic AVF with strong thrill and good hemostasis post needle removal.',
+  },
+];
+
+// Initial demo lab results for patient-1 covering all 12 tests
+export const INITIAL_DEMO_LAB_RESULTS: PatientLabRecord[] = [
+  {
+    id: 'demo-lab-1',
+    patientId: 'patient-1',
+    testDate: '2026-02-28',
+    recordedBy: 'admin-1',
+    recordedAt: '2026-02-28T09:00:00.000Z',
+    values: {
+      hemoglobin: 11.2,
+      wbc: 6.8,
+      platelets: 245,
+      calcium: 9.1,
+      phosphorus: 4.8,
+      pth: 210,
+      creatinine: 8.9,
+      urea: 78,
+      serumIron: 85,
+      tibc: 290,
+      ferritin: 320,
+      albumin: 4.1,
+    },
+    notes: 'Monthly routine renal panel. Hemoglobin and bone mineral markers within target range.',
   },
 ];
 
@@ -256,6 +403,46 @@ export function initDataStore(): void {
       existingNotifs.unshift(...INITIAL_DEMO_NOTIFICATIONS);
       writeStorage(STORAGE_KEYS.NOTIFICATIONS, existingNotifs);
     }
+  }
+
+  // Ensure patients in storage have dryWeightKg
+  const rawStoredPatients = window.localStorage.getItem(STORAGE_KEYS.PATIENTS);
+  if (rawStoredPatients) {
+    try {
+      const parsedPatients = JSON.parse(rawStoredPatients) as Patient[];
+      let patientModified = false;
+      const patchedPatients = parsedPatients.map((p) => {
+        if (p.id === 'patient-1' && (p.dryWeightKg === undefined || p.dryWeightKg === null)) {
+          patientModified = true;
+          return { ...p, dryWeightKg: 70 };
+        }
+        if (p.id === 'patient-2' && (p.dryWeightKg === undefined || p.dryWeightKg === null)) {
+          patientModified = true;
+          return { ...p, dryWeightKg: 65 };
+        }
+        return p;
+      });
+      if (patientModified) {
+        writeStorage(STORAGE_KEYS.PATIENTS, patchedPatients);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Demo medications
+  if (!window.localStorage.getItem(STORAGE_KEYS.PATIENT_MEDICATIONS)) {
+    writeStorage(STORAGE_KEYS.PATIENT_MEDICATIONS, INITIAL_DEMO_MEDICATIONS);
+  }
+
+  // Demo dialysis sessions
+  if (!window.localStorage.getItem(STORAGE_KEYS.DIALYSIS_SESSIONS)) {
+    writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, INITIAL_DEMO_SESSIONS);
+  }
+
+  // Demo lab results
+  if (!window.localStorage.getItem(STORAGE_KEYS.LAB_RESULTS)) {
+    writeStorage(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
   }
 }
 
@@ -581,4 +768,245 @@ export function getDietChecklist(): DietChecklistItem[] {
     STORAGE_KEYS.DIET_CHECKLIST,
     defaultDietChecklist as DietChecklistItem[]
   );
+}
+
+// ==========================================
+// REACTIVE STORAGE EVENT DISPATCHER
+// ==========================================
+function dispatchStorageEvent(eventName: string): void {
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new Event(eventName));
+    } catch {
+      // ignore in environments without DOM event dispatch
+    }
+  }
+}
+
+// ==========================================
+// R1: PATIENT MEDICATIONS CRUD
+// ==========================================
+export type NewPatientMedication = Omit<PatientMedication, 'id' | 'createdAt' | 'isActive'> & {
+  id?: string;
+  createdAt?: Date | string;
+  isActive?: boolean;
+};
+
+export function getPatientMedications(patientId?: string): PatientMedication[] {
+  if (patientId === '') return [];
+  initDataStore();
+  let meds = readStorage<PatientMedication[]>(STORAGE_KEYS.PATIENT_MEDICATIONS, INITIAL_DEMO_MEDICATIONS);
+  if (patientId) {
+    meds = meds.filter((m) => m.patientId === patientId);
+  }
+  return cloneValue(meds);
+}
+
+export function addPatientMedication(
+  med: NewPatientMedication | PatientMedication
+): PatientMedication {
+  initDataStore();
+  const allMeds = readStorage<PatientMedication[]>(STORAGE_KEYS.PATIENT_MEDICATIONS, INITIAL_DEMO_MEDICATIONS);
+  const newMed: PatientMedication = {
+    ...med,
+    id: ('id' in med && med.id) ? med.id : uuidv4(),
+    createdAt: ('createdAt' in med && med.createdAt) ? med.createdAt : new Date().toISOString(),
+    isActive: med.isActive !== undefined ? med.isActive : true,
+  };
+  allMeds.push(newMed);
+  writeStorage(STORAGE_KEYS.PATIENT_MEDICATIONS, allMeds);
+  dispatchStorageEvent('dialycare_medications_updated');
+  return cloneValue(newMed);
+}
+
+export function updatePatientMedication(
+  id: string,
+  data: Partial<PatientMedication>
+): PatientMedication | null {
+  initDataStore();
+  const allMeds = readStorage<PatientMedication[]>(STORAGE_KEYS.PATIENT_MEDICATIONS, INITIAL_DEMO_MEDICATIONS);
+  const index = allMeds.findIndex((m) => m.id === id);
+  if (index === -1) return null;
+  const updated: PatientMedication = { ...allMeds[index], ...data };
+  allMeds[index] = updated;
+  writeStorage(STORAGE_KEYS.PATIENT_MEDICATIONS, allMeds);
+  dispatchStorageEvent('dialycare_medications_updated');
+  return cloneValue(updated);
+}
+
+export function deletePatientMedication(id: string): boolean {
+  initDataStore();
+  const allMeds = readStorage<PatientMedication[]>(STORAGE_KEYS.PATIENT_MEDICATIONS, INITIAL_DEMO_MEDICATIONS);
+  const filtered = allMeds.filter((m) => m.id !== id);
+  if (filtered.length === allMeds.length) return false;
+  writeStorage(STORAGE_KEYS.PATIENT_MEDICATIONS, filtered);
+  dispatchStorageEvent('dialycare_medications_updated');
+  return true;
+}
+
+// ==========================================
+// R2: DIALYSIS SESSIONS CRUD (14 CLINICAL FIELDS)
+// ==========================================
+export type NewDialysisSession = Omit<DialysisSession, 'id' | 'recordedAt'> & {
+  id?: string;
+  recordedAt?: string;
+};
+
+export function getDialysisSessions(patientId?: string): DialysisSession[] {
+  if (patientId === '') return [];
+  initDataStore();
+  let sessions = readStorage<DialysisSession[]>(STORAGE_KEYS.DIALYSIS_SESSIONS, INITIAL_DEMO_SESSIONS);
+  if (patientId) {
+    sessions = sessions.filter((s) => s.patientId === patientId);
+  }
+  const sorted = [...sessions].sort((a, b) => {
+    const dateA = new Date(a.sessionDate).getTime();
+    const dateB = new Date(b.sessionDate).getTime();
+    if (!isNaN(dateA) && !isNaN(dateB) && dateB !== dateA) {
+      return dateB - dateA;
+    }
+    const timeA = a.recordedAt ? new Date(a.recordedAt).getTime() : 0;
+    const timeB = b.recordedAt ? new Date(b.recordedAt).getTime() : 0;
+    return timeB - timeA;
+  });
+  return cloneValue(sorted);
+}
+
+export function addDialysisSession(
+  session: NewDialysisSession | DialysisSession
+): DialysisSession {
+  initDataStore();
+  const allSessions = readStorage<DialysisSession[]>(STORAGE_KEYS.DIALYSIS_SESSIONS, INITIAL_DEMO_SESSIONS);
+  const newSession: DialysisSession = {
+    ...session,
+    id: ('id' in session && session.id) ? session.id : uuidv4(),
+    recordedAt: ('recordedAt' in session && session.recordedAt) ? session.recordedAt : new Date().toISOString(),
+  };
+  allSessions.unshift(newSession);
+  writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, allSessions);
+  dispatchStorageEvent('dialycare_sessions_updated');
+  return cloneValue(newSession);
+}
+
+export function updateDialysisSession(
+  id: string,
+  data: Partial<DialysisSession>
+): DialysisSession | null {
+  initDataStore();
+  const allSessions = readStorage<DialysisSession[]>(STORAGE_KEYS.DIALYSIS_SESSIONS, INITIAL_DEMO_SESSIONS);
+  const index = allSessions.findIndex((s) => s.id === id);
+  if (index === -1) return null;
+  const updated: DialysisSession = { ...allSessions[index], ...data };
+  allSessions[index] = updated;
+  writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, allSessions);
+  dispatchStorageEvent('dialycare_sessions_updated');
+  return cloneValue(updated);
+}
+
+export function deleteDialysisSession(id: string): boolean {
+  initDataStore();
+  const allSessions = readStorage<DialysisSession[]>(STORAGE_KEYS.DIALYSIS_SESSIONS, INITIAL_DEMO_SESSIONS);
+  const filtered = allSessions.filter((s) => s.id !== id);
+  if (filtered.length === allSessions.length) return false;
+  writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, filtered);
+  dispatchStorageEvent('dialycare_sessions_updated');
+  return true;
+}
+
+// ==========================================
+// R5: PATIENT LAB RESULTS CRUD (12 TESTS)
+// ==========================================
+export type NewPatientLabRecord = Omit<PatientLabRecord, 'id' | 'recordedAt'> & {
+  id?: string;
+  recordedAt?: string;
+};
+
+export function getPatientLabResults(patientId?: string): PatientLabRecord[] {
+  if (patientId === '') return [];
+  initDataStore();
+  let results = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  if (patientId) {
+    results = results.filter((r) => r.patientId === patientId);
+  }
+  const sorted = [...results].sort((a, b) => {
+    const timeA = new Date(a.recordedAt || a.testDate).getTime();
+    const timeB = new Date(b.recordedAt || b.testDate).getTime();
+    return timeB - timeA;
+  });
+  return cloneValue(sorted);
+}
+
+export function addPatientLabResult(
+  record: NewPatientLabRecord | PatientLabRecord
+): PatientLabRecord {
+  initDataStore();
+  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  const newRecord: PatientLabRecord = {
+    ...record,
+    id: ('id' in record && record.id) ? record.id : uuidv4(),
+    recordedAt: ('recordedAt' in record && record.recordedAt) ? record.recordedAt : new Date().toISOString(),
+  };
+  allResults.unshift(newRecord);
+  writeStorage(STORAGE_KEYS.LAB_RESULTS, allResults);
+  dispatchStorageEvent('dialycare_labs_updated');
+  return cloneValue(newRecord);
+}
+
+export function updatePatientLabResult(
+  id: string,
+  data: Partial<PatientLabRecord>
+): PatientLabRecord | null {
+  initDataStore();
+  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  const index = allResults.findIndex((r) => r.id === id);
+  if (index === -1) return null;
+  const updated: PatientLabRecord = { ...allResults[index], ...data };
+  allResults[index] = updated;
+  writeStorage(STORAGE_KEYS.LAB_RESULTS, allResults);
+  dispatchStorageEvent('dialycare_labs_updated');
+  return cloneValue(updated);
+}
+
+export function deletePatientLabResult(id: string): boolean {
+  initDataStore();
+  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  const filtered = allResults.filter((r) => r.id !== id);
+  if (filtered.length === allResults.length) return false;
+  writeStorage(STORAGE_KEYS.LAB_RESULTS, filtered);
+  dispatchStorageEvent('dialycare_labs_updated');
+  return true;
+}
+
+export function savePatientLabResults(
+  record: NewPatientLabRecord | PatientLabRecord
+): PatientLabRecord {
+  if ('id' in record && record.id) {
+    const updated = updatePatientLabResult(record.id, record);
+    if (updated) return updated;
+  }
+  return addPatientLabResult(record);
+}
+
+// ==========================================
+// R3: SMART FLUID LIMITS FROM DRY WEIGHT
+// ==========================================
+export interface PatientFluidLimits {
+  warningMl: number;
+  criticalMl: number;
+  warning: number;
+  critical: number;
+}
+
+export function getPatientFluidLimits(dryWeightKg: number): PatientFluidLimits {
+  const safeWeight = typeof dryWeightKg === 'number' && dryWeightKg > 0 ? dryWeightKg : 70;
+  // Warning: dry_weight * 10 * 4 / 2
+  const warning = (safeWeight * 10 * 4) / 2;
+  // Critical: dry_weight * 13 * 4 / 2
+  const critical = (safeWeight * 13 * 4) / 2;
+  return {
+    warningMl: warning,
+    criticalMl: critical,
+    warning,
+    critical,
+  };
 }

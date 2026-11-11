@@ -11,6 +11,7 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { PatientMedicationManager } from '@/components/admin/PatientMedicationManager';
 import type { Patient, Notification } from '@/lib/types';
 import {
   getPatients,
@@ -364,7 +365,21 @@ export default function PatientsListPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => {
+              const el = document.getElementById('admin-medications-section');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            data-testid="admin-prescribe-medications-header-btn"
+            title={isRtl ? 'الانتقال إلى قسم تخصيص الأدوية' : 'Prescribe Medications'}
+          >
+            <span>💊</span>
+            <span>{isRtl ? 'تخصيص الأدوية' : 'Prescribe Medications'}</span>
+          </Button>
+
           <Link href={`/${locale}/admin/patients/new`}>
             <Button
               variant="primary"
@@ -648,6 +663,11 @@ export default function PatientsListPage() {
           </Button>
         </div>
       </Card>
+
+      {/* Administrative Medication Assignment Section (R1) */}
+      <section id="admin-medications-section" className="space-y-3 pt-2">
+        <PatientMedicationManager />
+      </section>
 
       {/* Notification Modal */}
       <Modal

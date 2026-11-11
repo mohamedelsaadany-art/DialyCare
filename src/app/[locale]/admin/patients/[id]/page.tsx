@@ -23,7 +23,12 @@ import Modal from '@/components/ui/Modal';
 import ProgressBar from '@/components/ui/ProgressBar';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
-import type { Patient, PatientReminder, Notification } from '@/lib/types';
+import type { Patient, PatientReminder, Notification, PatientLabRecord } from '@/lib/types';
+import { PatientMedicationManager } from '@/components/admin/PatientMedicationManager';
+import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
+import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
+import { DialysisSessionModal } from '@/components/DialysisSessionModal';
+import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
 import { addNotification, getPatientNotifications } from '@/lib/data-store';
 import {
   getPatients,
@@ -169,6 +174,13 @@ export default function PatientDetailPage() {
     time: '08:00',
     isActive: true,
   });
+
+  // Lab Results modal
+  const [labModalOpen, setLabModalOpen] = useState(false);
+  const [selectedLabRecord, setSelectedLabRecord] = useState<PatientLabRecord | null>(null);
+
+  // Dialysis Session modal
+  const [dialysisModalOpen, setDialysisModalOpen] = useState(false);
 
   const loadPatientData = useCallback(() => {
     if (!patientId) return;
@@ -652,6 +664,31 @@ export default function PatientDetailPage() {
             </Button>
 
             <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setDialysisModalOpen(true)}
+              data-testid="patient-detail-record-dialysis-btn"
+              title={isRtl ? 'تسجيل جلسة غسيل كلوي (14 معيار)' : 'Record Dialysis Session (14 Fields)'}
+              aria-label={isRtl ? 'تسجيل جلسة غسيل كلوي' : 'Record Dialysis Session'}
+              className="bg-[#1e6bb8] hover:bg-blue-700 font-bold"
+            >
+              🩺 {isRtl ? 'تسجيل جلسة غسيل' : 'Record Dialysis'}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedLabRecord(null);
+                setLabModalOpen(true);
+              }}
+              data-testid="patient-detail-enter-labs-btn"
+              title={isRtl ? 'إدخال / تحديث التحاليل المخبرية' : 'Enter / Update Lab Results'}
+            >
+              🔬 {isRtl ? 'إدخال التحاليل' : 'Enter Labs'}
+            </Button>
+
+            <Button
               variant="secondary"
               size="sm"
               onClick={() => setEditModalOpen(true)}
@@ -793,6 +830,33 @@ export default function PatientDetailPage() {
           </ResponsiveContainer>
         </div>
       </Card>
+
+      {/* Prescribed Named Medications Section (R1) */}
+      <PatientMedicationManager
+        patientId={patient.id}
+        onMedicationAdded={() => loadPatientData()}
+        onMedicationUpdated={() => loadPatientData()}
+        onMedicationDeleted={() => loadPatientData()}
+      />
+
+      {/* Dialysis Treatment Session History & 14-Field Recording (R2) */}
+      <DialysisSessionHistory
+        patientId={patient.id}
+        patientName={isRtl ? patient.fullNameAr || patient.fullName : patient.fullName}
+        canRecord={true}
+        canManage={true}
+        onRecordClick={() => setDialysisModalOpen(true)}
+      />
+
+      {/* Bilingual Clinical Laboratory Results Section (R5) */}
+      <PatientLabResultsView
+        patientId={patient.id}
+        canEdit={true}
+        onEditClick={(rec) => {
+          setSelectedLabRecord(rec || null);
+          setLabModalOpen(true);
+        }}
+      />
 
       {/* Reminder Schedule Section */}
       <Card
@@ -1296,6 +1360,37 @@ export default function PatientDetailPage() {
           </form>
         )}
       </Modal>
+
+      {/* Bilingual Lab Results Modal (R5) */}
+      <PatientLabResultsModal
+        isOpen={labModalOpen}
+        onClose={() => setLabModalOpen(false)}
+        patientId={patient.id}
+        existingRecord={selectedLabRecord}
+        onSaved={() => {
+          loadPatientData();
+          setToastMessage(isRtl ? 'تم حفظ وتحديث نتائج التحاليل بنجاح ✅' : 'Lab results updated successfully ✅');
+          setTimeout(() => setToastMessage(null), 3500);
+        }}
+      />
+
+      {/* Dialysis Session Recording Modal (R2 - 14 Clinical Fields) */}
+      <DialysisSessionModal
+        isOpen={dialysisModalOpen}
+        onClose={() => setDialysisModalOpen(false)}
+        patientId={patient.id}
+        patientName={isRtl ? patient.fullNameAr || patient.fullName : patient.fullName}
+        recordedBy="doctor"
+        onSessionRecorded={(savedSession) => {
+          loadPatientData();
+          setToastMessage(
+            isRtl
+              ? `تم تسجيل جلسة الغسيل الكلوي (${savedSession.sessionDate}) بنجاح ✅`
+              : `Dialysis session for ${savedSession.sessionDate} recorded successfully ✅`
+          );
+          setTimeout(() => setToastMessage(null), 3500);
+        }}
+      />
     </div>
   );
 }

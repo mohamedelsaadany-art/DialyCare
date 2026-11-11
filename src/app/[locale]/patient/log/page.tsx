@@ -5,8 +5,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import {
-  getReminders,
-  getReminderTemplates,
   getAdherenceLogs,
   addAdherenceLog,
   getFluidLogs,
@@ -14,16 +12,18 @@ import {
   getDietLogs,
   addDietLog,
   getDietChecklist,
+  getPatients,
+  getPatientFluidLimits,
 } from '@/lib/data-store';
-import { getReminderStatus, recordReminderAdherence } from '../patient-utils';
+import { playFluidAlarm } from '@/lib/audio-alarm';
+import { PatientCoachingAvatar } from '@/components/PatientCoachingAvatar';
 import type {
-  PatientReminder,
-  ReminderTemplate,
   AdherenceLog,
   FluidLog,
   DietLog,
   DietChecklistItem,
   MealType,
+  Patient,
 } from '@/lib/types';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -31,8 +31,11 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { PatientMedicationSection } from '@/components/patient/PatientMedicationSection';
+import { DialysisSessionModal } from '@/components/DialysisSessionModal';
+import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
 
-type LogTab = 'medication' | 'fluid' | 'diet';
+type LogTab = 'medication' | 'fluid' | 'diet' | 'dialysis';
 
 function LogContent() {
   const { user } = useAuth();
@@ -43,6 +46,7 @@ function LogContent() {
 
   const tPatient = useTranslations('patient');
   const tCommon = useTranslations('common');
+  const tFluidAlerts = useTranslations('fluidAlerts');
 
   const initialTab = (searchParams.get('tab') as LogTab) || 'medication';
   const [activeTab, setActiveTab] = useState<LogTab>(initialTab);
@@ -56,18 +60,14 @@ function LogContent() {
   const patientId = user?.uid || 'patient-1';
 
   // Common State
-  const [reminders, setReminders] = useState<PatientReminder[]>([]);
-  const [templates, setTemplates] = useState<ReminderTemplate[]>([]);
+  const [patientRecord, setPatientRecord] = useState<Patient | null>(null);
   const [adherenceLogs, setAdherenceLogs] = useState<AdherenceLog[]>([]);
   const [fluidLogs, setFluidLogs] = useState<FluidLog[]>([]);
   const [dietLogs, setDietLogs] = useState<DietLog[]>([]);
   const [dietChecklistItems, setDietChecklistItems] = useState<DietChecklistItem[]>([]);
-  const [fluidLimit, setFluidLimit] = useState<number>(1000);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  const [isDialysisModalOpen, setIsDialysisModalOpen] = useState<boolean>(false);
   const [isPending, startTransition] = useTransition();
-
-  // Medication Tab State
-  const [medStatuses, setMedStatuses] = useState<Record<string, 'done' | 'skipped' | 'pending'>>({});
 
   // Fluid Tab State
   const [customAmount, setCustomAmount] = useState<string>('');
@@ -84,8 +84,14 @@ function LogContent() {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    const r = getReminders(patientId);
-    const tmpl = getReminderTemplates();
+    const allPatients = getPatients();
+    const currentPatient =
+      allPatients.find((p) => p.id === patientId) ||
+      allPatients.find((p) => p.fullName.toLowerCase().includes('ahmed')) ||
+      allPatients[0] ||
+      null;
+    setPatientRecord(currentPatient);
+
     const adh = getAdherenceLogs(patientId, undefined, {
       start: startOfToday.toISOString(),
       end: endOfToday.toISOString(),
@@ -94,33 +100,10 @@ function LogContent() {
     const dl = getDietLogs(patientId, todayStr);
     const dCheck = getDietChecklist();
 
-    const activeList = r.length > 0 ? r : getReminders('patient-1');
-
-    setReminders(activeList);
-    setTemplates(tmpl);
     setAdherenceLogs(adh);
     setFluidLogs(fl);
     setDietLogs(dl);
     setDietChecklistItems(dCheck);
-
-    // Accurately determine initial med statuses for each reminder individually
-    const initialStatuses: Record<string, 'done' | 'skipped' | 'pending'> = {};
-    activeList
-      .filter((item) => item.type === 'ttt' && item.isActive)
-      .forEach((item) => {
-        const res = getReminderStatus(item, adh, fl, dl, tmpl);
-        initialStatuses[item.id] =
-          res.status === 'done' ? 'done' : res.status === 'skipped' ? 'skipped' : 'pending';
-      });
-    setMedStatuses(initialStatuses);
-
-    // Read personalized fluid limit
-    if (typeof window !== 'undefined') {
-      const savedLimit = window.localStorage.getItem(`DIALYCARE_FLUID_LIMIT_${patientId}`);
-      if (savedLimit) {
-        setFluidLimit(parseInt(savedLimit, 10) || 1000);
-      }
-    }
   }, [patientId]);
 
   useEffect(() => {
@@ -135,51 +118,9 @@ function LogContent() {
     }, 3500);
   };
 
-  // Medication Reminders
-  const medReminders = useMemo(() => {
-    return reminders
-      .filter((r) => r.type === 'ttt' && r.isActive)
-      .map((r) => {
-        const tpl = templates.find((t) => t.id === r.templateId);
-        return {
-          id: r.id,
-          time: r.time,
-          title: isAr
-            ? tpl?.titleAr || 'أدوية ومثبتات الفوسفات'
-            : tpl?.titleEn || 'Scheduled Medication',
-        };
-      });
-  }, [reminders, templates, isAr]);
-
-  // Handle Med toggle
-  const handleMedToggle = (remId: string, status: 'done' | 'skipped') => {
-    setMedStatuses((prev) => ({
-      ...prev,
-      [remId]: prev[remId] === status ? 'pending' : status,
-    }));
-  };
-
-  // Save all Med changes
-  const handleSaveMedications = () => {
-    startTransition(() => {
-      Object.entries(medStatuses).forEach(([remId, status]) => {
-        if (status !== 'pending') {
-          const rem = medReminders.find((m) => m.id === remId);
-          recordReminderAdherence({
-            patientId,
-            reminderId: remId,
-            type: 'ttt',
-            status,
-            title: rem?.title || 'Scheduled Medication',
-          });
-        }
-      });
-      loadAllLogs();
-      showNotification(
-        isAr ? 'تم حفظ سجل الأدوية بنجاح ✅' : 'Medication adherence saved successfully ✅'
-      );
-    });
-  };
+  // Dry-weight based limits from R3 (Warning: dry_weight * 20, Critical: dry_weight * 26)
+  const dryWeightKg = patientRecord?.dryWeightKg || 70;
+  const fluidLimits = useMemo(() => getPatientFluidLimits(dryWeightKg), [dryWeightKg]);
 
   // Today's Medication Logs History
   const todayMedLogs = useMemo(() => {
@@ -191,18 +132,27 @@ function LogContent() {
     return fluidLogs.reduce((sum, item) => sum + item.amountMl, 0);
   }, [fluidLogs]);
 
+  const fluidStatus = useMemo<'normal' | 'warning' | 'critical'>(() => {
+    if (totalFluidConsumed >= fluidLimits.critical) return 'critical';
+    if (totalFluidConsumed >= fluidLimits.warning) return 'warning';
+    return 'normal';
+  }, [totalFluidConsumed, fluidLimits]);
+
   const fluidPercentage = useMemo(() => {
-    return Math.min(100, Math.round((totalFluidConsumed / fluidLimit) * 100));
-  }, [totalFluidConsumed, fluidLimit]);
+    return Math.min(100, Math.round((totalFluidConsumed / fluidLimits.critical) * 100));
+  }, [totalFluidConsumed, fluidLimits]);
 
   const fluidProgressVariant = useMemo(() => {
-    if (fluidPercentage < 70) return 'success';
-    if (fluidPercentage <= 90) return 'warning';
-    return 'danger';
-  }, [fluidPercentage]);
+    if (fluidStatus === 'critical') return 'danger';
+    if (fluidStatus === 'warning') return 'warning';
+    return 'success';
+  }, [fluidStatus]);
 
-  // Handle Quick Add Fluid
+  // Handle Quick Add Fluid (Auto-triggers or re-triggers alarm when at/above critical)
   const handleAddFluidAmount = (amountMl: number) => {
+    const nextTotal = totalFluidConsumed + amountMl;
+    const willBeCritical = nextTotal >= fluidLimits.critical;
+
     startTransition(() => {
       addFluidLog({
         patientId,
@@ -220,6 +170,12 @@ function LogContent() {
       });
 
       loadAllLogs();
+
+      // CRITICAL REQUIREMENT: Trigger alarm on reaching critical limit OR re-trigger if already critical!
+      if (willBeCritical) {
+        playFluidAlarm();
+      }
+
       showNotification(
         isAr
           ? `تمت إضافة ${amountMl} مل إلى سجل السوائل 💧`
@@ -228,13 +184,15 @@ function LogContent() {
     });
   };
 
-  // Handle Custom Fluid Submit
+  // Handle Custom Fluid Submit (Auto-triggers or re-triggers alarm when at/above critical)
   const handleCustomFluidSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(customAmount);
     if (isNaN(val) || val <= 0) return;
 
     const amountInMl = fluidUnit === 'cups' ? Math.round(val * 240) : Math.round(val);
+    const nextTotal = totalFluidConsumed + amountInMl;
+    const willBeCritical = nextTotal >= fluidLimits.critical;
 
     startTransition(() => {
       addFluidLog({
@@ -254,6 +212,12 @@ function LogContent() {
 
       setCustomAmount('');
       loadAllLogs();
+
+      // CRITICAL REQUIREMENT: Trigger alarm on reaching critical limit OR re-trigger if already critical!
+      if (willBeCritical) {
+        playFluidAlarm();
+      }
+
       showNotification(
         isAr
           ? `تم تسجيل ${amountInMl} مل بنجاح 💧`
@@ -346,8 +310,17 @@ function LogContent() {
         </div>
       )}
 
+      {/* Patient Coaching Avatar Character "Dr. Dialy" (R4) */}
+      <PatientCoachingAvatar
+        patientId={patientId}
+        adherenceMetrics={{
+          fluidPercentage,
+          adherenceScore: fluidStatus === 'critical' ? 45 : fluidStatus === 'warning' ? 70 : 95,
+        }}
+      />
+
       {/* Tabs Header */}
-      <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-200/80 rounded-2xl">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-200/80 rounded-2xl">
         <button
           type="button"
           onClick={() => handleTabChange('medication')}
@@ -395,6 +368,24 @@ function LogContent() {
           <span>🥗</span>
           <span>{isAr ? 'التغذية' : 'Diet'}</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('dialysis')}
+          data-testid="patient-log-dialysis-tab-btn"
+          aria-label={isAr ? 'سجل جلسات الغسيل الكلوي (14 معيار)' : 'Dialysis Sessions (14 Clinical Fields)'}
+          className={`
+            min-h-[50px] rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer
+            ${
+              activeTab === 'dialysis'
+                ? 'bg-white text-[#1e6bb8] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }
+          `}
+        >
+          <span>🩺</span>
+          <span>{isAr ? 'جلسة الغسيل' : 'Dialysis'}</span>
+        </button>
       </div>
 
       {/* =================================================== */}
@@ -402,88 +393,10 @@ function LogContent() {
       {/* =================================================== */}
       {activeTab === 'medication' && (
         <div className="space-y-4">
-          <Card className="p-5 bg-white rounded-3xl border border-slate-200/90 shadow-xs">
-            <h2 className="text-lg font-black text-slate-900 tracking-tight">
-              {isAr ? 'أدوية ومثبتات الفوسفات اليوم' : "Today's Medication Adherence"}
-            </h2>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {isAr
-                ? 'حدد حالة تناول كل دواء تم جدولته لليوم ثم اضغط حفظ'
-                : 'Confirm which scheduled doses you completed or skipped'}
-            </p>
-
-            <div className="mt-4 space-y-3">
-              {medReminders.length === 0 ? (
-                <p className="text-sm text-slate-500 py-3 text-center">
-                  {isAr ? 'لا توجد أدوية مقررة اليوم' : 'No medications scheduled today'}
-                </p>
-              ) : (
-                medReminders.map((med) => {
-                  const currentStatus = medStatuses[med.id] || 'pending';
-                  return (
-                    <div
-                      key={med.id}
-                      className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div>
-                        <h3 className="font-extrabold text-slate-900 text-sm leading-snug">
-                          {med.title}
-                        </h3>
-                        <p className="text-xs text-[#1e6bb8] font-bold mt-0.5 font-mono">
-                          🕒 {med.time}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleMedToggle(med.id, 'done')}
-                          className={`
-                            flex-1 sm:flex-none min-h-[48px] px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer
-                            ${
-                              currentStatus === 'done'
-                                ? 'bg-emerald-600 text-white shadow-xs scale-102'
-                                : 'bg-white border border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
-                            }
-                          `}
-                        >
-                          {isAr ? 'تم ✅' : 'Done ✅'}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleMedToggle(med.id, 'skipped')}
-                          className={`
-                            flex-1 sm:flex-none min-h-[48px] px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer
-                            ${
-                              currentStatus === 'skipped'
-                                ? 'bg-amber-500 text-white shadow-xs scale-102'
-                                : 'bg-white border border-slate-300 text-slate-700 hover:bg-amber-50 hover:text-amber-700'
-                            }
-                          `}
-                        >
-                          {isAr ? 'تخطي ⏭️' : 'Skip ⏭️'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="mt-5">
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                onClick={handleSaveMedications}
-                disabled={isPending}
-                className="font-extrabold min-h-[52px]"
-              >
-                {tCommon('save') || (isAr ? 'حفظ سجل الأدوية' : 'Save Medication Logs')}
-              </Button>
-            </div>
-          </Card>
+          <PatientMedicationSection
+            patientId={patientId}
+            onAdherenceLogged={() => loadAllLogs()}
+          />
 
           {/* Today's History */}
           <div className="space-y-2">
@@ -538,31 +451,194 @@ function LogContent() {
       )}
 
       {/* =================================================== */}
-      {/* 2. FLUID TAB */}
+      {/* 2. FLUID TAB (R3: SMART FLUID LIMIT ALERTS) */}
       {/* =================================================== */}
       {activeTab === 'fluid' && (
         <div className="space-y-4">
-          {/* Target and Progress Card */}
-          <Card className="p-5 bg-white rounded-3xl border border-slate-200/90 shadow-xs">
+          {/* R3 Smart Fluid Alert Target Card with Dynamic Warnings and Visual Flashing */}
+          <Card
+            data-testid="fluid-target-card"
+            className={`
+              p-5 rounded-3xl transition-all duration-300
+              ${
+                fluidStatus === 'critical'
+                  ? 'bg-red-100/90 border-2 border-red-600 ring-4 ring-red-500 animate-pulse text-red-950 shadow-xl shadow-red-500/20'
+                  : fluidStatus === 'warning'
+                  ? 'bg-red-50 border-2 border-red-500 text-red-900 shadow-md'
+                  : 'bg-white border border-slate-200/90 shadow-xs'
+              }
+            `}
+          >
+            {/* Critical Emergency Banner (Audible & Visual Alarm Triggered) */}
+            {fluidStatus === 'critical' && (
+              <div
+                data-testid="fluid-critical-banner"
+                className="mb-4 p-4 rounded-2xl bg-red-600 text-white font-extrabold text-xs flex flex-col gap-2.5 shadow-lg"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl animate-bounce" role="img" aria-label="Critical Alert">
+                      🚨
+                    </span>
+                    <div>
+                      <p className="font-black text-sm uppercase tracking-wide text-white">
+                        {tFluidAlerts('criticalBanner') ||
+                          (isAr
+                            ? 'إنذار خطر حرج: تم تجاوز الحد الأقصى للسوائل!'
+                            : 'CRITICAL ALARM: Interdialytic fluid limit exceeded!')}
+                      </p>
+                      <p className="text-xs font-bold text-red-100 mt-0.5">
+                        {tFluidAlerts('criticalAction') ||
+                          (isAr
+                            ? 'توقف عن شرب السوائل فوراً! اكتفِ بقطع ثلج صغيرة أو مضمضة الفم فقط.'
+                            : 'Stop fluid intake immediately! Take small ice chips or mouth rinse only.')}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Accessible Re-Trigger / Audible Sound Alarm Button */}
+                  <button
+                    type="button"
+                    onClick={() => playFluidAlarm()}
+                    data-testid="fluid-alarm-sound-btn"
+                    aria-label={isAr ? 'تشغيل صافرة الإنذار الصوتي' : 'Trigger Audible Alarm'}
+                    className="shrink-0 min-h-[48px] px-3.5 py-2 rounded-xl bg-white text-red-700 hover:bg-red-50 font-black text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-transform active:scale-95"
+                  >
+                    <span>🔊</span>
+                    <span>{isAr ? 'صافرة الإنذار' : 'Sound Alarm'}</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-red-500/60 flex items-center justify-between text-[11px] font-semibold text-red-200">
+                  <span>
+                    {tFluidAlerts('subsequentWarning') ||
+                      (isAr
+                        ? 'تمت إضافة سوائل جديدة بعد بلوغ حد الخطر! إشعار عاجل للفريق الطبي.'
+                        : 'Additional fluid logged beyond critical limit! Urgent medical notification.')}
+                  </span>
+                  <span className="font-mono bg-red-800/80 px-2 py-0.5 rounded text-white font-bold">
+                    {tFluidAlerts('audioAlarmActive') || (isAr ? 'الإنذار الصوتي نشط' : 'Alarm Active')}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Warning State Banner (Intake >= dry_weight * 20 mL) */}
+            {fluidStatus === 'warning' && (
+              <div
+                data-testid="fluid-warning-banner"
+                className="mb-4 p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-950 font-extrabold text-xs flex items-center justify-between gap-2 shadow-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl" role="img" aria-label="Warning">
+                    ⚠️
+                  </span>
+                  <div>
+                    <p className="font-black text-amber-950 text-xs sm:text-sm">
+                      {tFluidAlerts('warningBanner') ||
+                        (isAr
+                          ? 'تحذير: استهلاك السوائل يقترب من الحد الأقصى بين الجلسات!'
+                          : 'Warning: Interdialytic fluid intake approaching limit!')}
+                    </p>
+                    <p className="text-[11px] font-semibold text-amber-800 mt-0.5">
+                      {tFluidAlerts('warningStatus') ||
+                        (isAr
+                          ? `استهلاك السوائل في منطقة التحذير (أكبر من ${dryWeightKg} كجم × 20 مل = ${fluidLimits.warning} مل)`
+                          : `Fluid intake in warning zone (> ${dryWeightKg} kg × 20 mL = ${fluidLimits.warning} mL)`)}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="warning" size="sm" className="font-black shrink-0">
+                  {isAr ? 'منطقة التحذير' : 'Warning Zone'}
+                </Badge>
+              </div>
+            )}
+
+            {/* Header: Allowance Title & Consumed mL */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  {tPatient('fluidAllowance') || (isAr ? 'حد السوائل اليومي' : 'Daily Fluid Target')}
-                </p>
-                <h2 className="text-2xl font-black text-slate-900 mt-0.5">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    {tPatient('fluidAllowance') || (isAr ? 'سقف السوائل المعتمد' : 'Clinical Fluid Allowance')}
+                  </p>
+                  <Badge
+                    variant={
+                      fluidStatus === 'critical' ? 'danger' : fluidStatus === 'warning' ? 'warning' : 'success'
+                    }
+                    size="sm"
+                    className="font-black uppercase"
+                  >
+                    {fluidStatus === 'critical'
+                      ? isAr
+                        ? 'خطر حرج 🚨'
+                        : 'Critical Limit 🚨'
+                      : fluidStatus === 'warning'
+                      ? isAr
+                        ? 'تحذير ⚠️'
+                        : 'Warning Limit ⚠️'
+                      : isAr
+                      ? 'آمن 💧'
+                      : 'Safe Zone 💧'}
+                  </Badge>
+                </div>
+
+                <h2 className="text-2xl sm:text-3xl font-black mt-1 text-slate-900">
                   {totalFluidConsumed}{' '}
-                  <span className="text-sm font-bold text-slate-500">/ {fluidLimit} mL</span>
+                  <span className="text-sm font-bold text-slate-500">/ {fluidLimits.critical} mL</span>
                 </h2>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#1e6bb8] flex items-center justify-center text-2xl font-bold">
+
+              <div
+                className={`
+                  w-14 h-14 rounded-2xl flex items-center justify-center text-3xl font-bold shrink-0
+                  ${
+                    fluidStatus === 'critical'
+                      ? 'bg-red-200 text-red-700 animate-bounce'
+                      : fluidStatus === 'warning'
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-blue-50 text-[#1e6bb8]'
+                  }
+                `}
+              >
                 💧
               </div>
             </div>
 
+            {/* Dry Weight Limits Breakdown Strip (R3 Auto-Calculation) */}
+            <div className="mt-3.5 grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-slate-100/80 border border-slate-200 text-center">
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                  {tFluidAlerts('dryWeight') || (isAr ? 'الوزن الجاف' : 'Dry Weight')}
+                </p>
+                <p className="text-xs sm:text-sm font-black text-slate-900 mt-0.5">
+                  {dryWeightKg} <span className="text-[10px] font-bold text-slate-500">kg</span>
+                </p>
+              </div>
+
+              <div className="border-x border-slate-200 px-1">
+                <p className="text-[10px] font-bold text-amber-700 uppercase tracking-tight">
+                  {tFluidAlerts('warningThreshold') || (isAr ? 'حد التحذير' : 'Warning (×20)')}
+                </p>
+                <p className="text-xs sm:text-sm font-black text-amber-800 mt-0.5">
+                  {fluidLimits.warning} <span className="text-[10px] font-bold">mL</span>
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold text-red-700 uppercase tracking-tight">
+                  {tFluidAlerts('criticalThreshold') || (isAr ? 'حد الخطر' : 'Critical (×26)')}
+                </p>
+                <p className="text-xs sm:text-sm font-black text-red-800 mt-0.5">
+                  {fluidLimits.critical} <span className="text-[10px] font-bold">mL</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
             <div className="mt-4">
               <ProgressBar
                 value={totalFluidConsumed}
-                max={fluidLimit}
+                max={fluidLimits.critical}
                 variant={fluidProgressVariant}
                 size="lg"
                 showValue={true}
@@ -570,16 +646,23 @@ function LogContent() {
               />
             </div>
 
+            {/* Remaining budget and percentage footer */}
             <div className="mt-3 flex items-center justify-between text-xs font-bold">
-              <span className="text-slate-600">
-                {totalFluidConsumed >= fluidLimit
-                  ? (isAr ? '⚠️ وصلت إلى الحد الأقصى' : '⚠️ Limit Reached!')
+              <span className="text-slate-700">
+                {totalFluidConsumed >= fluidLimits.critical
+                  ? isAr
+                    ? '⚠️ تم تجاوز الحد الحرج الأقصى المسموح به!'
+                    : '🚨 Critical ceiling exceeded!'
+                  : totalFluidConsumed >= fluidLimits.warning
+                  ? isAr
+                    ? `⚠️ متبقي ${Math.max(0, fluidLimits.critical - totalFluidConsumed)} مل فقط قبل الإنذار الحرج`
+                    : `⚠️ Only ${Math.max(0, fluidLimits.critical - totalFluidConsumed)} mL before critical alarm`
                   : isAr
-                  ? `المتبقي: ${Math.max(0, fluidLimit - totalFluidConsumed)} مل`
-                  : `Remaining: ${Math.max(0, fluidLimit - totalFluidConsumed)} mL`}
+                  ? `المتبقي للحد الحرج: ${Math.max(0, fluidLimits.critical - totalFluidConsumed)} مل`
+                  : `Remaining to critical: ${Math.max(0, fluidLimits.critical - totalFluidConsumed)} mL`}
               </span>
               <span
-                className={`font-black ${
+                className={`font-black text-sm ${
                   fluidProgressVariant === 'danger'
                     ? 'text-red-600'
                     : fluidProgressVariant === 'warning'
@@ -866,6 +949,36 @@ function LogContent() {
           </div>
         </div>
       )}
+
+      {/* =================================================== */}
+      {/* 4. DIALYSIS TREATMENT SESSION TAB (R2) */}
+      {/* =================================================== */}
+      {activeTab === 'dialysis' && (
+        <div className="space-y-4">
+          <DialysisSessionHistory
+            patientId={patientId}
+            canRecord={true}
+            canManage={false}
+            onRecordClick={() => setIsDialysisModalOpen(true)}
+          />
+        </div>
+      )}
+
+      {/* Dialysis Session Recording Modal (14 Clinical Fields) */}
+      <DialysisSessionModal
+        isOpen={isDialysisModalOpen}
+        onClose={() => setIsDialysisModalOpen(false)}
+        patientId={patientId}
+        recordedBy={user?.uid || 'patient'}
+        onSessionRecorded={(saved) => {
+          loadAllLogs();
+          showNotification(
+            isAr
+              ? `تم تسجيل جلسة الغسيل الكلوي (${saved.sessionDate}) بنجاح! ✅`
+              : `Dialysis session for ${saved.sessionDate} recorded successfully! ✅`
+          );
+        }}
+      />
     </div>
   );
 }

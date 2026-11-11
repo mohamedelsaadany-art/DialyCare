@@ -13,6 +13,7 @@ import {
   getReminderTemplates,
   getPatients,
   getNotifications,
+  getPatientFluidLimits,
 } from '@/lib/data-store';
 import {
   getReminderStatus,
@@ -39,6 +40,11 @@ import { Button } from '@/components/ui/Button';
 import { InstallPwaPrompt } from '@/components/InstallPwaPrompt';
 import { DialysisDayCard } from '@/components/DialysisDayCard';
 import { DoctorNotificationsInboxModal } from '@/components/DoctorNotificationsInboxModal';
+import { PatientMedicationSection } from '@/components/patient/PatientMedicationSection';
+import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
+import { DialysisSessionModal } from '@/components/DialysisSessionModal';
+import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
+import { PatientCoachingAvatar } from '@/components/PatientCoachingAvatar';
 
 function formatNotifTime(sentAt?: Date | string | null, isAr: boolean = false): string {
   if (!sentAt) return isAr ? 'اليوم' : 'Today';
@@ -70,14 +76,15 @@ export default function PatientDashboardPage() {
   const [fluidLogs, setFluidLogs] = useState<FluidLog[]>([]);
   const [dietLogs, setDietLogs] = useState<DietLog[]>([]);
   const [tips, setTips] = useState<CoachingTip[]>([]);
-  const [fluidLimit, setFluidLimit] = useState<number>(1000);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [isInboxOpen, setIsInboxOpen] = useState<boolean>(false);
   const [selectedNotifId, setSelectedNotifId] = useState<string | null>(null);
+  const [isDialysisModalOpen, setIsDialysisModalOpen] = useState<boolean>(false);
   const [isPending, startTransition] = useTransition();
 
   const patientId = user?.uid || 'patient-1';
+  const activePatientId = patientRecord?.id || patientId;
 
   // Load all daily metrics
   const loadData = React.useCallback(() => {
@@ -113,14 +120,6 @@ export default function PatientDashboardPage() {
     setFluidLogs(fl);
     setDietLogs(dl);
     setTips(ct);
-
-    // Read personalized fluid limit
-    if (typeof window !== 'undefined') {
-      const savedLimit = window.localStorage.getItem(`DIALYCARE_FLUID_LIMIT_${activeId}`);
-      if (savedLimit) {
-        setFluidLimit(parseInt(savedLimit, 10) || 1000);
-      }
-    }
 
     // Load and filter doctor notifications
     const allNotifs = getNotifications();
@@ -262,17 +261,24 @@ export default function PatientDashboardPage() {
     };
   }, [processedReminders]);
 
+  // Dry-weight based limits from R3 (Critical limit: dry_weight * 26)
+  const dryWeightKg = patientRecord?.dryWeightKg || 70;
+  const fluidLimits = useMemo(() => getPatientFluidLimits(dryWeightKg), [dryWeightKg]);
+
   // Fluid stats
   const fluidStats = useMemo(() => {
     const totalConsumed = fluidLogs.reduce((sum, item) => sum + item.amountMl, 0);
-    const percentage = Math.min(100, Math.round((totalConsumed / fluidLimit) * 100));
+    const limit = fluidLimits.critical;
+    const percentage = Math.min(100, Math.round((totalConsumed / limit) * 100));
     return {
       totalConsumed,
-      limit: fluidLimit,
+      limit,
+      warningLimit: fluidLimits.warning,
       percentage,
-      isOver: totalConsumed > fluidLimit,
+      isOver: totalConsumed >= limit,
+      isWarning: totalConsumed >= fluidLimits.warning,
     };
-  }, [fluidLogs, fluidLimit]);
+  }, [fluidLogs, fluidLimits]);
 
   // Diet stats
   const dietStats = useMemo(() => {
@@ -700,7 +706,7 @@ export default function PatientDashboardPage() {
         <h2 className="text-sm font-black text-slate-700 uppercase tracking-wider px-1">
           {tPatient('quickActions') || (isAr ? 'تسجيل سريع' : 'Quick Actions')}
         </h2>
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <Link
             href={`/${locale}/patient/log?tab=medication`}
             className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:bg-blue-50/50 hover:border-[#1e6bb8] active:scale-95 transition-all min-h-[58px]"
@@ -730,8 +736,53 @@ export default function PatientDashboardPage() {
               {isAr ? 'تسجيل الوجبة' : 'Log Diet'}
             </span>
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setIsDialysisModalOpen(true)}
+            data-testid="patient-quick-record-dialysis-btn"
+            aria-label={isAr ? 'تسجيل جلسة غسيل كلوي اليوم (14 معيار)' : "Record Today's Dialysis Session (14 Fields)"}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-blue-200/80 shadow-xs hover:bg-blue-50/70 hover:border-[#1e6bb8] active:scale-95 transition-all min-h-[58px] cursor-pointer"
+          >
+            <span className="text-xl">🩺</span>
+            <span className="text-xs font-black text-[#1e6bb8] mt-1 text-center">
+              {isAr ? 'جلسة الغسيل' : 'Dialysis Session'}
+            </span>
+          </button>
         </div>
       </section>
+
+      {/* Patient Coaching Avatar Character "Dr. Dialy" (R4) */}
+      <PatientCoachingAvatar
+        patientId={activePatientId}
+        adherenceMetrics={{
+          adherenceScore,
+          fluidPercentage: fluidStats.percentage,
+          medicationsTaken: medStats.completed,
+          medicationsTotal: medStats.total,
+          mealsLogged: dietStats.mealsLogged,
+        }}
+      />
+
+      {/* Prescribed Named Medications Section (R1) */}
+      <PatientMedicationSection
+        patientId={activePatientId}
+        onAdherenceLogged={() => loadData()}
+      />
+
+      {/* Dialysis Treatment Session History (R2) */}
+      <DialysisSessionHistory
+        patientId={activePatientId}
+        patientName={isAr ? patientRecord?.fullNameAr || patientRecord?.fullName : patientRecord?.fullName}
+        canRecord={true}
+        canManage={false}
+        onRecordClick={() => setIsDialysisModalOpen(true)}
+      />
+
+      {/* Bilingual Clinical Laboratory Results Section (R5) */}
+      <PatientLabResultsView
+        patientId={activePatientId}
+      />
 
       {/* Daily Coaching Tip */}
       {dailyTip && (
@@ -777,6 +828,18 @@ export default function PatientDashboardPage() {
         onMarkAsRead={handleMarkAsRead}
         onMarkAllAsRead={handleMarkAllAsRead}
         selectedNotificationId={selectedNotifId}
+      />
+
+      {/* Dialysis Session Recording Modal (R2 - 14 Clinical Fields) */}
+      <DialysisSessionModal
+        isOpen={isDialysisModalOpen}
+        onClose={() => setIsDialysisModalOpen(false)}
+        patientId={activePatientId}
+        patientName={isAr ? patientRecord?.fullNameAr || patientRecord?.fullName : patientRecord?.fullName}
+        recordedBy={user?.uid || 'patient'}
+        onSessionRecorded={() => {
+          loadData();
+        }}
       />
     </div>
   );
