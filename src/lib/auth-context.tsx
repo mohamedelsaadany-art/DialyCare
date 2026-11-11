@@ -136,7 +136,7 @@ export function addPatientAccount(
     fullName: patientData.fullName || trimmedUsername,
     fullNameAr: patientData.fullNameAr || patientData.fullName || trimmedUsername,
     phone: patientData.phone || '',
-    dialysisSchedule: patientData.dialysisSchedule || 'MWF',
+    dialysisSchedule: (patientData.dialysisSchedule === 'TTS' || patientData.dialysisSchedule === 'STT') ? 'STT' : 'SMW',
     reminderSchedule: patientData.reminderSchedule || 'standard',
     isActive: patientData.isActive ?? true,
     createdAt: patientData.createdAt || new Date().toISOString(),

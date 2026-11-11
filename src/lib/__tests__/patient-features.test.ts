@@ -1,6 +1,9 @@
 import assert from 'node:assert';
 import {
   isDialysisDay,
+  normalizeDialysisSchedule,
+  getDialysisScheduleLabel,
+  getDialysisScheduleFullLabel,
   filterPatientNotifications,
   getReadNotificationIds,
   markNotificationAsRead,
@@ -10,7 +13,7 @@ import {
 import type { Notification } from '../types';
 
 // ========================================================
-// 1. DIALYSIS DAY SMART DETECTION TESTS
+// 1. DIALYSIS DAY SMART DETECTION TESTS (R6 STRICT 2-OPTION)
 // ========================================================
 console.log('--- Testing Dialysis Day Smart Detection ---');
 
@@ -30,37 +33,79 @@ const thu = new Date('2026-03-05T12:00:00Z');
 const fri = new Date('2026-03-06T12:00:00Z');
 const sat = new Date('2026-03-07T12:00:00Z');
 
-// MWF Schedule
-assert.strictEqual(isDialysisDay('MWF', mon), true, 'MWF on Monday must be dialysis day');
-assert.strictEqual(isDialysisDay('MWF', tue), false, 'MWF on Tuesday must NOT be dialysis day');
-assert.strictEqual(isDialysisDay('MWF', wed), true, 'MWF on Wednesday must be dialysis day');
-assert.strictEqual(isDialysisDay('MWF', thu), false, 'MWF on Thursday must NOT be dialysis day');
-assert.strictEqual(isDialysisDay('MWF', fri), true, 'MWF on Friday must be dialysis day');
-assert.strictEqual(isDialysisDay('MWF', sat), false, 'MWF on Saturday must NOT be dialysis day');
-assert.strictEqual(isDialysisDay('MWF', sun), false, 'MWF on Sunday must NOT be dialysis day');
+// Option 1: SMW Schedule (Saturday / Monday / Wednesday — السبت / الاثنين / الأربعاء)
+assert.strictEqual(isDialysisDay('SMW', sat), true, 'SMW on Saturday must be dialysis day (day 6)');
+assert.strictEqual(isDialysisDay('SMW', mon), true, 'SMW on Monday must be dialysis day (day 1)');
+assert.strictEqual(isDialysisDay('SMW', wed), true, 'SMW on Wednesday must be dialysis day (day 3)');
+assert.strictEqual(isDialysisDay('SMW', sun), false, 'SMW on Sunday must NOT be dialysis day (day 0)');
+assert.strictEqual(isDialysisDay('SMW', tue), false, 'SMW on Tuesday must NOT be dialysis day (day 2)');
+assert.strictEqual(isDialysisDay('SMW', thu), false, 'SMW on Thursday must NOT be dialysis day (day 4)');
+assert.strictEqual(isDialysisDay('SMW', fri), false, 'SMW on Friday must NOT be dialysis day (day 5)');
 
-// TTS Schedule
-assert.strictEqual(isDialysisDay('TTS', mon), false, 'TTS on Monday must NOT be dialysis day');
-assert.strictEqual(isDialysisDay('TTS', tue), true, 'TTS on Tuesday must be dialysis day');
-assert.strictEqual(isDialysisDay('TTS', wed), false, 'TTS on Wednesday must NOT be dialysis day');
-assert.strictEqual(isDialysisDay('TTS', thu), true, 'TTS on Thursday must be dialysis day');
-assert.strictEqual(isDialysisDay('TTS', fri), false, 'TTS on Friday must NOT be dialysis day');
-assert.strictEqual(isDialysisDay('TTS', sat), true, 'TTS on Saturday must be dialysis day');
-assert.strictEqual(isDialysisDay('TTS', sun), false, 'TTS on Sunday must NOT be dialysis day');
+// Option 2: STT Schedule (Sunday / Tuesday / Thursday — الأحد / الثلاثاء / الخميس)
+assert.strictEqual(isDialysisDay('STT', sun), true, 'STT on Sunday must be dialysis day (day 0)');
+assert.strictEqual(isDialysisDay('STT', tue), true, 'STT on Tuesday must be dialysis day (day 2)');
+assert.strictEqual(isDialysisDay('STT', thu), true, 'STT on Thursday must be dialysis day (day 4)');
+assert.strictEqual(isDialysisDay('STT', mon), false, 'STT on Monday must NOT be dialysis day (day 1)');
+assert.strictEqual(isDialysisDay('STT', wed), false, 'STT on Wednesday must NOT be dialysis day (day 3)');
+assert.strictEqual(isDialysisDay('STT', fri), false, 'STT on Friday must NOT be dialysis day (day 5)');
+assert.strictEqual(isDialysisDay('STT', sat), false, 'STT on Saturday must NOT be dialysis day (day 6)');
+
+// Backwards-compatible legacy schedule mapping
+// MWF normalizes to SMW (Sat / Mon / Wed)
+assert.strictEqual(isDialysisDay('MWF', sat), true, 'Legacy MWF on Saturday must be dialysis day');
+assert.strictEqual(isDialysisDay('MWF', mon), true, 'Legacy MWF on Monday must be dialysis day');
+assert.strictEqual(isDialysisDay('MWF', wed), true, 'Legacy MWF on Wednesday must be dialysis day');
+assert.strictEqual(isDialysisDay('MWF', tue), false, 'Legacy MWF on Tuesday must NOT be dialysis day');
+assert.strictEqual(isDialysisDay('MWF', thu), false, 'Legacy MWF on Thursday must NOT be dialysis day');
+assert.strictEqual(isDialysisDay('MWF', fri), false, 'Legacy MWF on Friday must NOT be dialysis day');
+assert.strictEqual(isDialysisDay('MWF', sun), false, 'Legacy MWF on Sunday must NOT be dialysis day');
+
+// TTS normalizes to STT (Sun / Tue / Thu)
+assert.strictEqual(isDialysisDay('TTS', sun), true, 'Legacy TTS on Sunday must be dialysis day');
+assert.strictEqual(isDialysisDay('TTS', tue), true, 'Legacy TTS on Tuesday must be dialysis day');
+assert.strictEqual(isDialysisDay('TTS', thu), true, 'Legacy TTS on Thursday must be dialysis day');
+assert.strictEqual(isDialysisDay('TTS', mon), false, 'Legacy TTS on Monday must NOT be dialysis day');
+assert.strictEqual(isDialysisDay('TTS', wed), false, 'Legacy TTS on Wednesday must NOT be dialysis day');
+assert.strictEqual(isDialysisDay('TTS', fri), false, 'Legacy TTS on Friday must NOT be dialysis day');
+assert.strictEqual(isDialysisDay('TTS', sat), false, 'Legacy TTS on Saturday must NOT be dialysis day');
 
 // Case insensitivity & Whitespace trimming
-assert.strictEqual(isDialysisDay('  mwf  ', mon), true, 'lowercase mwf with whitespace on Monday must be true');
-assert.strictEqual(isDialysisDay('  tts  ', tue), true, 'lowercase tts with whitespace on Tuesday must be true');
+assert.strictEqual(isDialysisDay('  smw  ', sat), true, 'lowercase smw with whitespace on Saturday must be true');
+assert.strictEqual(isDialysisDay('  stt  ', sun), true, 'lowercase stt with whitespace on Sunday must be true');
+assert.strictEqual(isDialysisDay('  mwf  ', sat), true, 'lowercase mwf with whitespace on Saturday must be true');
+assert.strictEqual(isDialysisDay('  tts  ', sun), true, 'lowercase tts with whitespace on Sunday must be true');
 
-// Default fallback when undefined or Custom
-assert.strictEqual(isDialysisDay(undefined, mon), true, 'Undefined schedule should default to MWF (Mon true)');
-assert.strictEqual(isDialysisDay(undefined, tue), false, 'Undefined schedule should default to MWF (Tue false)');
-assert.strictEqual(isDialysisDay('Custom', mon), true, 'Custom schedule should fallback to MWF (Mon true)');
-assert.strictEqual(isDialysisDay('Custom', tue), false, 'Custom schedule should fallback to MWF (Tue false)');
+// Default fallback when undefined or Custom defaults to SMW (Sat / Mon / Wed)
+assert.strictEqual(isDialysisDay(undefined, sat), true, 'Undefined schedule should default to SMW (Sat true)');
+assert.strictEqual(isDialysisDay(undefined, mon), true, 'Undefined schedule should default to SMW (Mon true)');
+assert.strictEqual(isDialysisDay(undefined, tue), false, 'Undefined schedule should default to SMW (Tue false)');
+assert.strictEqual(isDialysisDay('Custom', sat), true, 'Custom schedule should fallback to SMW (Sat true)');
+assert.strictEqual(isDialysisDay('Custom', mon), true, 'Custom schedule should fallback to SMW (Mon true)');
+assert.strictEqual(isDialysisDay('Custom', tue), false, 'Custom schedule should fallback to SMW (Tue false)');
+
+// Schedule helper functions verification
+assert.strictEqual(normalizeDialysisSchedule('SMW'), 'SMW');
+assert.strictEqual(normalizeDialysisSchedule('STT'), 'STT');
+assert.strictEqual(normalizeDialysisSchedule('MWF'), 'SMW');
+assert.strictEqual(normalizeDialysisSchedule('TTS'), 'STT');
+assert.strictEqual(normalizeDialysisSchedule('Custom'), 'SMW');
+assert.strictEqual(normalizeDialysisSchedule(undefined), 'SMW');
+
+assert.strictEqual(getDialysisScheduleLabel('SMW', true), 'السبت / الاثنين / الأربعاء');
+assert.strictEqual(getDialysisScheduleLabel('SMW', false), 'Sat / Mon / Wed');
+assert.strictEqual(getDialysisScheduleLabel('STT', true), 'الأحد / الثلاثاء / الخميس');
+assert.strictEqual(getDialysisScheduleLabel('STT', false), 'Sun / Tue / Thu');
+
+assert.strictEqual(getDialysisScheduleFullLabel('SMW', true), 'السبت / الاثنين / الأربعاء (Sat / Mon / Wed)');
+assert.strictEqual(getDialysisScheduleFullLabel('SMW', false), 'Sat / Mon / Wed (السبت / الاثنين / الأربعاء)');
+assert.strictEqual(getDialysisScheduleFullLabel('STT', true), 'الأحد / الثلاثاء / الخميس (Sun / Tue / Thu)');
+assert.strictEqual(getDialysisScheduleFullLabel('STT', false), 'Sun / Tue / Thu (الأحد / الثلاثاء / الخميس)');
 
 // Invalid date robustness
 const invalidDate = new Date('invalid-date-string');
-assert.strictEqual(typeof isDialysisDay('MWF', invalidDate), 'boolean', 'Invalid date should not throw');
+assert.strictEqual(typeof isDialysisDay('SMW', invalidDate), 'boolean', 'Invalid date should not throw');
+assert.strictEqual(typeof isDialysisDay('STT', invalidDate), 'boolean', 'Invalid date should not throw');
 
 console.log('✓ All Dialysis Day Smart Detection tests passed!');
 
@@ -130,6 +175,30 @@ const mockNotifications: Notification[] = [
     sentAt: '2026-03-01T14:00:00Z',
     status: 'sent',
   },
+  {
+    id: 'notif-group-smw',
+    senderId: 'doctor-1',
+    type: 'group',
+    recipientIds: ['SMW'],
+    titleEn: 'SMW Group Update',
+    titleAr: 'تحديث مجموعة السبت والاثنين والأربعاء',
+    messageEn: 'Update for SMW shift',
+    messageAr: 'تحديث لوردية السبت والاثنين والأربعاء',
+    sentAt: '2026-03-01T14:30:00Z',
+    status: 'sent',
+  },
+  {
+    id: 'notif-group-stt',
+    senderId: 'doctor-1',
+    type: 'group',
+    recipientIds: ['STT'],
+    titleEn: 'STT Group Update',
+    titleAr: 'تحديث مجموعة الأحد والثلاثاء والخميس',
+    messageEn: 'Update for STT shift',
+    messageAr: 'تحديث لوردية الأحد والثلاثاء والخميس',
+    sentAt: '2026-03-01T14:45:00Z',
+    status: 'sent',
+  },
   // Extra: group notification targeting via properties
   {
     id: 'notif-group-prop-mwf',
@@ -147,25 +216,52 @@ const mockNotifications: Notification[] = [
   },
 ];
 
-// Patient 1 (schedule MWF)
+// Patient 1 (schedule SMW - Option 1)
+const p1SmwNotifs = filterPatientNotifications(mockNotifications, 'patient-1', 'SMW');
+const p1SmwIds = p1SmwNotifs.map((n) => n.id);
+assert.strictEqual(p1SmwIds.includes('notif-broadcast-1'), true, 'P1 (SMW) must receive broadcast');
+assert.strictEqual(p1SmwIds.includes('notif-direct-p1'), true, 'P1 (SMW) must receive direct P1');
+assert.strictEqual(p1SmwIds.includes('notif-group-smw'), true, 'P1 (SMW) must receive SMW group');
+assert.strictEqual(p1SmwIds.includes('notif-group-mwf'), true, 'P1 (SMW) must receive legacy MWF group');
+assert.strictEqual(p1SmwIds.includes('notif-group-prop-mwf'), true, 'P1 (SMW) must receive MWF group via property');
+assert.strictEqual(p1SmwIds.includes('notif-direct-p2'), false, 'P1 (SMW) must NOT receive direct P2');
+assert.strictEqual(p1SmwIds.includes('notif-group-stt'), false, 'P1 (SMW) must NOT receive STT group');
+assert.strictEqual(p1SmwIds.includes('notif-group-tts'), false, 'P1 (SMW) must NOT receive TTS group');
+
+// Patient 1 (schedule MWF legacy)
 const p1Notifs = filterPatientNotifications(mockNotifications, 'patient-1', 'MWF');
 const p1Ids = p1Notifs.map((n) => n.id);
-assert.strictEqual(p1Ids.includes('notif-broadcast-1'), true, 'P1 must receive broadcast');
-assert.strictEqual(p1Ids.includes('notif-direct-p1'), true, 'P1 must receive direct P1');
-assert.strictEqual(p1Ids.includes('notif-group-mwf'), true, 'P1 must receive MWF group');
-assert.strictEqual(p1Ids.includes('notif-group-prop-mwf'), true, 'P1 must receive MWF group via group property');
-assert.strictEqual(p1Ids.includes('notif-direct-p2'), false, 'P1 must NOT receive direct P2');
-assert.strictEqual(p1Ids.includes('notif-group-tts'), false, 'P1 must NOT receive TTS group');
+assert.strictEqual(p1Ids.includes('notif-broadcast-1'), true, 'P1 (MWF) must receive broadcast');
+assert.strictEqual(p1Ids.includes('notif-direct-p1'), true, 'P1 (MWF) must receive direct P1');
+assert.strictEqual(p1Ids.includes('notif-group-smw'), true, 'P1 (MWF) must receive SMW group');
+assert.strictEqual(p1Ids.includes('notif-group-mwf'), true, 'P1 (MWF) must receive MWF group');
+assert.strictEqual(p1Ids.includes('notif-group-prop-mwf'), true, 'P1 (MWF) must receive MWF group via group property');
+assert.strictEqual(p1Ids.includes('notif-direct-p2'), false, 'P1 (MWF) must NOT receive direct P2');
+assert.strictEqual(p1Ids.includes('notif-group-stt'), false, 'P1 (MWF) must NOT receive STT group');
+assert.strictEqual(p1Ids.includes('notif-group-tts'), false, 'P1 (MWF) must NOT receive TTS group');
 
-// Patient 2 (schedule TTS)
+// Patient 2 (schedule STT - Option 2)
+const p2SttNotifs = filterPatientNotifications(mockNotifications, 'patient-2', 'STT');
+const p2SttIds = p2SttNotifs.map((n) => n.id);
+assert.strictEqual(p2SttIds.includes('notif-broadcast-1'), true, 'P2 (STT) must receive broadcast');
+assert.strictEqual(p2SttIds.includes('notif-direct-p2'), true, 'P2 (STT) must receive direct P2');
+assert.strictEqual(p2SttIds.includes('notif-group-stt'), true, 'P2 (STT) must receive STT group');
+assert.strictEqual(p2SttIds.includes('notif-group-tts'), true, 'P2 (STT) must receive legacy TTS group');
+assert.strictEqual(p2SttIds.includes('notif-direct-p1'), false, 'P2 (STT) must NOT receive direct P1');
+assert.strictEqual(p2SttIds.includes('notif-group-smw'), false, 'P2 (STT) must NOT receive SMW group');
+assert.strictEqual(p2SttIds.includes('notif-group-mwf'), false, 'P2 (STT) must NOT receive MWF group');
+
+// Patient 2 (schedule TTS legacy)
 const p2Notifs = filterPatientNotifications(mockNotifications, 'patient-2', 'TTS');
 const p2Ids = p2Notifs.map((n) => n.id);
-assert.strictEqual(p2Ids.includes('notif-broadcast-1'), true, 'P2 must receive broadcast');
-assert.strictEqual(p2Ids.includes('notif-direct-p2'), true, 'P2 must receive direct P2');
-assert.strictEqual(p2Ids.includes('notif-group-tts'), true, 'P2 must receive TTS group');
-assert.strictEqual(p2Ids.includes('notif-direct-p1'), false, 'P2 must NOT receive direct P1');
-assert.strictEqual(p2Ids.includes('notif-group-mwf'), false, 'P2 must NOT receive MWF group');
-assert.strictEqual(p2Ids.includes('notif-group-prop-mwf'), false, 'P2 must NOT receive MWF group property');
+assert.strictEqual(p2Ids.includes('notif-broadcast-1'), true, 'P2 (TTS) must receive broadcast');
+assert.strictEqual(p2Ids.includes('notif-direct-p2'), true, 'P2 (TTS) must receive direct P2');
+assert.strictEqual(p2Ids.includes('notif-group-stt'), true, 'P2 (TTS) must receive STT group');
+assert.strictEqual(p2Ids.includes('notif-group-tts'), true, 'P2 (TTS) must receive TTS group');
+assert.strictEqual(p2Ids.includes('notif-direct-p1'), false, 'P2 (TTS) must NOT receive direct P1');
+assert.strictEqual(p2Ids.includes('notif-group-smw'), false, 'P2 (TTS) must NOT receive SMW group');
+assert.strictEqual(p2Ids.includes('notif-group-mwf'), false, 'P2 (TTS) must NOT receive MWF group');
+assert.strictEqual(p2Ids.includes('notif-group-prop-mwf'), false, 'P2 (TTS) must NOT receive MWF group property');
 
 // Edge cases: null/undefined notifications or patientId
 assert.deepStrictEqual(filterPatientNotifications(null as unknown as Notification[], 'patient-1'), []);

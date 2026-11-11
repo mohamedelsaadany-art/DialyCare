@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 import type { Notification, Patient } from '@/lib/types';
+import { getDialysisScheduleLabel } from '@/app/[locale]/patient/patient-utils';
 import {
   getNotifications,
   addNotification,
@@ -100,7 +101,7 @@ export default function NotificationsCenterPage() {
   // Recipient targeting
   const [audienceType, setAudienceType] = useState<'all' | 'custom' | 'schedule'>('all');
   const [selectedPatientIds, setSelectedPatientIds] = useState<Set<string>>(new Set());
-  const [selectedSchedules, setSelectedSchedules] = useState<Set<string>>(new Set(['MWF']));
+  const [selectedSchedules, setSelectedSchedules] = useState<Set<string>>(new Set(['SMW']));
   const [patientSearch, setPatientSearch] = useState('');
 
   // Status feedback
@@ -206,7 +207,17 @@ export default function NotificationsCenterPage() {
     }
     if (audienceType === 'schedule') {
       return patients
-        .filter((p) => selectedSchedules.has(p.dialysisSchedule))
+        .filter((p) => {
+          const sched = (p.dialysisSchedule || '').trim().toUpperCase();
+          const isSTT = sched === 'STT' || sched === 'TTS' || sched.includes('SUN') || sched.includes('أحد');
+          const norm = isSTT ? 'STT' : 'SMW';
+          return (
+            selectedSchedules.has(norm) ||
+            selectedSchedules.has(sched) ||
+            (norm === 'SMW' && selectedSchedules.has('MWF')) ||
+            (norm === 'STT' && selectedSchedules.has('TTS'))
+          );
+        })
         .map((p) => p.id);
     }
     return Array.from(selectedPatientIds);
@@ -453,16 +464,31 @@ export default function NotificationsCenterPage() {
 
             {/* Schedule checkboxes if 'schedule' selected */}
             {audienceType === 'schedule' && (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-6 animate-in fade-in">
-                {['MWF', 'TTS', 'Custom'].map((sch) => (
-                  <label key={sch} className="flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 animate-in fade-in">
+                {[
+                  {
+                    code: 'SMW',
+                    labelAr: 'السبت / الاثنين / الأربعاء (Sat / Mon / Wed)',
+                    labelEn: 'Sat / Mon / Wed (السبت / الاثنين / الأربعاء)',
+                  },
+                  {
+                    code: 'STT',
+                    labelAr: 'الأحد / الثلاثاء / الخميس (Sun / Tue / Thu)',
+                    labelEn: 'Sun / Tue / Thu (الأحد / الثلاثاء / الخميس)',
+                  },
+                ].map((sch) => (
+                  <label key={sch.code} className="flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={selectedSchedules.has(sch)}
-                      onChange={() => handleToggleSchedule(sch)}
+                      checked={
+                        selectedSchedules.has(sch.code) ||
+                        (sch.code === 'SMW' && selectedSchedules.has('MWF')) ||
+                        (sch.code === 'STT' && selectedSchedules.has('TTS'))
+                      }
+                      onChange={() => handleToggleSchedule(sch.code)}
                       className="w-4 h-4 text-[#1e6bb8] rounded"
                     />
-                    <span>{sch} Shift</span>
+                    <span>{isRtl ? sch.labelAr : sch.labelEn}</span>
                   </label>
                 ))}
               </div>
@@ -502,7 +528,7 @@ export default function NotificationsCenterPage() {
                           </span>
                         </div>
                         <Badge variant="neutral" size="sm">
-                          {p.dialysisSchedule}
+                          {getDialysisScheduleLabel(p.dialysisSchedule, isRtl)}
                         </Badge>
                       </label>
                     );

@@ -494,6 +494,20 @@ export default function PatientDashboardPage() {
         </div>
       )}
 
+      {/* Patient Coaching Avatar Hero Placement (R1, R2, R3, R4) */}
+      <PatientCoachingAvatar
+        patientId={activePatientId}
+        dialysisSchedule={patientRecord?.dialysisSchedule}
+        dryWeightKg={dryWeightKg}
+        adherenceMetrics={{
+          adherenceScore,
+          fluidPercentage: fluidStats.percentage,
+          medicationsTaken: medStats.completed,
+          medicationsTotal: medStats.total,
+          mealsLogged: dietStats.mealsLogged,
+        }}
+      />
+
       {/* Dialysis Day vs Non-Dialysis Day Smart Awareness Card */}
       <DialysisDayCard dialysisSchedule={patientRecord?.dialysisSchedule} />
 
@@ -786,17 +800,6 @@ export default function PatientDashboardPage() {
         </Link>
       </section>
 
-      {/* Patient Coaching Avatar Character "Dr. Dialy" (R4) */}
-      <PatientCoachingAvatar
-        patientId={activePatientId}
-        adherenceMetrics={{
-          adherenceScore,
-          fluidPercentage: fluidStats.percentage,
-          medicationsTaken: medStats.completed,
-          medicationsTotal: medStats.total,
-          mealsLogged: dietStats.mealsLogged,
-        }}
-      />
 
       {/* Prescribed Named Medications Section (R1) */}
       <PatientMedicationSection

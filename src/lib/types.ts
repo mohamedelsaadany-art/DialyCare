@@ -12,7 +12,15 @@ export interface User {
   createdAt: Date | string;
 }
 
-export type DialysisScheduleType = 'MWF' | 'TTS' | string;
+/**
+ * Strict 2-Option Dialysis Days Schedule (R6):
+ * - 'SMW': Option 1 — Saturday / Monday / Wednesday (السبت / الاثنين / الأربعاء) -> getDay() in [6, 1, 3]
+ * - 'STT': Option 2 — Sunday / Tuesday / Thursday (الأحد / الثلاثاء / الخميس) -> getDay() in [0, 2, 4]
+ * Backwards compatibility: legacy 'MWF' normalizes to 'SMW', and 'TTS' normalizes to 'STT'.
+ */
+export type DialysisScheduleType = 'SMW' | 'STT' | 'MWF' | 'TTS' | string;
+
+export type Gender = 'male' | 'female';
 
 export interface Patient {
   id: string;
@@ -25,6 +33,9 @@ export interface Patient {
   dialysisSchedule: DialysisScheduleType;
   reminderSchedule?: string | Record<string, unknown>;
   dryWeightKg?: number;
+  gender?: Gender;
+  avatarId?: string;
+  avatarStyle?: string;
   isActive: boolean;
   createdAt: Date | string;
 }

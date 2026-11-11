@@ -74,6 +74,11 @@ const TEST_SUITES: TestSuiteDefinition[] = [
     name: '6. Tier 5: White-Box Adversarial Coverage Hardening Suite',
     importPath: './tier5-adversarial-coverage.test',
   },
+  {
+    id: 'dialysis-schedule-r6',
+    name: '7. Dialysis Schedule Options (R6) Strict Verification Suite',
+    importPath: './dialysis-schedule-r6.test',
+  },
 ];
 
 async function runMasterTestSuite(): Promise<void> {

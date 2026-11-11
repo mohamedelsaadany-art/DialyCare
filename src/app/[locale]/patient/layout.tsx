@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
+import { PatientAvatarSvg } from '@/components/avatar/PatientAvatarPresets';
+import { getPatientAvatar } from '@/lib/data-store';
 
 interface PatientLayoutProps {
   children: React.ReactNode;
@@ -145,6 +147,8 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
 
   const tCommon = useTranslations('common');
 
+  const [headerAvatarId, setHeaderAvatarId] = useState<string>('male_mature_1');
+
   useEffect(() => {
     if (!loading) {
       if (!user) {
@@ -154,6 +158,23 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
       }
     }
   }, [user, loading, isAdmin, locale, router]);
+
+  useEffect(() => {
+    const updateAvatar = () => {
+      const pId = user?.uid || 'patient-1';
+      const current = getPatientAvatar(pId);
+      if (current) {
+        setHeaderAvatarId(current);
+      }
+    };
+    updateAvatar();
+    window.addEventListener('dialycare_avatar_updated', updateAvatar);
+    window.addEventListener('dialycare_patient_updated', updateAvatar);
+    return () => {
+      window.removeEventListener('dialycare_avatar_updated', updateAvatar);
+      window.removeEventListener('dialycare_patient_updated', updateAvatar);
+    };
+  }, [user]);
 
   if (loading) {
     return (
@@ -197,6 +218,18 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
 
           <div className="flex items-center gap-2">
             <LanguageToggle variant="badge" />
+
+            {/* Quick Profile & Avatar Indicator */}
+            <Link
+              href={`/${locale}/patient/profile`}
+              aria-label={isAr ? 'الملف الشخصي وإعدادات المظهر' : 'Patient profile and avatar settings'}
+              title={isAr ? 'الملف الشخصي' : 'Patient Profile'}
+              className="w-11 h-11 min-h-[48px] min-w-[48px] rounded-2xl bg-slate-100 hover:bg-slate-200 p-1 flex items-center justify-center border border-slate-200 shadow-2xs transition-transform active:scale-95"
+            >
+              <div className="w-8 h-8 rounded-xl overflow-hidden bg-white">
+                <PatientAvatarSvg presetId={headerAvatarId} />
+              </div>
+            </Link>
           </div>
         </div>
       </header>

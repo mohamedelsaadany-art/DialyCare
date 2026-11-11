@@ -18,6 +18,7 @@ import {
   getPatientMedications,
 } from '@/lib/data-store';
 import type { PatientLabRecord } from '@/lib/types';
+import { getDialysisScheduleLabel } from '@/app/[locale]/patient/patient-utils';
 
 export interface AdminClinicalQuickPanelProps {
   /** Optional externally controlled patient ID */
@@ -308,8 +309,8 @@ export function AdminClinicalQuickPanel({
                       filteredPatients.map((p) => (
                         <option key={p.id} value={p.id}>
                           {isRtl
-                            ? `${p.fullNameAr || p.fullName} — ${p.fullName} | ${p.id} | ${p.dialysisSchedule}`
-                            : `${p.fullName}${p.fullNameAr ? ` (${p.fullNameAr})` : ''} | ${p.id} | ${p.dialysisSchedule}`}
+                            ? `${p.fullNameAr || p.fullName} — ${p.fullName} | ${p.id} | ${getDialysisScheduleLabel(p.dialysisSchedule, isRtl)}`
+                            : `${p.fullName}${p.fullNameAr ? ` (${p.fullNameAr})` : ''} | ${p.id} | ${getDialysisScheduleLabel(p.dialysisSchedule, isRtl)}`}
                         </option>
                       ))
                     )}
@@ -349,7 +350,7 @@ export function AdminClinicalQuickPanel({
                       ID: {activePatient.id}
                     </Badge>
                     <Badge variant="info" size="sm">
-                      📅 {activePatient.dialysisSchedule}
+                      📅 {getDialysisScheduleLabel(activePatient.dialysisSchedule, isRtl)}
                     </Badge>
                   </div>
 

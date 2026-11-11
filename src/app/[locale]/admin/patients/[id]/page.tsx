@@ -25,6 +25,7 @@ import ProgressBar from '@/components/ui/ProgressBar';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 import type { Patient, PatientReminder, Notification, PatientLabRecord } from '@/lib/types';
+import { getDialysisScheduleLabel, getDialysisScheduleFullLabel } from '@/app/[locale]/patient/patient-utils';
 import { PatientMedicationManager } from '@/components/admin/PatientMedicationManager';
 import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
 import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
@@ -165,7 +166,7 @@ export default function PatientDetailPage() {
     fullName: '',
     fullNameAr: '',
     phone: '',
-    dialysisSchedule: 'MWF',
+    dialysisSchedule: 'SMW',
     isActive: true,
   });
 
@@ -218,7 +219,7 @@ export default function PatientDetailPage() {
       fullName: found.fullName,
       fullNameAr: found.fullNameAr || '',
       phone: found.phone || '',
-      dialysisSchedule: found.dialysisSchedule,
+      dialysisSchedule: (found.dialysisSchedule === 'TTS' || found.dialysisSchedule === 'STT') ? 'STT' : 'SMW',
       isActive: found.isActive,
     });
 
@@ -633,7 +634,7 @@ export default function PatientDetailPage() {
                   {patient.isActive ? (isRtl ? 'نشط' : 'Active') : isRtl ? 'غير نشط' : 'Inactive'}
                 </Badge>
                 <Badge variant="info" size="sm">
-                  {patient.dialysisSchedule}
+                  {getDialysisScheduleLabel(patient.dialysisSchedule, isRtl)}
                 </Badge>
                 {/* Active Status Header Toggle Switch */}
                 <div className="inline-flex items-center gap-1.5 ms-2 px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-200">
@@ -674,7 +675,7 @@ export default function PatientDetailPage() {
                   <strong>{isRtl ? 'الهاتف:' : 'Phone:'}</strong> {patient.phone || 'N/A'}
                 </span>
                 <span>
-                  <strong>{isRtl ? 'جدول الغسيل:' : 'Schedule:'}</strong> {patient.dialysisSchedule}
+                  <strong>{isRtl ? 'جدول الغسيل:' : 'Schedule:'}</strong> {getDialysisScheduleFullLabel(patient.dialysisSchedule, isRtl)}
                 </span>
                 <span>
                   <strong>{isRtl ? 'تاريخ التسجيل:' : 'Enrolled:'}</strong>{' '}
@@ -1228,18 +1229,33 @@ export default function PatientDetailPage() {
             <label className="text-sm font-semibold text-slate-700">
               {isRtl ? 'جدول جلسات الغسيل' : 'Dialysis Days'}
             </label>
-            <div className="flex gap-4 mt-1">
-              {['MWF', 'TTS', 'Custom'].map((sch) => (
-                <label key={sch} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            <div className="flex flex-col sm:flex-row gap-3 mt-1">
+              {[
+                {
+                  code: 'SMW',
+                  labelAr: 'السبت / الاثنين / الأربعاء (Sat / Mon / Wed)',
+                  labelEn: 'Sat / Mon / Wed (السبت / الاثنين / الأربعاء)',
+                },
+                {
+                  code: 'STT',
+                  labelAr: 'الأحد / الثلاثاء / الخميس (Sun / Tue / Thu)',
+                  labelEn: 'Sun / Tue / Thu (الأحد / الثلاثاء / الخميس)',
+                },
+              ].map((sch) => (
+                <label key={sch.code} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                   <input
                     type="radio"
                     name="editPatientSchedule"
-                    value={sch}
-                    checked={editForm.dialysisSchedule === sch}
-                    onChange={(e) => setEditForm({ ...editForm, dialysisSchedule: e.target.value })}
-                    className="text-[#1e6bb8]"
+                    value={sch.code}
+                    checked={
+                      editForm.dialysisSchedule === sch.code ||
+                      (sch.code === 'SMW' && (editForm.dialysisSchedule === 'MWF' || editForm.dialysisSchedule === 'Custom')) ||
+                      (sch.code === 'STT' && editForm.dialysisSchedule === 'TTS')
+                    }
+                    onChange={() => setEditForm({ ...editForm, dialysisSchedule: sch.code })}
+                    className="w-4 h-4 text-[#1e6bb8] focus:ring-[#1e6bb8]"
                   />
-                  <span>{sch}</span>
+                  <span>{isRtl ? sch.labelAr : sch.labelEn}</span>
                 </label>
               ))}
             </div>

@@ -43,9 +43,17 @@ function cloneValue<T>(val: T): T {
   return JSON.parse(JSON.stringify(val));
 }
 
+const memoryStorage = new Map<string, string>();
+
 function readStorage<T>(key: string, defaultValue: T): T {
   if (typeof window === 'undefined') {
-    return cloneValue(defaultValue);
+    const mem = memoryStorage.get(key);
+    if (!mem) return cloneValue(defaultValue);
+    try {
+      return JSON.parse(mem) as T;
+    } catch {
+      return cloneValue(defaultValue);
+    }
   }
   try {
     const raw = window.localStorage.getItem(key);
@@ -58,7 +66,10 @@ function readStorage<T>(key: string, defaultValue: T): T {
 }
 
 function writeStorage<T>(key: string, value: T): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined') {
+    memoryStorage.set(key, JSON.stringify(value));
+    return;
+  }
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
@@ -73,9 +84,12 @@ const INITIAL_DEMO_PATIENTS: Patient[] = [
     fullName: 'Ahmed Mahmoud',
     fullNameAr: 'أحمد محمود',
     phone: '+201012345678',
-    dialysisSchedule: 'MWF', // Monday, Wednesday, Friday
+    dialysisSchedule: 'SMW', // Saturday, Monday, Wednesday (السبت / الاثنين / الأربعاء)
     reminderSchedule: 'standard',
     dryWeightKg: 70,
+    gender: 'male',
+    avatarId: 'male_mature_1',
+    avatarStyle: 'classic',
     isActive: true,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
@@ -84,9 +98,12 @@ const INITIAL_DEMO_PATIENTS: Patient[] = [
     fullName: 'Fatima El-Sayed',
     fullNameAr: 'فاطمة السيد',
     phone: '+201098765432',
-    dialysisSchedule: 'TTS', // Tuesday, Thursday, Saturday
+    dialysisSchedule: 'STT', // Sunday, Tuesday, Thursday (الأحد / الثلاثاء / الخميس)
     reminderSchedule: 'standard',
     dryWeightKg: 65,
+    gender: 'female',
+    avatarId: 'female_mature_1',
+    avatarStyle: 'classic',
     isActive: true,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
@@ -283,9 +300,13 @@ export const INITIAL_DEMO_NOTIFICATIONS: Notification[] = [
   },
 ];
 
-// Initialize data store on first load
 export function initDataStore(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined') {
+    if (!memoryStorage.has(STORAGE_KEYS.PATIENTS)) {
+      writeStorage(STORAGE_KEYS.PATIENTS, INITIAL_DEMO_PATIENTS);
+    }
+    return;
+  }
 
   // Coaching tips
   if (!window.localStorage.getItem(STORAGE_KEYS.COACHING_TIPS)) {
@@ -405,22 +426,72 @@ export function initDataStore(): void {
     }
   }
 
-  // Ensure patients in storage have dryWeightKg
+  // Ensure patients in storage have dryWeightKg, gender, avatarId, and avatarStyle
   const rawStoredPatients = window.localStorage.getItem(STORAGE_KEYS.PATIENTS);
   if (rawStoredPatients) {
     try {
       const parsedPatients = JSON.parse(rawStoredPatients) as Patient[];
       let patientModified = false;
       const patchedPatients = parsedPatients.map((p) => {
-        if (p.id === 'patient-1' && (p.dryWeightKg === undefined || p.dryWeightKg === null)) {
-          patientModified = true;
-          return { ...p, dryWeightKg: 70 };
+        let changed = false;
+        const item = { ...p };
+        if (item.id === 'patient-1') {
+          if (item.dryWeightKg === undefined || item.dryWeightKg === null) {
+            item.dryWeightKg = 70;
+            changed = true;
+          }
+          if (!item.gender) {
+            item.gender = 'male';
+            changed = true;
+          }
+          if (!item.avatarId) {
+            item.avatarId = 'male_mature_1';
+            changed = true;
+          }
+          if (!item.avatarStyle) {
+            item.avatarStyle = 'classic';
+            changed = true;
+          }
+          if (!item.dialysisSchedule || item.dialysisSchedule === 'MWF') {
+            item.dialysisSchedule = 'SMW';
+            changed = true;
+          }
+        } else if (item.id === 'patient-2') {
+          if (item.dryWeightKg === undefined || item.dryWeightKg === null) {
+            item.dryWeightKg = 65;
+            changed = true;
+          }
+          if (!item.gender) {
+            item.gender = 'female';
+            changed = true;
+          }
+          if (!item.avatarId) {
+            item.avatarId = 'female_mature_1';
+            changed = true;
+          }
+          if (!item.avatarStyle) {
+            item.avatarStyle = 'classic';
+            changed = true;
+          }
+          if (!item.dialysisSchedule || item.dialysisSchedule === 'TTS') {
+            item.dialysisSchedule = 'STT';
+            changed = true;
+          }
+        } else {
+          if (!item.avatarId) {
+            item.avatarId = item.gender === 'female' ? 'female_mature_1' : 'male_mature_1';
+            changed = true;
+          }
+          if (item.dialysisSchedule === 'MWF' || item.dialysisSchedule === 'Custom') {
+            item.dialysisSchedule = 'SMW';
+            changed = true;
+          } else if (item.dialysisSchedule === 'TTS') {
+            item.dialysisSchedule = 'STT';
+            changed = true;
+          }
         }
-        if (p.id === 'patient-2' && (p.dryWeightKg === undefined || p.dryWeightKg === null)) {
-          patientModified = true;
-          return { ...p, dryWeightKg: 65 };
-        }
-        return p;
+        if (changed) patientModified = true;
+        return item;
       });
       if (patientModified) {
         writeStorage(STORAGE_KEYS.PATIENTS, patchedPatients);
@@ -464,6 +535,7 @@ export function addPatient(patient: Patient): Patient {
   };
   patients.push(newPatient);
   writeStorage(STORAGE_KEYS.PATIENTS, patients);
+  dispatchStorageEvent('dialycare_patient_updated');
   return newPatient;
 }
 
@@ -475,7 +547,43 @@ export function updatePatient(id: string, data: Partial<Patient>): Patient | nul
   const updated: Patient = { ...patients[index], ...data };
   patients[index] = updated;
   writeStorage(STORAGE_KEYS.PATIENTS, patients);
+  dispatchStorageEvent('dialycare_patient_updated');
+  if (data.avatarId || data.avatarStyle) {
+    dispatchStorageEvent('dialycare_avatar_updated');
+  }
   return updated;
+}
+
+export function updatePatientAvatar(
+  patientId: string,
+  avatarId: string,
+  avatarStyle?: string
+): Patient | null {
+  initDataStore();
+  const patients = getPatients();
+  const index = patients.findIndex((p) => p.id === patientId);
+  if (index === -1) return null;
+
+  const updated: Patient = {
+    ...patients[index],
+    avatarId,
+    avatarStyle: avatarStyle || patients[index].avatarStyle || 'classic',
+  };
+  patients[index] = updated;
+  writeStorage(STORAGE_KEYS.PATIENTS, patients);
+  dispatchStorageEvent('dialycare_avatar_updated');
+  dispatchStorageEvent('dialycare_patient_updated');
+  return cloneValue(updated);
+}
+
+export function getPatientAvatar(patientId: string): string {
+  initDataStore();
+  const patients = getPatients();
+  const patient = patients.find((p) => p.id === patientId);
+  if (patient?.avatarId) {
+    return patient.avatarId;
+  }
+  return patient?.gender === 'female' ? 'female_mature_1' : 'male_mature_1';
 }
 
 export function deletePatient(id: string): boolean {
@@ -680,13 +788,22 @@ export function getPatientNotifications(patientId: string, schedule?: string): N
     const p = patients.find((pt) => pt.id === patientId);
     if (p) patientSchedule = p.dialysisSchedule;
   }
-  const schedUpper = (patientSchedule || '').toUpperCase();
+  const schedUpper = (patientSchedule || 'SMW').trim().toUpperCase();
+  const isSTT = schedUpper === 'STT' || schedUpper === 'TTS' || schedUpper.includes('SUN') || schedUpper.includes('أحد');
+  const isSMW = !isSTT;
+
   return notifications.filter((n) => {
     if (n.type === 'broadcast') return true;
     if (Array.isArray(n.recipientIds)) {
       if (n.recipientIds.includes(patientId)) return true;
-      if (n.type === 'group' && schedUpper && n.recipientIds.some((s) => s.toUpperCase() === schedUpper)) {
-        return true;
+      if (n.type === 'group') {
+        const matches = n.recipientIds.some((s) => {
+          const sUp = s.trim().toUpperCase();
+          if (isSMW && (sUp === 'SMW' || sUp === 'MWF')) return true;
+          if (isSTT && (sUp === 'STT' || sUp === 'TTS')) return true;
+          return sUp === schedUpper;
+        });
+        if (matches) return true;
       }
     }
     return false;

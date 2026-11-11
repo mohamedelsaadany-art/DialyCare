@@ -19,7 +19,16 @@ import {
   type CoachingTipItem,
 } from '../../components/PatientCoachingAvatar';
 import { playFluidAlarm, isAudioContextSupported } from '../audio-alarm';
-import { getPatientFluidLimits } from '../data-store';
+import {
+  getPatientFluidLimits,
+  getPatients,
+  updatePatientAvatar,
+  getPatientAvatar,
+} from '../data-store';
+import {
+  AVATAR_PRESETS,
+  getAvatarPreset,
+} from '../../components/avatar/PatientAvatarPresets';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 
@@ -46,8 +55,8 @@ test('1.1: COACHING_TIPS contains at least 9 comprehensive clinical items', () =
   );
 });
 
-test('1.2: Mandatory clinical domain coverage: medication, fluid, diet', () => {
-  const mandatoryDomains: CoachingDomain[] = ['medication', 'fluid', 'diet'];
+test('1.2: Mandatory clinical domain coverage: dialysis, medication, fluid, diet', () => {
+  const mandatoryDomains: CoachingDomain[] = ['dialysis', 'medication', 'fluid', 'diet'];
   const domainCounts = new Map<CoachingDomain, number>();
 
   for (const domain of mandatoryDomains) {
@@ -200,8 +209,11 @@ test('1.5: Adversarial domain filtering and cyclic navigation math', () => {
   const dietList = filterTips('diet');
   assert.ok(dietList.every((t) => t.domain === 'diet'));
 
+  const dialysisList = filterTips('dialysis');
+  assert.ok(dialysisList.every((t) => t.domain === 'dialysis'));
+
   // Cyclic navigation simulation across all lists
-  const testLists = [medList, fluidList, dietList, filterTips('all')];
+  const testLists = [dialysisList, medList, fluidList, dietList, filterTips('all')];
   for (const list of testLists) {
     const len = list.length;
     // Step forward 100 times
@@ -644,6 +656,130 @@ test('5.2: Re-triggering invariant: any subsequent fluid entry while critical tr
     'Alarm must re-trigger on every single addition beyond critical limit'
   );
   assert.strictEqual(total, 2050);
+});
+
+// ============================================================================
+// SUITE 6: PATIENT AVATAR PRESETS & PROFILE PERSISTENCE (R1)
+// ============================================================================
+
+test('6.1: AVATAR_PRESETS contains 8 distinct presets matching patient profiles', () => {
+  assert.ok(Array.isArray(AVATAR_PRESETS), 'AVATAR_PRESETS must be an exported array');
+  assert.strictEqual(AVATAR_PRESETS.length, 8, 'Expected exactly 8 avatar presets');
+
+  const malePresets = AVATAR_PRESETS.filter((p) => p.gender === 'male');
+  const femalePresets = AVATAR_PRESETS.filter((p) => p.gender === 'female');
+
+  assert.strictEqual(malePresets.length, 4, 'Expected 4 male avatar presets');
+  assert.strictEqual(femalePresets.length, 4, 'Expected 4 female avatar presets');
+
+  const expectedIds = [
+    'male_mature_1',
+    'male_mature_2',
+    'male_elder_1',
+    'male_young_1',
+    'female_mature_1',
+    'female_mature_2',
+    'female_elder_1',
+    'female_young_1',
+  ];
+
+  for (const id of expectedIds) {
+    const found = AVATAR_PRESETS.find((p) => p.id === id);
+    assert.ok(found, `Expected preset ID '${id}' to exist`);
+  }
+});
+
+test('6.2: All presets have bilingual names and descriptions with Arabic script', () => {
+  const arabicRegex = /[\u0600-\u06FF]/;
+  for (const p of AVATAR_PRESETS) {
+    assert.ok(p.nameEn.length >= 3, `Preset ${p.id} nameEn too short`);
+    assert.ok(p.nameAr.length >= 3, `Preset ${p.id} nameAr too short`);
+    assert.ok(arabicRegex.test(p.nameAr), `Preset ${p.id} nameAr must contain Arabic script`);
+    assert.ok(p.descriptionEn.length >= 10, `Preset ${p.id} descriptionEn too short`);
+    assert.ok(p.descriptionAr.length >= 10, `Preset ${p.id} descriptionAr too short`);
+    assert.ok(arabicRegex.test(p.descriptionAr), `Preset ${p.id} descriptionAr must contain Arabic script`);
+  }
+});
+
+test('6.3: Clinical accessories coverage: AV fistula and permcath chest dressings exist across presets', () => {
+  const fistulaPresets = AVATAR_PRESETS.filter((p) => p.medicalAccessory === 'av_fistula_arm');
+  const permcathPresets = AVATAR_PRESETS.filter((p) => p.medicalAccessory === 'permcath_chest');
+
+  assert.ok(fistulaPresets.length >= 4, 'Expected at least 4 presets with AV fistula arm access');
+  assert.ok(permcathPresets.length >= 2, 'Expected at least 2 presets with permcath chest catheter access');
+});
+
+test('6.4: Default fallback: getAvatarPreset returns appropriate defaults for male and female patients', () => {
+  const maleDefault = getAvatarPreset(undefined, 'male');
+  assert.strictEqual(maleDefault.id, 'male_mature_1');
+  assert.strictEqual(maleDefault.gender, 'male');
+
+  const femaleDefault = getAvatarPreset(undefined, 'female');
+  assert.strictEqual(femaleDefault.id, 'female_mature_1');
+  assert.strictEqual(femaleDefault.gender, 'female');
+
+  const directLookup = getAvatarPreset('male_elder_1');
+  assert.strictEqual(directLookup.id, 'male_elder_1');
+});
+
+test('6.5: updatePatientAvatar and getPatientAvatar persist and retrieve avatar IDs', () => {
+  const patients = getPatients();
+  assert.ok(patients.length >= 2, 'Expected at least 2 demo patients');
+
+  const p1 = patients.find((p) => p.id === 'patient-1');
+  assert.ok(p1, 'patient-1 must exist');
+  assert.ok(p1.avatarId, 'patient-1 must have an avatarId');
+
+  // Test updating avatar
+  const updated = updatePatientAvatar('patient-1', 'male_mature_2', 'modern');
+  assert.ok(updated, 'updatePatientAvatar should return updated patient');
+  assert.strictEqual(updated.avatarId, 'male_mature_2');
+  assert.strictEqual(getPatientAvatar('patient-1'), 'male_mature_2');
+
+  // Reset back to male_mature_1
+  updatePatientAvatar('patient-1', 'male_mature_1', 'classic');
+  assert.strictEqual(getPatientAvatar('patient-1'), 'male_mature_1');
+});
+
+// ============================================================================
+// SUITE 7: VISUAL INTERACTIVE REMINDERS & DIALYSIS SCHEDULE (R3)
+// ============================================================================
+
+test('7.1: Dialysis session importance coaching tips are present and verified', () => {
+  const dialysisTips = COACHING_TIPS.filter((t) => t.domain === 'dialysis');
+  assert.ok(dialysisTips.length >= 3, 'Dialysis domain must contain at least 3 tips');
+
+  const fourHourTip = dialysisTips.find((t) =>
+    (t.titleEn + ' ' + t.contentEn).toLowerCase().includes('4-hour')
+  );
+  assert.ok(fourHourTip, 'Must contain 4-hour dialysis session duration tip');
+
+  const thrillTip = dialysisTips.find((t) =>
+    (t.titleEn + ' ' + t.contentEn).toLowerCase().includes('thrill')
+  );
+  assert.ok(thrillTip, 'Must contain vascular access thrill care tip');
+});
+
+// ============================================================================
+// SUITE 8: SAVED LAB RESULTS COMMENTARY DEFINITIONS (R4)
+// ============================================================================
+
+test('8.1: Core 6 lab metrics definitions and clinical advice are registered', () => {
+  const avatarCode = fs.readFileSync(
+    path.join(PROJECT_ROOT, 'src/components/PatientCoachingAvatar.tsx'),
+    'utf8'
+  );
+
+  const coreMetrics = ['hemoglobin', 'phosphorus', 'calcium', 'urea', 'creatinine', 'albumin'];
+  for (const m of coreMetrics) {
+    assert.ok(
+      avatarCode.includes(m),
+      `PatientCoachingAvatar must handle core lab metric '${m}'`
+    );
+  }
+
+  assert.ok(avatarCode.includes('getPatientLabResults'), 'Must query patient lab results');
+  assert.ok(avatarCode.includes('getPatientMedications'), 'Must query patient medications for reminders');
 });
 
 // ============================================================================

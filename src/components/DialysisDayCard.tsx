@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useLocale } from 'next-intl';
-import { isDialysisDay } from '@/app/[locale]/patient/patient-utils';
+import { isDialysisDay, getDialysisScheduleLabel } from '@/app/[locale]/patient/patient-utils';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 
@@ -17,14 +17,8 @@ export function DialysisDayCard({ dialysisSchedule, className = '' }: DialysisDa
   const isTreatmentDay = isDialysisDay(dialysisSchedule);
 
   const scheduleLabel = React.useMemo(() => {
-    const s = (dialysisSchedule || 'MWF').toUpperCase();
-    if (s.includes('TTS')) {
-      return isAr ? 'جدول: الثلاثاء / الخميس / السبت' : 'Schedule: Tue / Thu / Sat';
-    }
-    if (s.includes('MWF')) {
-      return isAr ? 'جدول: الإثنين / الأربعاء / الجمعة' : 'Schedule: Mon / Wed / Fri';
-    }
-    return isAr ? `جدول: ${dialysisSchedule}` : `Schedule: ${dialysisSchedule || 'Custom'}`;
+    const label = getDialysisScheduleLabel(dialysisSchedule, isAr);
+    return isAr ? `جدول: ${label}` : `Schedule: ${label}`;
   }, [dialysisSchedule, isAr]);
 
   if (isTreatmentDay) {

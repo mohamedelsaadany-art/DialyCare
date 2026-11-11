@@ -16,12 +16,15 @@ import {
   showLocalNotification,
 } from '@/lib/notifications';
 import type { Patient } from '@/lib/types';
+import { getDialysisScheduleFullLabel } from '@/app/[locale]/patient/patient-utils';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
+import { PatientAvatarSvg } from '@/components/avatar/PatientAvatarPresets';
+import { AvatarStyleSelectorModal } from '@/components/avatar/AvatarStyleSelectorModal';
 
 export default function PatientProfilePage() {
   const { user, logout } = useAuth();
@@ -35,6 +38,7 @@ export default function PatientProfilePage() {
   const patientId = user?.uid || 'patient-1';
 
   const [patientRecord, setPatientRecord] = useState<Patient | null>(null);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
   const [fluidLimitInput, setFluidLimitInput] = useState<string>('1000');
   const [isLimitSaved, setIsLimitSaved] = useState<boolean>(false);
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
@@ -133,7 +137,12 @@ export default function PatientProfilePage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProfileMetrics();
+    const handleAvatarUpdated = () => loadProfileMetrics();
+    window.addEventListener('dialycare_avatar_updated', handleAvatarUpdated);
+    window.addEventListener('dialycare_patient_updated', handleAvatarUpdated);
     return () => {
+      window.removeEventListener('dialycare_avatar_updated', handleAvatarUpdated);
+      window.removeEventListener('dialycare_patient_updated', handleAvatarUpdated);
       if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
       if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
     };
@@ -180,15 +189,8 @@ export default function PatientProfilePage() {
   };
 
   const scheduleLabel = useMemo(() => {
-    const sched = patientRecord?.dialysisSchedule || 'MWF';
-    if (sched === 'MWF') {
-      return isAr ? 'السبت / الاثنين / الأربعاء (MWF)' : 'Mon / Wed / Fri (MWF)';
-    }
-    if (sched === 'TTS') {
-      return isAr ? 'الأحد / الثلاثاء / الخميس (TTS)' : 'Tue / Thu / Sat (TTS)';
-    }
-    return sched;
-  }, [patientRecord, isAr]);
+    return getDialysisScheduleFullLabel(patientRecord?.dialysisSchedule, isAr);
+  }, [patientRecord?.dialysisSchedule, isAr]);
 
   const fullNameDisplay = useMemo(() => {
     if (isAr) {
@@ -201,9 +203,20 @@ export default function PatientProfilePage() {
     <div className="space-y-5 animate-in fade-in duration-200">
       {/* Profile Header: Patient name (large), username */}
       <div className="p-6 bg-gradient-to-br from-[#1e6bb8] to-[#155392] text-white rounded-3xl shadow-md flex items-center gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-xs border-2 border-white/40 flex items-center justify-center text-3xl font-extrabold shrink-0 shadow-inner">
-          👤
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsAvatarModalOpen(true)}
+          aria-label={isAr ? 'تغيير مظهر الشخصية' : 'Change avatar appearance style'}
+          className="relative w-18 h-18 rounded-2xl bg-white/20 backdrop-blur-xs border-2 border-white/40 p-1 flex items-center justify-center shrink-0 shadow-inner hover:scale-105 active:scale-95 transition-transform cursor-pointer min-h-[48px] min-w-[48px]"
+          title={isAr ? 'اضغط لتغيير المظهر' : 'Click to customize avatar'}
+        >
+          <div className="w-14 h-14 rounded-xl overflow-hidden bg-white/10">
+            <PatientAvatarSvg presetId={patientRecord?.avatarId} gender={patientRecord?.gender} />
+          </div>
+          <span className="absolute -bottom-1 -end-1 w-6 h-6 rounded-full bg-white text-[#1e6bb8] text-xs font-black flex items-center justify-center shadow-xs">
+            ✎
+          </span>
+        </button>
         <div className="space-y-0.5 overflow-hidden">
           <h1 className="text-2xl font-black truncate">{fullNameDisplay}</h1>
           <p className="text-xs text-blue-100 font-mono tracking-wide truncate">
@@ -217,11 +230,21 @@ export default function PatientProfilePage() {
         </div>
       </div>
 
-      {/* Personal Info Card: Name, phone, dialysis schedule (MWF/TTS), dialysis center */}
+      {/* Personal Info Card: Name, phone, dialysis schedule, dialysis center, avatar style */}
       <Card className="p-5 bg-white rounded-3xl border border-slate-200/90 shadow-xs space-y-3.5">
-        <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">
-          {isAr ? 'البيانات الشخصية والجدول' : 'Personal & Dialysis Information'}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">
+            {isAr ? 'البيانات الشخصية والجدول' : 'Personal & Dialysis Information'}
+          </h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsAvatarModalOpen(true)}
+            className="text-xs font-extrabold min-h-[40px] px-3 border-[#1e6bb8] text-[#1e6bb8] hover:bg-blue-50"
+          >
+            🎨 {isAr ? 'تغيير المظهر' : 'Change Avatar'}
+          </Button>
+        </div>
 
         <div className="space-y-2 text-sm divide-y divide-slate-100">
           <div className="pt-2 flex items-center justify-between">
@@ -420,6 +443,19 @@ export default function PatientProfilePage() {
           <span>{tCommon('logout') || (isAr ? 'تسجيل الخروج من الحساب' : 'Sign Out')}</span>
         </Button>
       </div>
+
+      {/* Avatar Personalization Modal */}
+      <AvatarStyleSelectorModal
+        isOpen={isAvatarModalOpen}
+        onClose={() => setIsAvatarModalOpen(false)}
+        patientId={activePatientId}
+        currentAvatarId={patientRecord?.avatarId}
+        patientGender={patientRecord?.gender}
+        onAvatarSelected={(newAvatarId) => {
+          setPatientRecord((prev) => (prev ? { ...prev, avatarId: newAvatarId } : null));
+          loadProfileMetrics();
+        }}
+      />
     </div>
   );
 }

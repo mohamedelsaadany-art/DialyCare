@@ -45,7 +45,7 @@ export default function NewPatientPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [dialysisSchedule, setDialysisSchedule] = useState<'MWF' | 'TTS' | 'Custom'>('MWF');
+  const [dialysisSchedule, setDialysisSchedule] = useState<'SMW' | 'STT'>('SMW');
   const [centerName, setCenterName] = useState('');
   const [fluidLimit, setFluidLimit] = useState('1000');
 
@@ -288,41 +288,37 @@ export default function NewPatientPage() {
                 <span className="text-red-500 font-bold ms-1">*</span>
               </label>
 
-              <div className="flex flex-wrap gap-4 pt-1">
+              <div className="flex flex-col sm:flex-row gap-4 pt-1">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
                   <input
                     type="radio"
                     name="schedule"
-                    value="MWF"
-                    checked={dialysisSchedule === 'MWF'}
-                    onChange={() => setDialysisSchedule('MWF')}
+                    value="SMW"
+                    checked={dialysisSchedule === 'SMW'}
+                    onChange={() => setDialysisSchedule('SMW')}
                     className="w-4 h-4 text-[#1e6bb8] focus:ring-[#1e6bb8]"
                   />
-                  <span>MWF ({isRtl ? 'السبت/الإثنين/الأربعاء أو الأحد/الثلاثاء/الخميس' : 'Mon / Wed / Fri'})</span>
+                  <span>
+                    {isRtl
+                      ? 'السبت / الاثنين / الأربعاء (Sat / Mon / Wed)'
+                      : 'Sat / Mon / Wed (السبت / الاثنين / الأربعاء)'}
+                  </span>
                 </label>
 
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
                   <input
                     type="radio"
                     name="schedule"
-                    value="TTS"
-                    checked={dialysisSchedule === 'TTS'}
-                    onChange={() => setDialysisSchedule('TTS')}
+                    value="STT"
+                    checked={dialysisSchedule === 'STT'}
+                    onChange={() => setDialysisSchedule('STT')}
                     className="w-4 h-4 text-[#1e6bb8] focus:ring-[#1e6bb8]"
                   />
-                  <span>TTS ({isRtl ? 'الثلاثاء/الخميس/السبت' : 'Tue / Thu / Sat'})</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="schedule"
-                    value="Custom"
-                    checked={dialysisSchedule === 'Custom'}
-                    onChange={() => setDialysisSchedule('Custom')}
-                    className="w-4 h-4 text-[#1e6bb8] focus:ring-[#1e6bb8]"
-                  />
-                  <span>{isRtl ? 'مخصص' : 'Custom'}</span>
+                  <span>
+                    {isRtl
+                      ? 'الأحد / الثلاثاء / الخميس (Sun / Tue / Thu)'
+                      : 'Sun / Tue / Thu (الأحد / الثلاثاء / الخميس)'}
+                  </span>
                 </label>
               </div>
             </div>

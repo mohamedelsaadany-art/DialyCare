@@ -154,11 +154,16 @@ assert.ok(
   'Patient 1 must receive the direct message'
 );
 
-// Patient 1 inbox check via filterPatientNotifications
+// Patient 1 inbox check via filterPatientNotifications (SMW and legacy MWF)
+const p1FilteredSmw = filterPatientNotifications(adminList, 'patient-1', 'SMW');
+assert.ok(
+  p1FilteredSmw.some((n) => n.id === 'direct_msg_test_101'),
+  'Patient 1 inbox filter (SMW) must match the direct message'
+);
 const p1Filtered = filterPatientNotifications(adminList, 'patient-1', 'MWF');
 assert.ok(
   p1Filtered.some((n) => n.id === 'direct_msg_test_101'),
-  'Patient 1 inbox filter must match the direct message'
+  'Patient 1 inbox filter (legacy MWF) must match the direct message'
 );
 
 // Patient 2 inbox check - MUST NOT receive Patient 1 direct message
@@ -169,11 +174,18 @@ assert.strictEqual(
   'Patient 2 must NOT receive Patient 1 direct message'
 );
 
+const p2FilteredStt = filterPatientNotifications(adminList, 'patient-2', 'STT');
+assert.strictEqual(
+  p2FilteredStt.some((n) => n.id === 'direct_msg_test_101'),
+  false,
+  'Patient 2 inbox filter (STT) must NOT include Patient 1 direct message'
+);
+
 const p2Filtered = filterPatientNotifications(adminList, 'patient-2', 'TTS');
 assert.strictEqual(
   p2Filtered.some((n) => n.id === 'direct_msg_test_101'),
   false,
-  'Patient 2 inbox filter must NOT include Patient 1 direct message'
+  'Patient 2 inbox filter (legacy TTS) must NOT include Patient 1 direct message'
 );
 
 console.log('✓ Unified store verified: Admin and Patient Inbox read identical data with correct isolation.');

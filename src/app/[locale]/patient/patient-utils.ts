@@ -167,32 +167,83 @@ export function recordReminderAdherence(params: {
 }
 
 /**
+ * Normalizes any schedule string to one of the two strict options: 'SMW' or 'STT'.
+ * - 'SMW': Saturday / Monday / Wednesday (السبت / الاثنين / الأربعاء) -> [6, 1, 3]
+ * - 'STT': Sunday / Tuesday / Thursday (الأحد / الثلاثاء / الخميس) -> [0, 2, 4]
+ * Backwards compatibility: normalizes legacy 'MWF' -> 'SMW', 'TTS' -> 'STT', and 'Custom' -> 'SMW'.
+ */
+export function normalizeDialysisSchedule(schedule?: string): 'SMW' | 'STT' {
+  if (!schedule) return 'SMW';
+  const s = schedule.trim().toUpperCase();
+  if (
+    s.includes('STT') ||
+    s.includes('TTS') ||
+    s.includes('SUN') ||
+    s.includes('أحد') ||
+    s.includes('TUE') ||
+    s.includes('THU')
+  ) {
+    return 'STT';
+  }
+  return 'SMW';
+}
+
+/**
+ * Returns the short localized schedule label:
+ * - 'SMW': 'السبت / الاثنين / الأربعاء' (ar) or 'Sat / Mon / Wed' (en)
+ * - 'STT': 'الأحد / الثلاثاء / الخميس' (ar) or 'Sun / Tue / Thu' (en)
+ */
+export function getDialysisScheduleLabel(schedule?: string, isAr: boolean = false): string {
+  const norm = normalizeDialysisSchedule(schedule);
+  if (norm === 'STT') {
+    return isAr ? 'الأحد / الثلاثاء / الخميس' : 'Sun / Tue / Thu';
+  }
+  return isAr ? 'السبت / الاثنين / الأربعاء' : 'Sat / Mon / Wed';
+}
+
+/**
+ * Returns the full bilingual schedule label for forms, modals, and badges:
+ * - 'SMW': 'السبت / الاثنين / الأربعاء (Sat / Mon / Wed)' (ar) or 'Sat / Mon / Wed (السبت / الاثنين / الأربعاء)' (en)
+ * - 'STT': 'الأحد / الثلاثاء / الخميس (Sun / Tue / Thu)' (ar) or 'Sun / Tue / Thu (الأحد / الثلاثاء / الخميس)' (en)
+ */
+export function getDialysisScheduleFullLabel(schedule?: string, isAr: boolean = false): string {
+  const norm = normalizeDialysisSchedule(schedule);
+  if (norm === 'STT') {
+    return isAr
+      ? 'الأحد / الثلاثاء / الخميس (Sun / Tue / Thu)'
+      : 'Sun / Tue / Thu (الأحد / الثلاثاء / الخميس)';
+  }
+  return isAr
+    ? 'السبت / الاثنين / الأربعاء (Sat / Mon / Wed)'
+    : 'Sat / Mon / Wed (السبت / الاثنين / الأربعاء)';
+}
+
+/**
  * Smart detection of whether a given date is a Dialysis Treatment Day.
- * MWF: Monday (1), Wednesday (3), Friday (5)
- * TTS: Tuesday (2), Thursday (4), Saturday (6)
+ * Strict 2-Option Schedule (R6):
+ * - Option 1 (SMW): Saturday (6), Monday (1), Wednesday (3) [and legacy MWF]
+ * - Option 2 (STT): Sunday (0), Tuesday (2), Thursday (4) [and legacy TTS]
+ * Note: Friday (5) is always an off-dialysis day across both schedules.
  */
 export function isDialysisDay(dialysisSchedule?: string, date: Date = new Date()): boolean {
   const validDate = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
   const day = validDate.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
-  const schedule = (dialysisSchedule || 'MWF').toUpperCase();
+  const normalized = normalizeDialysisSchedule(dialysisSchedule);
 
-  if (schedule.includes('TTS')) {
-    return day === 2 || day === 4 || day === 6;
-  }
-  // Default and standard MWF
-  if (schedule.includes('MWF')) {
-    return day === 1 || day === 3 || day === 5;
+  if (normalized === 'STT') {
+    // Sunday (0), Tuesday (2), Thursday (4)
+    return day === 0 || day === 2 || day === 4;
   }
 
-  // Fallback for custom schedules
-  return day === 1 || day === 3 || day === 5;
+  // Default: SMW — Saturday (6), Monday (1), Wednesday (3)
+  return day === 6 || day === 1 || day === 3;
 }
 
 /**
  * Filter doctor notifications relevant to a specific patient:
  * - n.type === 'broadcast'
  * - OR n.recipientIds && (n.recipientIds.includes(patientId) || n.recipientIds.includes(userUid))
- * - OR n.type === 'group' matching patient's schedule (e.g. MWF or TTS)
+ * - OR n.type === 'group' matching patient's schedule (SMW or STT, with legacy MWF/TTS support)
  */
 export function filterPatientNotifications(
   notifications: Notification[],
@@ -202,7 +253,8 @@ export function filterPatientNotifications(
 ): Notification[] {
   if (!Array.isArray(notifications)) return [];
 
-  const patientSchedule = (schedule || 'MWF').trim().toUpperCase();
+  const rawSchedule = (schedule || 'SMW').trim().toUpperCase();
+  const normalizedPatientSchedule = normalizeDialysisSchedule(rawSchedule);
   const validIds = new Set<string>();
   if (patientId) validIds.add(patientId);
   if (userUid) validIds.add(userUid);
@@ -219,15 +271,15 @@ export function filterPatientNotifications(
 
       // Group matching schedule inside recipientIds
       if (n.type === 'group') {
-        if (
-          n.recipientIds.some(
-            (id) =>
-              id.trim().toUpperCase() === patientSchedule ||
-              id.trim().toUpperCase().includes(patientSchedule)
-          )
-        ) {
-          return true;
-        }
+        const matchesGroup = n.recipientIds.some((id) => {
+          const upper = id.trim().toUpperCase();
+          if (upper === rawSchedule || upper === normalizedPatientSchedule) return true;
+          // Support backwards compatibility for group matching
+          if (normalizedPatientSchedule === 'SMW' && (upper === 'MWF' || upper === 'SMW')) return true;
+          if (normalizedPatientSchedule === 'STT' && (upper === 'TTS' || upper === 'STT')) return true;
+          return false;
+        });
+        if (matchesGroup) return true;
       }
     }
 
@@ -238,13 +290,15 @@ export function filterPatientNotifications(
         typeof extra.group === 'string'
           ? extra.group.trim().toUpperCase()
           : typeof extra.targetGroup === 'string'
-          ? extra.targetGroup.trim().toUpperCase()
+          ? (extra.targetGroup as string).trim().toUpperCase()
           : typeof extra.schedule === 'string'
-          ? extra.schedule.trim().toUpperCase()
+          ? (extra.schedule as string).trim().toUpperCase()
           : '';
 
-      if (groupProp && (groupProp === patientSchedule || groupProp.includes(patientSchedule))) {
-        return true;
+      if (groupProp) {
+        if (groupProp === rawSchedule || groupProp === normalizedPatientSchedule) return true;
+        if (normalizedPatientSchedule === 'SMW' && (groupProp === 'MWF' || groupProp === 'SMW')) return true;
+        if (normalizedPatientSchedule === 'STT' && (groupProp === 'TTS' || groupProp === 'STT')) return true;
       }
     }
 
