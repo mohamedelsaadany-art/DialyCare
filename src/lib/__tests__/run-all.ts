@@ -69,6 +69,11 @@ const TEST_SUITES: TestSuiteDefinition[] = [
     name: '5. Milestone 4: Smart Fluid Alerts & Coaching Avatar Suite (R3 & R4)',
     importPath: './milestone4-alerts-avatar.test',
   },
+  {
+    id: 'tier5-adversarial-coverage',
+    name: '6. Tier 5: White-Box Adversarial Coverage Hardening Suite',
+    importPath: './tier5-adversarial-coverage.test',
+  },
 ];
 
 async function runMasterTestSuite(): Promise<void> {
@@ -90,6 +95,9 @@ async function runMasterTestSuite(): Promise<void> {
       const mod = await import(suite.importPath);
       if (typeof mod.runAllMilestone4Tests === 'function') {
         await mod.runAllMilestone4Tests();
+      }
+      if (typeof mod.runAllTier5AdversarialTests === 'function') {
+        await mod.runAllTier5AdversarialTests();
       }
       const assertionsRun = globalAssertionCount - priorCount;
       suiteResults.push({
