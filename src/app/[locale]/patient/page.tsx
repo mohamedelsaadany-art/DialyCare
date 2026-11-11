@@ -37,7 +37,6 @@ import type {
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { InstallPwaPrompt } from '@/components/InstallPwaPrompt';
 import { DialysisDayCard } from '@/components/DialysisDayCard';
 import { DoctorNotificationsInboxModal } from '@/components/DoctorNotificationsInboxModal';
 import { PatientMedicationSection } from '@/components/patient/PatientMedicationSection';
@@ -114,7 +113,19 @@ export default function PatientDashboardPage() {
     const dl = getDietLogs(activeId, todayStr);
     const ct = getCoachingTips().filter((t) => t.isActive);
 
-    setReminders(r.length > 0 ? r : getReminders('patient-1'));
+    const fallbackReminders =
+      r.length > 0
+        ? r
+        : tmpl.map((t) => ({
+            id: `rem_${activeId}_${t.id}`,
+            patientId: activeId,
+            templateId: t.id,
+            type: t.type,
+            time: t.defaultTime,
+            isActive: true,
+            useCustomSchedule: false,
+          }));
+    setReminders(fallbackReminders);
     setTemplates(tmpl);
     setAdherenceLogs(adh);
     setFluidLogs(fl);
@@ -149,6 +160,7 @@ export default function PatientDashboardPage() {
     const handleStorageChange = (e: StorageEvent) => {
       if (
         e.key === 'DIALYCARE_NOTIFICATIONS' ||
+        e.key === `DIALYCARE_READ_NOTIFICATIONS_${activePatientId}` ||
         e.key === `DIALYCARE_READ_NOTIFICATIONS_${patientId}`
       ) {
         loadData();
@@ -163,7 +175,7 @@ export default function PatientDashboardPage() {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('dialycare_notifications_updated', handleCustomUpdate);
     };
-  }, [loadData, patientId]);
+  }, [loadData, patientId, activePatientId]);
 
   // Doctor Notifications computation
   const unreadNotifications = useMemo(() => {
@@ -334,7 +346,7 @@ export default function PatientDashboardPage() {
   const handleQuickComplete = (rem: NonNullable<typeof nextReminder>) => {
     startTransition(() => {
       recordReminderAdherence({
-        patientId,
+        patientId: activePatientId,
         reminderId: rem.id,
         type: rem.type,
         status: 'done',
@@ -355,7 +367,10 @@ export default function PatientDashboardPage() {
       if (patientRecord?.fullNameAr) {
         return patientRecord.fullNameAr.split(' ')[0];
       }
-      return 'أحمد';
+      if (patientRecord?.fullName) {
+        return patientRecord.fullName.split(' ')[0];
+      }
+      return user?.displayName?.split(' ')[0] || user?.username || 'مريض';
     }
     if (patientRecord?.fullName) {
       return patientRecord.fullName.split(' ')[0];
@@ -391,9 +406,6 @@ export default function PatientDashboardPage() {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
-      {/* PWA Install Prompt Banner */}
-      <InstallPwaPrompt />
-
       {/* Header Greeting Banner with Doctor Notification Bell */}
       <section className="bg-gradient-to-br from-[#1e6bb8] to-[#155392] text-white p-5 rounded-3xl shadow-md">
         <div className="flex items-start justify-between gap-3">
@@ -750,6 +762,28 @@ export default function PatientDashboardPage() {
             </span>
           </button>
         </div>
+
+        {/* Read-only Patient Lab Results Shortcut */}
+        <Link
+          href={`/${locale}/patient/log?tab=labs`}
+          data-testid="patient-quick-view-labs-link"
+          className="flex items-center justify-between gap-3 px-4 py-3 min-h-[48px] rounded-2xl bg-teal-50/80 hover:bg-teal-100/80 border border-teal-200/80 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl" aria-hidden="true">🔬</span>
+            <div>
+              <p className="text-xs sm:text-sm font-black text-teal-950">
+                {isAr ? 'نتائج التحاليل المخبرية (12 تحليل)' : 'Laboratory Test Results (12 Tests)'}
+              </p>
+              <p className="text-[11px] font-semibold text-teal-700">
+                {isAr ? 'مسجلة بواسطة الطبيب المعالج — للعرض فقط' : 'Recorded by your doctor — Read-only view'}
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-black text-teal-800 shrink-0">
+            {isAr ? 'عرض ←' : 'View →'}
+          </span>
+        </Link>
       </section>
 
       {/* Patient Coaching Avatar Character "Dr. Dialy" (R4) */}
@@ -779,10 +813,20 @@ export default function PatientDashboardPage() {
         onRecordClick={() => setIsDialysisModalOpen(true)}
       />
 
-      {/* Bilingual Clinical Laboratory Results Section (R5) */}
-      <PatientLabResultsView
-        patientId={activePatientId}
-      />
+      {/* Bilingual Clinical Laboratory Results Section (R5 — Read-Only for Patient) */}
+      <section id="patient-labs-section" className="space-y-2 scroll-mt-20">
+        <div className="px-3 py-2 rounded-xl bg-teal-50 border border-teal-200/80 text-xs font-bold text-teal-900 flex items-center gap-2">
+          <span aria-hidden="true">🔬</span>
+          <span>
+            {isAr
+              ? 'نتائج التحاليل المخبرية — يتم إدخالها وتحديثها بواسطة الطبيب المعالج فقط (عرض فقط)'
+              : 'Laboratory Results — Entered & updated exclusively by your doctor (Read-only)'}
+          </span>
+        </div>
+        <PatientLabResultsView
+          patientId={activePatientId}
+        />
+      </section>
 
       {/* Daily Coaching Tip */}
       {dailyTip && (

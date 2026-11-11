@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import type {
   DialysisSession,
@@ -28,10 +28,18 @@ export interface DialysisSessionModalProps {
   initialSession?: DialysisSession | null;
 }
 
-const DEFAULT_TIMEPOINT: VitalsTimepoint = {
-  systolic: 130,
-  diastolic: 80,
-  heartRate: 72,
+type VitalsTimepointForm = {
+  systolic: string;
+  diastolic: string;
+  heartRate: string;
+};
+
+type DialysisSessionVitalsForm = Record<keyof DialysisSessionVitals, VitalsTimepointForm>;
+
+const DEFAULT_TIMEPOINT: VitalsTimepointForm = {
+  systolic: '130',
+  diastolic: '80',
+  heartRate: '72',
 };
 
 const DEFAULT_VITALS: DialysisSessionVitals = {
@@ -41,6 +49,21 @@ const DEFAULT_VITALS: DialysisSessionVitals = {
   after3hr: { systolic: 125, diastolic: 78, heartRate: 75 },
   endSession: { systolic: 128, diastolic: 79, heartRate: 72 },
 };
+
+function toVitalsForm(vitals: DialysisSessionVitals): DialysisSessionVitalsForm {
+  const mapTp = (tp: VitalsTimepoint | undefined, fallback: VitalsTimepoint): VitalsTimepointForm => ({
+    systolic: String(tp?.systolic ?? fallback.systolic),
+    diastolic: String(tp?.diastolic ?? fallback.diastolic),
+    heartRate: String(tp?.heartRate ?? fallback.heartRate),
+  });
+  return {
+    preSession: mapTp(vitals.preSession, DEFAULT_VITALS.preSession),
+    after1hr: mapTp(vitals.after1hr, DEFAULT_VITALS.after1hr),
+    after2hr: mapTp(vitals.after2hr, DEFAULT_VITALS.after2hr),
+    after3hr: mapTp(vitals.after3hr, DEFAULT_VITALS.after3hr),
+    endSession: mapTp(vitals.endSession, DEFAULT_VITALS.endSession),
+  };
+}
 
 export function DialysisSessionModal({
   isOpen,
@@ -72,7 +95,9 @@ export function DialysisSessionModal({
   const [postWeightGrams, setPostWeightGrams] = useState<string>('0');
 
   // Field 4 & 5: Vitals (BP & HR at 5 timepoints)
-  const [vitals, setVitals] = useState<DialysisSessionVitals>(DEFAULT_VITALS);
+  const [vitals, setVitals] = useState<DialysisSessionVitalsForm>(() =>
+    toVitalsForm(DEFAULT_VITALS)
+  );
 
   // Field 6: Temperature (°C)
   const [temperatureC, setTemperatureC] = useState<string>('36.6');
@@ -106,10 +131,12 @@ export function DialysisSessionModal({
   // Notes
   const [notes, setNotes] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const formBodyRef = useRef<HTMLDivElement>(null);
 
   // Populate form if initialSession changes or modal opens
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    if (!isOpen) return;
     if (initialSession) {
       setSessionDate(initialSession.sessionDate);
       setComplianceRating(initialSession.complianceRating);
@@ -117,7 +144,7 @@ export function DialysisSessionModal({
       setPreWeightGrams(String(initialSession.preWeightGrams ?? 0));
       setPostWeightKg(String(initialSession.postWeightKg));
       setPostWeightGrams(String(initialSession.postWeightGrams ?? 0));
-      setVitals(initialSession.vitals || DEFAULT_VITALS);
+      setVitals(toVitalsForm(initialSession.vitals || DEFAULT_VITALS));
       setTemperatureC(String(initialSession.temperatureC));
       setLegEdema(initialSession.fluidStatus?.legEdema || 'none');
       setLungCrackles(initialSession.fluidStatus?.lungCrackles || 'none');
@@ -130,6 +157,7 @@ export function DialysisSessionModal({
       setAccessType(initialSession.accessType || 'AVF');
       setMachineSodiumMeqL(String(initialSession.machineSodiumMeqL));
       setNotes(initialSession.notes || '');
+      setErrorMsg(null);
     } else if (isOpen) {
       setSessionDate(new Date().toISOString().slice(0, 10));
       setComplianceRating(5);
@@ -137,7 +165,7 @@ export function DialysisSessionModal({
       setPreWeightGrams('0');
       setPostWeightKg('68');
       setPostWeightGrams('0');
-      setVitals(DEFAULT_VITALS);
+      setVitals(toVitalsForm(DEFAULT_VITALS));
       setTemperatureC('36.6');
       setLegEdema('none');
       setLungCrackles('none');
@@ -155,20 +183,24 @@ export function DialysisSessionModal({
   }, [initialSession, isOpen]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Handle vitals timepoint changes
+  // Handle vitals timepoint changes (keep string values so clearing inputs works smoothly)
   const handleVitalsChange = (
     timepointKey: keyof DialysisSessionVitals,
     field: keyof VitalsTimepoint,
     value: string
   ) => {
-    const num = parseInt(value, 10);
     setVitals((prev) => ({
       ...prev,
       [timepointKey]: {
         ...prev[timepointKey],
-        [field]: isNaN(num) ? 0 : num,
+        [field]: value,
       },
     }));
+  };
+
+  const showValidationError = (msg: string) => {
+    setErrorMsg(msg);
+    formBodyRef.current?.scrollTo({ top: 0, behavior: 'auto' });
   };
 
   // Submission handler
@@ -176,17 +208,24 @@ export function DialysisSessionModal({
     e.preventDefault();
     setErrorMsg(null);
 
+    if (!sessionDate.trim()) {
+      showValidationError(
+        isAr ? 'يرجى تحديد تاريخ الجلسة.' : 'Please select a dialysis session date.'
+      );
+      return;
+    }
+
     const preKg = parseFloat(preWeightKg);
     const postKg = parseFloat(postWeightKg);
-    const preGrams = parseInt(preWeightGrams, 10) || 0;
-    const postGrams = parseInt(postWeightGrams, 10) || 0;
+    const preGrams = preWeightGrams.trim() === '' ? 0 : Number(preWeightGrams);
+    const postGrams = postWeightGrams.trim() === '' ? 0 : Number(postWeightGrams);
     const temp = parseFloat(temperatureC);
     const ufVol = parseFloat(ultrafiltrationVolumeMl);
     const bloodFlow = parseFloat(bloodFlowRateMlMin);
     const sodium = parseFloat(machineSodiumMeqL);
 
     if (isNaN(preKg) || preKg <= 0 || isNaN(postKg) || postKg <= 0) {
-      setErrorMsg(
+      showValidationError(
         isAr
           ? 'يرجى إدخال أوزان صحيحة قبل وبعد الجلسة بالكيلوجرام.'
           : 'Please enter valid pre- and post-dialysis weights.'
@@ -194,8 +233,81 @@ export function DialysisSessionModal({
       return;
     }
 
+    if (
+      isNaN(preGrams) ||
+      preGrams < 0 ||
+      preGrams > 999 ||
+      isNaN(postGrams) ||
+      postGrams < 0 ||
+      postGrams > 999
+    ) {
+      showValidationError(
+        isAr
+          ? 'يرجى إدخال قيمة الجرامات بين 0 و 999 جرام.'
+          : 'Please enter valid gram values between 0 and 999.'
+      );
+      return;
+    }
+
+    const parseNum = (s: string) => {
+      const trimmed = s.trim();
+      if (!trimmed) return NaN;
+      const num = Number(trimmed);
+      return Number.isFinite(num) ? Math.round(num) : NaN;
+    };
+
+    const parsedVitals: DialysisSessionVitals = {
+      preSession: {
+        systolic: parseNum(vitals.preSession.systolic),
+        diastolic: parseNum(vitals.preSession.diastolic),
+        heartRate: parseNum(vitals.preSession.heartRate),
+      },
+      after1hr: {
+        systolic: parseNum(vitals.after1hr.systolic),
+        diastolic: parseNum(vitals.after1hr.diastolic),
+        heartRate: parseNum(vitals.after1hr.heartRate),
+      },
+      after2hr: {
+        systolic: parseNum(vitals.after2hr.systolic),
+        diastolic: parseNum(vitals.after2hr.diastolic),
+        heartRate: parseNum(vitals.after2hr.heartRate),
+      },
+      after3hr: {
+        systolic: parseNum(vitals.after3hr.systolic),
+        diastolic: parseNum(vitals.after3hr.diastolic),
+        heartRate: parseNum(vitals.after3hr.heartRate),
+      },
+      endSession: {
+        systolic: parseNum(vitals.endSession.systolic),
+        diastolic: parseNum(vitals.endSession.diastolic),
+        heartRate: parseNum(vitals.endSession.heartRate),
+      },
+    };
+
+    const vitalsList = Object.values(parsedVitals);
+    const hasInvalidVitals = vitalsList.some(
+      (tp) =>
+        isNaN(tp.systolic) ||
+        tp.systolic < 40 ||
+        tp.systolic > 280 ||
+        isNaN(tp.diastolic) ||
+        tp.diastolic < 20 ||
+        tp.diastolic > 180 ||
+        isNaN(tp.heartRate) ||
+        tp.heartRate < 25 ||
+        tp.heartRate > 240
+    );
+    if (hasInvalidVitals) {
+      showValidationError(
+        isAr
+          ? 'يرجى التأكد من صحة قياسات ضغط الدم والنبض في جميع النقاط الزمنية الـ 5.'
+          : 'Please enter valid systolic, diastolic, and heart rate values across all 5 timepoints.'
+      );
+      return;
+    }
+
     if (isNaN(temp) || temp < 34 || temp > 43) {
-      setErrorMsg(
+      showValidationError(
         isAr
           ? 'يرجى إدخال درجة حرارة طبيعية ومقبولة طبياً (°م).'
           : 'Please enter a valid clinical body temperature (°C).'
@@ -204,7 +316,7 @@ export function DialysisSessionModal({
     }
 
     if (isNaN(ufVol) || ufVol < 0) {
-      setErrorMsg(
+      showValidationError(
         isAr
           ? 'يرجى إدخال حجم سحب الماء الفائق (UF Volume) بشكل صحيح.'
           : 'Please enter a valid ultrafiltration volume (mL).'
@@ -213,7 +325,7 @@ export function DialysisSessionModal({
     }
 
     if (isNaN(bloodFlow) || bloodFlow <= 0) {
-      setErrorMsg(
+      showValidationError(
         isAr
           ? 'يرجى إدخال معدل تدفق الدم (Blood Flow Rate) بشكل صحيح.'
           : 'Please enter a valid blood flow rate (mL/min).'
@@ -222,7 +334,7 @@ export function DialysisSessionModal({
     }
 
     if (isNaN(sodium) || sodium < 120 || sodium > 160) {
-      setErrorMsg(
+      showValidationError(
         isAr
           ? 'يرجى إدخال تركيز صوديوم جهاز الغسيل بين 120 و 160 مل مكافئ/لتر.'
           : 'Please enter a machine sodium concentration between 120 and 160 mEq/L.'
@@ -233,13 +345,13 @@ export function DialysisSessionModal({
     const sessionData = {
       patientId,
       sessionDate,
-      recordedBy,
+      recordedBy: initialSession?.recordedBy || recordedBy,
       complianceRating,
       preWeightKg: preKg,
       preWeightGrams: preGrams,
       postWeightKg: postKg,
       postWeightGrams: postGrams,
-      vitals,
+      vitals: parsedVitals,
       temperatureC: temp,
       fluidStatus: {
         legEdema,
@@ -286,25 +398,30 @@ export function DialysisSessionModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      maxWidth="2xl"
-      className="max-w-4xl max-h-[92vh] flex flex-col p-0 overflow-hidden"
+      maxWidth="4xl"
+      hideHeader
+      noBodyPadding
     >
       {/* Custom Sticky Header */}
-      <div className="p-5 sm:p-6 bg-gradient-to-r from-blue-900 to-[#1e6bb8] text-white flex items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-2xl shadow-inner border border-white/20">
+      <div className="px-4 py-3.5 sm:p-6 [@media(max-height:520px)]:px-4 [@media(max-height:520px)]:py-2 bg-gradient-to-r from-blue-900 to-[#1e6bb8] text-white flex items-center justify-between gap-3 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 [@media(max-height:520px)]:w-9 [@media(max-height:520px)]:h-9 rounded-2xl bg-white/15 flex items-center justify-center text-xl sm:text-2xl shadow-inner border border-white/20 shrink-0">
             🩺
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-                {tSession('recordSession') || (isAr ? 'تسجيل جلسة الغسيل الكلوي' : 'Record Dialysis Session')}
+              <h2 className="text-lg sm:text-2xl [@media(max-height:520px)]:text-base font-black tracking-tight">
+                {initialSession
+                  ? isAr
+                    ? 'تعديل جلسة الغسيل الكلوي'
+                    : 'Edit Dialysis Session'
+                  : tSession('recordSession') || (isAr ? 'تسجيل جلسة الغسيل الكلوي' : 'Record Dialysis Session')}
               </h2>
               <Badge variant="info" size="sm" className="bg-white/20 text-white border-0 font-bold">
                 {isAr ? '14 معيار سريري' : '14 Clinical Fields'}
               </Badge>
             </div>
-            <p className="text-blue-100 text-xs sm:text-sm mt-0.5 font-medium">
+            <p className="text-blue-100 text-xs sm:text-sm mt-0.5 font-medium truncate [@media(max-height:520px)]:hidden">
               {patientName ? (
                 <>
                   {isAr ? 'المريض:' : 'Patient:'}{' '}
@@ -328,8 +445,16 @@ export function DialysisSessionModal({
         </button>
       </div>
 
-      {/* Scrollable Form Body */}
-      <form onSubmit={handleSubmit} className="overflow-y-auto p-5 sm:p-6 space-y-6 flex-1 text-slate-800">
+      {/* Form Layout: Scrollable Clinical Body + Sticky Footer */}
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="flex-1 min-h-0 flex flex-col overflow-hidden text-slate-800"
+      >
+        <div
+          ref={formBodyRef}
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-5 sm:space-y-6"
+        >
         {errorMsg && (
           <div
             role="alert"
@@ -431,7 +556,7 @@ export function DialysisSessionModal({
         {/* SECTION 2: PRE & POST WEIGHT (FIELDS 2 & 3) */}
         {/* ============================================================== */}
         <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
             <div className="flex items-center gap-2 text-sm font-black text-slate-900">
               <span>⚖️</span>
               <span>{isAr ? 'أوزان المريض قبل وبعد الجلسة' : 'Pre & Post Dialysis Weights'}</span>
@@ -458,7 +583,7 @@ export function DialysisSessionModal({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="block text-[11px] font-bold text-slate-500 mb-1">
-                    {isAr ? 'كيلوجرام (kg)' : 'Kilograms (kg)'}
+                    {isAr ? 'كيلوجرام (كجم)' : 'Kilograms (kg)'}
                   </span>
                   <input
                     type="number"
@@ -467,13 +592,13 @@ export function DialysisSessionModal({
                     onChange={(e) => setPreWeightKg(e.target.value)}
                     required
                     placeholder="70"
-                    aria-label="Pre-dialysis weight in kilograms"
+                    aria-label={isAr ? 'الوزن قبل الجلسة بالكيلوجرام' : 'Pre-dialysis weight in kilograms'}
                     className="w-full min-h-[48px] px-3 text-base font-bold font-mono rounded-xl border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
                   />
                 </div>
                 <div>
                   <span className="block text-[11px] font-bold text-slate-500 mb-1">
-                    {isAr ? 'جرام (grams)' : 'Grams (g)'}
+                    {isAr ? 'جرام (جم)' : 'Grams (g)'}
                   </span>
                   <input
                     type="number"
@@ -483,7 +608,7 @@ export function DialysisSessionModal({
                     value={preWeightGrams}
                     onChange={(e) => setPreWeightGrams(e.target.value)}
                     placeholder="0"
-                    aria-label="Pre-dialysis weight in grams"
+                    aria-label={isAr ? 'الوزن قبل الجلسة بالجرام' : 'Pre-dialysis weight in grams'}
                     className="w-full min-h-[48px] px-3 text-base font-bold font-mono rounded-xl border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
                   />
                 </div>
@@ -498,7 +623,7 @@ export function DialysisSessionModal({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="block text-[11px] font-bold text-slate-500 mb-1">
-                    {isAr ? 'كيلوجرام (kg)' : 'Kilograms (kg)'}
+                    {isAr ? 'كيلوجرام (كجم)' : 'Kilograms (kg)'}
                   </span>
                   <input
                     type="number"
@@ -507,13 +632,13 @@ export function DialysisSessionModal({
                     onChange={(e) => setPostWeightKg(e.target.value)}
                     required
                     placeholder="68"
-                    aria-label="Post-dialysis weight in kilograms"
+                    aria-label={isAr ? 'الوزن بعد الجلسة بالكيلوجرام' : 'Post-dialysis weight in kilograms'}
                     className="w-full min-h-[48px] px-3 text-base font-bold font-mono rounded-xl border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
                   />
                 </div>
                 <div>
                   <span className="block text-[11px] font-bold text-slate-500 mb-1">
-                    {isAr ? 'جرام (grams)' : 'Grams (g)'}
+                    {isAr ? 'جرام (جم)' : 'Grams (g)'}
                   </span>
                   <input
                     type="number"
@@ -523,7 +648,7 @@ export function DialysisSessionModal({
                     value={postWeightGrams}
                     onChange={(e) => setPostWeightGrams(e.target.value)}
                     placeholder="0"
-                    aria-label="Post-dialysis weight in grams"
+                    aria-label={isAr ? 'الوزن بعد الجلسة بالجرام' : 'Post-dialysis weight in grams'}
                     className="w-full min-h-[48px] px-3 text-base font-bold font-mono rounded-xl border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
                   />
                 </div>
@@ -536,7 +661,7 @@ export function DialysisSessionModal({
         {/* SECTION 3: BLOOD PRESSURE & HEART RATE AT 5 TIMEPOINTS (FIELDS 4 & 5) */}
         {/* ============================================================== */}
         <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
             <div className="flex items-center gap-2 text-sm font-black text-slate-900">
               <span>🩺</span>
               <span>
@@ -549,75 +674,73 @@ export function DialysisSessionModal({
             </Badge>
           </div>
 
-          <div className="overflow-x-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 min-w-[580px] sm:min-w-0">
-              {timepointDefs.map((tp) => {
-                const cur = vitals[tp.key] || DEFAULT_TIMEPOINT;
-                return (
-                  <div key={tp.key} className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
-                    <div className="border-b border-slate-100 pb-1.5">
-                      <p className="text-xs font-extrabold text-slate-900">
-                        {isAr ? tp.labelAr : tp.labelEn}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        {isAr ? tp.subAr : tp.subEn}
-                      </p>
-                    </div>
-
-                    {/* Systolic */}
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">
-                        {isAr ? 'الانقباضي' : 'Systolic'} (mmHg)
-                      </span>
-                      <input
-                        type="number"
-                        min="50"
-                        max="260"
-                        value={cur.systolic}
-                        onChange={(e) => handleVitalsChange(tp.key, 'systolic', e.target.value)}
-                        required
-                        className="w-full min-h-[48px] px-2 text-center text-sm font-mono font-black rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
-                        aria-label={`${tp.labelEn} systolic blood pressure`}
-                      />
-                    </div>
-
-                    {/* Diastolic */}
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">
-                        {isAr ? 'الانبساطي' : 'Diastolic'} (mmHg)
-                      </span>
-                      <input
-                        type="number"
-                        min="30"
-                        max="160"
-                        value={cur.diastolic}
-                        onChange={(e) => handleVitalsChange(tp.key, 'diastolic', e.target.value)}
-                        required
-                        className="w-full min-h-[48px] px-2 text-center text-sm font-mono font-black rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
-                        aria-label={`${tp.labelEn} diastolic blood pressure`}
-                      />
-                    </div>
-
-                    {/* Heart Rate */}
-                    <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">
-                        ❤️ {isAr ? 'النبض' : 'Heart Rate'} (bpm)
-                      </span>
-                      <input
-                        type="number"
-                        min="30"
-                        max="220"
-                        value={cur.heartRate}
-                        onChange={(e) => handleVitalsChange(tp.key, 'heartRate', e.target.value)}
-                        required
-                        className="w-full min-h-[48px] px-2 text-center text-sm font-mono font-black rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
-                        aria-label={`${tp.labelEn} heart rate in bpm`}
-                      />
-                    </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {timepointDefs.map((tp) => {
+              const cur = vitals[tp.key] || DEFAULT_TIMEPOINT;
+              return (
+                <div key={tp.key} className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                  <div className="border-b border-slate-100 pb-1.5">
+                    <p className="text-xs font-extrabold text-slate-900">
+                      {isAr ? tp.labelAr : tp.labelEn}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      {isAr ? tp.subAr : tp.subEn}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
+
+                  {/* Systolic */}
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-500 uppercase">
+                      {isAr ? 'الانقباضي (ملم زئبق)' : 'Systolic (mmHg)'}
+                    </span>
+                    <input
+                      type="number"
+                      min="50"
+                      max="260"
+                      value={cur.systolic}
+                      onChange={(e) => handleVitalsChange(tp.key, 'systolic', e.target.value)}
+                      required
+                      className="w-full min-h-[48px] px-2 text-center text-sm font-mono font-black rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
+                      aria-label={isAr ? `${tp.labelAr} - الضغط الانقباضي` : `${tp.labelEn} systolic blood pressure`}
+                    />
+                  </div>
+
+                  {/* Diastolic */}
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-500 uppercase">
+                      {isAr ? 'الانبساطي (ملم زئبق)' : 'Diastolic (mmHg)'}
+                    </span>
+                    <input
+                      type="number"
+                      min="30"
+                      max="160"
+                      value={cur.diastolic}
+                      onChange={(e) => handleVitalsChange(tp.key, 'diastolic', e.target.value)}
+                      required
+                      className="w-full min-h-[48px] px-2 text-center text-sm font-mono font-black rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
+                      aria-label={isAr ? `${tp.labelAr} - الضغط الانبساطي` : `${tp.labelEn} diastolic blood pressure`}
+                    />
+                  </div>
+
+                  {/* Heart Rate */}
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-500 uppercase">
+                      ❤️ {isAr ? 'النبض (نبضة/د)' : 'Heart Rate (bpm)'}
+                    </span>
+                    <input
+                      type="number"
+                      min="30"
+                      max="220"
+                      value={cur.heartRate}
+                      onChange={(e) => handleVitalsChange(tp.key, 'heartRate', e.target.value)}
+                      required
+                      className="w-full min-h-[48px] px-2 text-center text-sm font-mono font-black rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
+                      aria-label={isAr ? `${tp.labelAr} - نبض القلب` : `${tp.labelEn} heart rate in bpm`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -645,7 +768,7 @@ export function DialysisSessionModal({
                 onChange={(e) => setTemperatureC(e.target.value)}
                 required
                 placeholder="36.6"
-                aria-label="Body temperature in Celsius"
+                aria-label={isAr ? 'درجة حرارة الجسم بالدرجة المئوية' : 'Body temperature in Celsius'}
                 className="w-full min-h-[48px] px-3.5 text-base font-mono font-black rounded-xl border border-slate-300 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
               />
               <span className="block text-[11px] text-slate-400 mt-1 font-semibold">
@@ -661,13 +784,13 @@ export function DialysisSessionModal({
               <select
                 value={legEdema}
                 onChange={(e) => setLegEdema(e.target.value as LegEdemaLevel)}
-                aria-label="Leg edema severity"
+                aria-label={isAr ? 'درجة تورم الساقين' : 'Leg edema severity'}
                 className="w-full min-h-[48px] px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
               >
-                <option value="none">{isAr ? 'بدون تورم (None)' : 'None'}</option>
-                <option value="mild">{isAr ? 'بسيط (+1 Mild)' : 'Mild (+1)'}</option>
-                <option value="moderate">{isAr ? 'متوسط (+2 Moderate)' : 'Moderate (+2)'}</option>
-                <option value="severe">{isAr ? 'شديد (+3/+4 Severe)' : 'Severe (+3/+4)'}</option>
+                <option value="none">{isAr ? 'بدون تورم' : 'None'}</option>
+                <option value="mild">{isAr ? 'بسيط (+1)' : 'Mild (+1)'}</option>
+                <option value="moderate">{isAr ? 'متوسط (+2)' : 'Moderate (+2)'}</option>
+                <option value="severe">{isAr ? 'شديد (+3/+4)' : 'Severe (+3/+4)'}</option>
               </select>
             </div>
 
@@ -679,13 +802,13 @@ export function DialysisSessionModal({
               <select
                 value={lungCrackles}
                 onChange={(e) => setLungCrackles(e.target.value as LungCracklesLevel)}
-                aria-label="Lung crackles severity"
+                aria-label={isAr ? 'شدة أصوات الرئة' : 'Lung crackles severity'}
                 className="w-full min-h-[48px] px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
               >
-                <option value="none">{isAr ? 'بدون أصوات (Clear)' : 'None (Clear lungs)'}</option>
-                <option value="lower_bases">{isAr ? 'أسفل الرئتين (Lower Bases)' : 'Lower Lung Bases'}</option>
-                <option value="mid_lung">{isAr ? 'منتصف الرئتين (Mid-Lung)' : 'Mid-Lung Fields'}</option>
-                <option value="all_areas">{isAr ? 'جميع أجزاء الصدر (Diffuse)' : 'All Chest Areas (Diffuse)'}</option>
+                <option value="none">{isAr ? 'بدون أصوات (رئة صافية)' : 'None (Clear lungs)'}</option>
+                <option value="lower_bases">{isAr ? 'أسفل الرئتين' : 'Lower Lung Bases'}</option>
+                <option value="mid_lung">{isAr ? 'منتصف الرئتين' : 'Mid-Lung Fields'}</option>
+                <option value="all_areas">{isAr ? 'جميع أجزاء الصدر' : 'All Chest Areas (Diffuse)'}</option>
               </select>
             </div>
 
@@ -697,13 +820,13 @@ export function DialysisSessionModal({
               <select
                 value={dyspnea}
                 onChange={(e) => setDyspnea(e.target.value as DyspneaLevel)}
-                aria-label="Dyspnea level"
+                aria-label={isAr ? 'درجة ضيق التنفس' : 'Dyspnea level'}
                 className="w-full min-h-[48px] px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
               >
-                <option value="none">{isAr ? 'بدون ضيق تنفس (None)' : 'None (Comfortable)'}</option>
-                <option value="mild">{isAr ? 'بسيط عند المجهود (Mild)' : 'Mild on exertion'}</option>
-                <option value="moderate">{isAr ? 'متوسط مع الحركة (Moderate)' : 'Moderate with activity'}</option>
-                <option value="severe">{isAr ? 'شديد أثناء الراحة (Severe)' : 'Severe at rest'}</option>
+                <option value="none">{isAr ? 'بدون ضيق تنفس' : 'None (Comfortable)'}</option>
+                <option value="mild">{isAr ? 'بسيط عند المجهود' : 'Mild on exertion'}</option>
+                <option value="moderate">{isAr ? 'متوسط مع الحركة' : 'Moderate with activity'}</option>
+                <option value="severe">{isAr ? 'شديد أثناء الراحة' : 'Severe at rest'}</option>
               </select>
             </div>
           </div>
@@ -738,7 +861,7 @@ export function DialysisSessionModal({
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                       }
                     `}
-                    aria-label={`Access type ${type}`}
+                    aria-label={isAr ? `نوع المدخل الوعائي ${type}` : `Access type ${type}`}
                   >
                     {type}
                   </button>
@@ -802,7 +925,7 @@ export function DialysisSessionModal({
                 onChange={(e) => setUltrafiltrationVolumeMl(e.target.value)}
                 required
                 placeholder="2000"
-                aria-label="Ultrafiltration volume in milliliters"
+                aria-label={isAr ? 'حجم السحب الفائق بالملليلتر' : 'Ultrafiltration volume in milliliters'}
                 className="w-full min-h-[48px] px-3.5 text-base font-mono font-black rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
               />
             </div>
@@ -821,7 +944,7 @@ export function DialysisSessionModal({
                 onChange={(e) => setBloodFlowRateMlMin(e.target.value)}
                 required
                 placeholder="350"
-                aria-label="Blood flow rate in milliliters per minute"
+                aria-label={isAr ? 'معدل تدفق الدم بالملليلتر في الدقيقة' : 'Blood flow rate in milliliters per minute'}
                 className="w-full min-h-[48px] px-3.5 text-base font-mono font-black rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
               />
             </div>
@@ -845,7 +968,7 @@ export function DialysisSessionModal({
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                       }
                     `}
-                    aria-label={`Dialysate flow ${rate} mL per min`}
+                    aria-label={isAr ? `معدل تدفق سائل الغسيل ${rate} مل في الدقيقة` : `Dialysate flow ${rate} mL per min`}
                   >
                     {rate}
                   </button>
@@ -867,7 +990,7 @@ export function DialysisSessionModal({
                 onChange={(e) => setMachineSodiumMeqL(e.target.value)}
                 required
                 placeholder="138"
-                aria-label="Dialysis machine sodium concentration in milliequivalents per liter"
+                aria-label={isAr ? 'تركيز صوديوم جهاز الغسيل' : 'Dialysis machine sodium concentration in milliequivalents per liter'}
                 className="w-full min-h-[48px] px-3.5 text-base font-mono font-black rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
               />
             </div>
@@ -894,15 +1017,16 @@ export function DialysisSessionModal({
             className="w-full p-3.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
           />
         </div>
+        </div>
 
         {/* Modal Sticky Footer Actions */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <div className="shrink-0 px-4 py-3 sm:px-6 sm:py-4 [@media(max-height:520px)]:py-2 border-t border-slate-200 bg-white flex flex-wrap items-center justify-end gap-2 sm:gap-3">
           <Button
             type="button"
             variant="secondary"
             size="md"
             onClick={onClose}
-            className="min-h-[48px] font-bold"
+            className="min-h-[48px] px-3.5 sm:px-5 text-sm sm:text-base font-bold"
           >
             {tCommon('cancel') || (isAr ? 'إلغاء' : 'Cancel')}
           </Button>
@@ -911,7 +1035,7 @@ export function DialysisSessionModal({
             type="submit"
             variant="primary"
             size="md"
-            className="min-h-[48px] font-black px-6 shadow-md"
+            className="min-h-[48px] font-black px-4 sm:px-6 text-sm sm:text-base shadow-md"
             data-testid="save-dialysis-session-btn"
           >
             💾 {tSession('saveSession') || (isAr ? 'حفظ بيانات الجلسة' : 'Save Dialysis Session')}

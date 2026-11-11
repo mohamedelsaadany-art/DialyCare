@@ -66,9 +66,9 @@ body {
 }
 
 /* Minimum accessible touch targets (at least 48px for patient ease) */
-button,
+button:not([data-compact-control]),
 a,
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   min-height: 48px;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
@@ -11,8 +11,13 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { useAuth } from '@/lib/auth-context';
 import { PatientMedicationManager } from '@/components/admin/PatientMedicationManager';
-import type { Patient, Notification } from '@/lib/types';
+import { AdminClinicalQuickPanel } from '@/components/admin/AdminClinicalQuickPanel';
+import { DialysisSessionModal } from '@/components/DialysisSessionModal';
+import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
+import type { Patient, Notification, PatientLabRecord } from '@/lib/types';
+import { STORAGE_KEYS } from '@/lib/data-store';
 import {
   getPatients,
   updatePatient,
@@ -42,6 +47,7 @@ type SortOrder = 'asc' | 'desc';
 export default function PatientsListPage() {
   const locale = useLocale();
   const router = useRouter();
+  const { user } = useAuth();
   const isRtl = locale === 'ar';
   const tAdmin = useTranslations('admin');
   const tCommon = useTranslations('common');
@@ -50,6 +56,16 @@ export default function PatientsListPage() {
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Clinical recorder focus & row-level modal state
+  const [activeClinicalPatientId, setActiveClinicalPatientId] = useState<string>('');
+  const [medFocusPatientId, setMedFocusPatientId] = useState<string>('');
+  const [rowDialysisPatient, setRowDialysisPatient] = useState<PatientRow | null>(null);
+  const [rowLabPatient, setRowLabPatient] = useState<PatientRow | null>(null);
+  const [rowLabExistingRecord, setRowLabExistingRecord] = useState<PatientLabRecord | null>(null);
+  const [clinicalToast, setClinicalToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField>('fullName');
@@ -75,7 +91,7 @@ export default function PatientsListPage() {
     isActive: true,
   });
 
-  const loadData = () => {
+  const loadData = React.useCallback(() => {
     try {
       const raw = getPatients();
       const rows: PatientRow[] = raw.map((p, idx) => {
@@ -90,25 +106,66 @@ export default function PatientsListPage() {
         };
       });
       setPatients(rows);
+      setActiveClinicalPatientId((prev) => prev || rows[0]?.id || '');
     } catch (err) {
       console.error('Failed to load patients:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       loadData();
       if (typeof window !== 'undefined') {
-        const querySearch = new URLSearchParams(window.location.search).get('search');
+        const params = new URLSearchParams(window.location.search);
+        const querySearch = params.get('search');
         if (querySearch) {
           setSearchTerm(querySearch);
         }
+        const queryPatientId = params.get('patientId');
+        if (queryPatientId) {
+          setActiveClinicalPatientId(queryPatientId);
+          setMedFocusPatientId(queryPatientId);
+        }
       }
     }, 0);
-    return () => clearTimeout(timer);
-  }, []);
+
+    const handleSync = () => {
+      loadData();
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (
+        e.key === null ||
+        e.key === STORAGE_KEYS.PATIENTS ||
+        e.key === STORAGE_KEYS.DIALYSIS_SESSIONS ||
+        e.key === STORAGE_KEYS.LAB_RESULTS ||
+        e.key === STORAGE_KEYS.PATIENT_MEDICATIONS ||
+        e.key === STORAGE_KEYS.ADHERENCE_LOGS
+      ) {
+        loadData();
+      }
+    };
+
+    window.addEventListener('dialycare_sessions_updated', handleSync);
+    window.addEventListener('dialycare_labs_updated', handleSync);
+    window.addEventListener('dialycare_medications_updated', handleSync);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      clearTimeout(timer);
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      if (notifTimerRef.current) {
+        clearTimeout(notifTimerRef.current);
+      }
+      window.removeEventListener('dialycare_sessions_updated', handleSync);
+      window.removeEventListener('dialycare_labs_updated', handleSync);
+      window.removeEventListener('dialycare_medications_updated', handleSync);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [loadData]);
 
   // Filter by search term
   const filteredPatients = useMemo(() => {
@@ -118,6 +175,7 @@ export default function PatientsListPage() {
       (p) =>
         p.fullName.toLowerCase().includes(term) ||
         (p.fullNameAr && p.fullNameAr.toLowerCase().includes(term)) ||
+        p.id.toLowerCase().includes(term) ||
         p.username.toLowerCase().includes(term) ||
         (p.phone && p.phone.includes(term))
     );
@@ -242,10 +300,14 @@ export default function PatientsListPage() {
 
     addNotification(newNotif);
     setNotifSuccess(true);
-    setTimeout(() => {
+    if (notifTimerRef.current) {
+      clearTimeout(notifTimerRef.current);
+    }
+    notifTimerRef.current = setTimeout(() => {
       setNotifModalOpen(false);
       setNotifSuccess(false);
       setSelectedIds(new Set());
+      notifTimerRef.current = null;
     }, 1500);
   };
 
@@ -367,6 +429,21 @@ export default function PatientsListPage() {
 
         <div className="flex flex-wrap items-center gap-2.5">
           <Button
+            variant="primary"
+            size="md"
+            onClick={() => {
+              const el = document.getElementById('admin-clinical-section');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            data-testid="admin-clinical-recorder-header-btn"
+            className="min-h-[48px] bg-[#1e6bb8] hover:bg-blue-700"
+            title={isRtl ? 'تسجيل جلسات الغسيل ونتائج التحاليل' : 'Record Dialysis & Lab Results'}
+          >
+            <span>🩺🔬</span>
+            <span>{isRtl ? 'تسجيل الغسيل والتحاليل' : 'Record Dialysis & Labs'}</span>
+          </Button>
+
+          <Button
             variant="outline"
             size="md"
             onClick={() => {
@@ -374,6 +451,7 @@ export default function PatientsListPage() {
               el?.scrollIntoView({ behavior: 'smooth' });
             }}
             data-testid="admin-prescribe-medications-header-btn"
+            className="min-h-[48px]"
             title={isRtl ? 'الانتقال إلى قسم تخصيص الأدوية' : 'Prescribe Medications'}
           >
             <span>💊</span>
@@ -382,15 +460,34 @@ export default function PatientsListPage() {
 
           <Link href={`/${locale}/admin/patients/new`}>
             <Button
-              variant="primary"
+              variant="outline"
               size="md"
               leftIcon={<PlusIcon className="w-4 h-4" />}
+              className="min-h-[48px]"
             >
               {tAdmin('addPatient') || (isRtl ? 'إضافة مريض جديد' : 'Register Patient')}
             </Button>
           </Link>
         </div>
       </div>
+
+      {clinicalToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow-sm flex items-center justify-between gap-2"
+        >
+          <span>✓ {clinicalToast}</span>
+          <button
+            type="button"
+            onClick={() => setClinicalToast(null)}
+            className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg hover:bg-emerald-700"
+            aria-label={isRtl ? 'إغلاق الإشعار' : 'Dismiss'}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Search & Bulk Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -442,7 +539,7 @@ export default function PatientsListPage() {
           <table className="w-full text-start text-sm border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider select-none">
-                <th className="py-3.5 px-4 text-center w-10">
+                <th className="py-3.5 px-2.5 text-center w-9">
                   <input
                     type="checkbox"
                     checked={selectedIds.size > 0 && selectedIds.size === sortedPatients.length}
@@ -452,7 +549,7 @@ export default function PatientsListPage() {
                 </th>
                 <th
                   onClick={() => handleSort('fullName')}
-                  className="py-3.5 px-4 text-start cursor-pointer hover:text-slate-800"
+                  className="py-3.5 px-2.5 text-start cursor-pointer hover:text-slate-800"
                 >
                   <div className="flex items-center gap-1">
                     <span>{isRtl ? 'الاسم' : 'Name'}</span>
@@ -463,7 +560,7 @@ export default function PatientsListPage() {
                 </th>
                 <th
                   onClick={() => handleSort('username')}
-                  className="py-3.5 px-4 text-start cursor-pointer hover:text-slate-800"
+                  className="py-3.5 px-2 text-start cursor-pointer hover:text-slate-800"
                 >
                   <div className="flex items-center gap-1">
                     <span>{isRtl ? 'اسم المستخدم' : 'Username'}</span>
@@ -474,7 +571,7 @@ export default function PatientsListPage() {
                 </th>
                 <th
                   onClick={() => handleSort('dialysisSchedule')}
-                  className="py-3.5 px-4 text-start cursor-pointer hover:text-slate-800"
+                  className="py-3.5 px-2 text-start cursor-pointer hover:text-slate-800"
                 >
                   <div className="flex items-center gap-1">
                     <span>{isRtl ? 'جدول الغسيل' : 'Schedule'}</span>
@@ -485,7 +582,7 @@ export default function PatientsListPage() {
                 </th>
                 <th
                   onClick={() => handleSort('ttt')}
-                  className="py-3.5 px-4 text-center cursor-pointer hover:text-slate-800"
+                  className="py-3.5 px-2 text-center cursor-pointer hover:text-slate-800"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>{isRtl ? 'الأدوية' : 'TTT %'}</span>
@@ -496,7 +593,7 @@ export default function PatientsListPage() {
                 </th>
                 <th
                   onClick={() => handleSort('fluid')}
-                  className="py-3.5 px-4 text-center cursor-pointer hover:text-slate-800"
+                  className="py-3.5 px-2 text-center cursor-pointer hover:text-slate-800"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>{isRtl ? 'السوائل' : 'Fluid %'}</span>
@@ -507,7 +604,7 @@ export default function PatientsListPage() {
                 </th>
                 <th
                   onClick={() => handleSort('diet')}
-                  className="py-3.5 px-4 text-center cursor-pointer hover:text-slate-800"
+                  className="py-3.5 px-2 text-center cursor-pointer hover:text-slate-800"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>{isRtl ? 'الغذاء' : 'Diet %'}</span>
@@ -518,7 +615,7 @@ export default function PatientsListPage() {
                 </th>
                 <th
                   onClick={() => handleSort('isActive')}
-                  className="py-3.5 px-4 text-center cursor-pointer hover:text-slate-800"
+                  className="py-3.5 px-2 text-center cursor-pointer hover:text-slate-800"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>{isRtl ? 'الحالة' : 'Status'}</span>
@@ -527,7 +624,7 @@ export default function PatientsListPage() {
                     )}
                   </div>
                 </th>
-                <th className="py-3.5 px-4 text-end">{isRtl ? 'إجراءات' : 'Actions'}</th>
+                <th className="py-3.5 px-2.5 text-end">{isRtl ? 'إجراءات' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -552,7 +649,7 @@ export default function PatientsListPage() {
                         ${isSelected ? 'bg-blue-50/50' : ''}
                       `}
                     >
-                      <td className="py-3.5 px-4 text-center" onClick={(e) => handleToggleSelect(patient.id, e)}>
+                      <td className="py-3 px-2.5 text-center" onClick={(e) => handleToggleSelect(patient.id, e)}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -561,7 +658,7 @@ export default function PatientsListPage() {
                         />
                       </td>
 
-                      <td className="py-3.5 px-4 font-semibold text-slate-900">
+                      <td className="py-3 px-2.5 font-semibold text-slate-900">
                         <div className="flex flex-col">
                           <span className="hover:text-[#1e6bb8] transition-colors">
                             {patient.fullName}
@@ -574,29 +671,29 @@ export default function PatientsListPage() {
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-slate-600 font-mono text-xs">
+                      <td className="py-3 px-2 text-slate-600 font-mono text-xs">
                         {patient.username}
                       </td>
 
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-2">
                         <Badge variant="neutral" size="sm">
                           {patient.dialysisSchedule}
                         </Badge>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-2 text-center">
                         {getAdherenceBadge(patient.metrics.tttAdherence)}
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-2 text-center">
                         {getAdherenceBadge(patient.metrics.fluidAdherence)}
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-2 text-center">
                         {getAdherenceBadge(patient.metrics.dietAdherence)}
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-2 text-center">
                         <Badge
                           variant={patient.isActive ? 'success' : 'neutral'}
                           size="sm"
@@ -608,13 +705,45 @@ export default function PatientsListPage() {
                         </Badge>
                       </td>
 
-                      <td className="py-3.5 px-4 text-end">
+                      <td className="py-3 px-2.5 text-end">
                         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveClinicalPatientId(patient.id);
+                              setRowDialysisPatient(patient);
+                            }}
+                            data-testid={`row-record-dialysis-${patient.id}`}
+                            aria-label={isRtl ? `تسجيل جلسة غسيل للمريض ${patient.fullNameAr || patient.fullName}` : `Record Dialysis Session for ${patient.fullName}`}
+                            title={isRtl ? 'تسجيل جلسة غسيل للمريض' : 'Record Dialysis Session'}
+                            className="min-w-[48px] min-h-[48px] px-1.5 flex items-center justify-center gap-1 rounded-xl bg-blue-50 text-[#1e6bb8] hover:bg-[#1e6bb8] hover:text-white border border-blue-200 font-bold text-xs transition-colors cursor-pointer"
+                          >
+                            <span aria-hidden="true">🩺</span>
+                            <span className="hidden 2xl:inline">{isRtl ? 'غسيل' : 'Dialysis'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveClinicalPatientId(patient.id);
+                              setRowLabExistingRecord(null);
+                              setRowLabPatient(patient);
+                            }}
+                            data-testid={`row-record-labs-${patient.id}`}
+                            aria-label={isRtl ? `تسجيل تحاليل المريض ${patient.fullNameAr || patient.fullName}` : `Record Lab Results for ${patient.fullName}`}
+                            title={isRtl ? 'تسجيل التحاليل المخبرية (12 تحليل)' : 'Record Lab Results (12 Tests)'}
+                            className="min-w-[48px] min-h-[48px] px-1.5 flex items-center justify-center gap-1 rounded-xl bg-teal-50 text-teal-800 hover:bg-teal-600 hover:text-white border border-teal-200 font-bold text-xs transition-colors cursor-pointer"
+                          >
+                            <span aria-hidden="true">🔬</span>
+                            <span className="hidden 2xl:inline">{isRtl ? 'تحاليل' : 'Labs'}</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => router.push(`/${locale}/admin/patients/${patient.id}`)}
                             title={isRtl ? 'عرض التفاصيل' : 'View Patient Details'}
-                            className="p-1.5 text-slate-500 hover:text-[#1e6bb8] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            aria-label={isRtl ? 'عرض التفاصيل' : 'View Patient Details'}
+                            className="min-w-[48px] min-h-[48px] flex items-center justify-center text-slate-500 hover:text-[#1e6bb8] hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
                           >
                             <EyeIcon className="w-4 h-4" />
                           </button>
@@ -623,7 +752,8 @@ export default function PatientsListPage() {
                             type="button"
                             onClick={(e) => handleOpenEdit(patient, e)}
                             title={isRtl ? 'تعديل البيانات' : 'Edit Profile'}
-                            className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            aria-label={isRtl ? 'تعديل البيانات' : 'Edit Profile'}
+                            className="min-w-[48px] min-h-[48px] flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors cursor-pointer"
                           >
                             <EditIcon className="w-4 h-4" />
                           </button>
@@ -632,7 +762,8 @@ export default function PatientsListPage() {
                             type="button"
                             onClick={(e) => handleOpenSingleNotification(patient, e)}
                             title={isRtl ? 'إرسال إشعار' : 'Send Notification'}
-                            className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                            aria-label={isRtl ? 'إرسال إشعار' : 'Send Notification'}
+                            className="min-w-[48px] min-h-[48px] flex items-center justify-center text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
                           >
                             <NotificationsIcon className="w-4 h-4" />
                           </button>
@@ -664,9 +795,61 @@ export default function PatientsListPage() {
         </div>
       </Card>
 
+      {/* Doctor Clinical Quick Recorder + Embedded Dialysis History & Lab Results (Doctor-Only Labs & Dialysis) */}
+      <AdminClinicalQuickPanel
+        id="admin-clinical-section"
+        selectedPatientId={activeClinicalPatientId}
+        onPatientChange={(pid) => {
+          setActiveClinicalPatientId(pid);
+          if (medFocusPatientId) {
+            setMedFocusPatientId(pid);
+          }
+        }}
+        onDataUpdated={loadData}
+        onOpenMedications={(pid) => {
+          setMedFocusPatientId(pid);
+          document.getElementById('admin-medications-section')?.scrollIntoView({ behavior: 'smooth' });
+        }}
+        showEmbeddedViews={true}
+      />
+
       {/* Administrative Medication Assignment Section (R1) */}
       <section id="admin-medications-section" className="space-y-3 pt-2">
-        <PatientMedicationManager />
+        {medFocusPatientId && (
+          <div
+            data-testid="med-focus-banner"
+            className="px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-wrap items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-2 text-sm font-bold text-emerald-950">
+              <span>💊</span>
+              <span>
+                {(() => {
+                  const focused = patients.find((p) => p.id === medFocusPatientId);
+                  const fName = focused
+                    ? isRtl
+                      ? focused.fullNameAr || focused.fullName
+                      : focused.fullName
+                    : medFocusPatientId;
+                  return isRtl
+                    ? `أدوية المريض المحدد: ${fName}`
+                    : `Focused Patient Medications: ${fName}`;
+                })()}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMedFocusPatientId('')}
+              data-testid="med-focus-reset-btn"
+              className="min-h-[48px] px-4 py-2 rounded-xl bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs sm:text-sm cursor-pointer transition-colors"
+            >
+              {isRtl ? 'إظهار قائمة كل المرضى' : 'Show All-Patients Dropdown'}
+            </button>
+          </div>
+        )}
+        <PatientMedicationManager
+          key={medFocusPatientId || 'default'}
+          patientId={medFocusPatientId || undefined}
+        />
       </section>
 
       {/* Notification Modal */}
@@ -830,6 +1013,68 @@ export default function PatientsListPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Row Quick Action: Dialysis Session Modal */}
+      {rowDialysisPatient && (
+        <DialysisSessionModal
+          isOpen={true}
+          onClose={() => setRowDialysisPatient(null)}
+          patientId={rowDialysisPatient.id}
+          patientName={isRtl ? rowDialysisPatient.fullNameAr || rowDialysisPatient.fullName : rowDialysisPatient.fullName}
+          recordedBy={user?.displayName || user?.username || 'doctor'}
+          onSessionRecorded={() => {
+            const pName = isRtl
+              ? rowDialysisPatient.fullNameAr || rowDialysisPatient.fullName
+              : rowDialysisPatient.fullName;
+            loadData();
+            setClinicalToast(
+              isRtl
+                ? `تم تسجيل جلسة الغسيل للمريض ${pName} بنجاح`
+                : `Dialysis session recorded for ${pName}`
+            );
+            if (toastTimerRef.current) {
+              clearTimeout(toastTimerRef.current);
+            }
+            toastTimerRef.current = setTimeout(() => {
+              setClinicalToast(null);
+              toastTimerRef.current = null;
+            }, 4500);
+          }}
+        />
+      )}
+
+      {/* Row Quick Action: Doctor Lab Results Modal */}
+      {rowLabPatient && (
+        <PatientLabResultsModal
+          isOpen={true}
+          onClose={() => {
+            setRowLabPatient(null);
+            setRowLabExistingRecord(null);
+          }}
+          patientId={rowLabPatient.id}
+          patientName={isRtl ? rowLabPatient.fullNameAr || rowLabPatient.fullName : rowLabPatient.fullName}
+          recordedBy={user?.displayName || user?.username || 'doctor'}
+          existingRecord={rowLabExistingRecord}
+          onSaved={() => {
+            const pName = isRtl
+              ? rowLabPatient.fullNameAr || rowLabPatient.fullName
+              : rowLabPatient.fullName;
+            loadData();
+            setClinicalToast(
+              isRtl
+                ? `تم حفظ التحاليل المخبرية للمريض ${pName} بنجاح`
+                : `Lab results saved for ${pName}`
+            );
+            if (toastTimerRef.current) {
+              clearTimeout(toastTimerRef.current);
+            }
+            toastTimerRef.current = setTimeout(() => {
+              setClinicalToast(null);
+              toastTimerRef.current = null;
+            }, 4500);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -32,7 +32,6 @@ export default function PatientProfilePage() {
   const tCommon = useTranslations('common');
 
   const patientId = user?.uid || 'patient-1';
-  const fluidLimitKey = `DIALYCARE_FLUID_LIMIT_${patientId}`;
 
   const [patientRecord, setPatientRecord] = useState<Patient | null>(null);
   const [fluidLimitInput, setFluidLimitInput] = useState<string>('1000');
@@ -40,12 +39,19 @@ export default function PatientProfilePage() {
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
 
+  const limitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedLimitForIdRef = React.useRef<string | null>(null);
+
   // Adherence rates state
   const [weeklyRates, setWeeklyRates] = useState<{
     medRate: number;
     fluidRate: number;
     dietRate: number;
   }>({ medRate: 85, fluidRate: 80, dietRate: 75 });
+
+  const activePatientId = patientRecord?.id || patientId;
+  const activeFluidLimitKey = `DIALYCARE_FLUID_LIMIT_${activePatientId}`;
 
   const loadProfileMetrics = React.useCallback(() => {
     // Load patient data
@@ -59,11 +65,19 @@ export default function PatientProfilePage() {
       setPatientRecord(current);
     }
 
-    // Load saved fluid limit
+    const activeId = current?.id || patientId;
+    const resolvedFluidLimitKey = `DIALYCARE_FLUID_LIMIT_${activeId}`;
+
+    // Load saved fluid limit once per resolved patient (do not overwrite active typing)
+    let savedFluidLimit = '1000';
     if (typeof window !== 'undefined') {
-      const saved = window.localStorage.getItem(fluidLimitKey);
+      const saved = window.localStorage.getItem(resolvedFluidLimitKey);
       if (saved) {
-        setFluidLimitInput(saved);
+        savedFluidLimit = saved;
+      }
+      if (loadedLimitForIdRef.current !== activeId) {
+        loadedLimitForIdRef.current = activeId;
+        setFluidLimitInput(saved || '1000');
       }
       if ('Notification' in window) {
         setNotificationPermission(Notification.permission);
@@ -76,7 +90,7 @@ export default function PatientProfilePage() {
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
     const now = new Date();
-    const adh = getAdherenceLogs(patientId, undefined, {
+    const adh = getAdherenceLogs(activeId, undefined, {
       start: sevenDaysAgo.toISOString(),
       end: now.toISOString(),
     });
@@ -87,9 +101,9 @@ export default function PatientProfilePage() {
     const medRate = medLogs.length > 0 ? Math.round((medDone / medLogs.length) * 100) : 90;
 
     // Fluid adherence (past 7 days)
-    const allFluid = getFluidLogs(patientId);
+    const allFluid = getFluidLogs(activeId);
     const recentFluid = allFluid.filter((fl) => new Date(fl.loggedAt) >= sevenDaysAgo);
-    const limitNum = parseInt(fluidLimitInput, 10) || 1000;
+    const limitNum = parseInt(savedFluidLimit, 10) || 1000;
     const dayTotals: Record<string, number> = {};
     recentFluid.forEach((fl) => {
       const d = new Date(fl.loggedAt).toISOString().slice(0, 10);
@@ -100,7 +114,7 @@ export default function PatientProfilePage() {
     const fluidRate = daysTracked > 0 ? Math.round((compliantDays / daysTracked) * 100) : 85;
 
     // Diet adherence (past 7 days)
-    const allDiet = getDietLogs(patientId);
+    const allDiet = getDietLogs(activeId);
     const recentDiet = allDiet.filter((dl) => new Date(dl.loggedAt) >= sevenDaysAgo);
     const targetWeekMeals = 21; // 3 meals * 7 days
     const computedDietRate = Math.min(100, Math.round((recentDiet.length / targetWeekMeals) * 100));
@@ -111,11 +125,15 @@ export default function PatientProfilePage() {
       fluidRate,
       dietRate,
     });
-  }, [patientId, fluidLimitKey, fluidLimitInput]);
+  }, [patientId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProfileMetrics();
+    return () => {
+      if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
+      if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+    };
   }, [loadProfileMetrics]);
 
   const handleSaveFluidLimit = (e: React.FormEvent) => {
@@ -124,10 +142,12 @@ export default function PatientProfilePage() {
     if (isNaN(val) || val <= 0) return;
 
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(fluidLimitKey, String(val));
+      window.localStorage.setItem(activeFluidLimitKey, String(val));
     }
+    loadProfileMetrics();
     setIsLimitSaved(true);
-    setTimeout(() => setIsLimitSaved(false), 3000);
+    if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
+    limitTimerRef.current = setTimeout(() => setIsLimitSaved(false), 3000);
   };
 
   const handleToggleNotifications = async () => {
@@ -146,7 +166,8 @@ export default function PatientProfilePage() {
       setNotifFeedback(isAr ? 'تم رفض إذن التنبيهات من المتصفح.' : 'Permission denied by browser.');
     }
 
-    setTimeout(() => setNotifFeedback(null), 4000);
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+    notifTimerRef.current = setTimeout(() => setNotifFeedback(null), 4000);
   };
 
   const handleLogout = () => {
@@ -167,9 +188,9 @@ export default function PatientProfilePage() {
 
   const fullNameDisplay = useMemo(() => {
     if (isAr) {
-      return patientRecord?.fullNameAr || patientRecord?.fullName || 'أحمد محمود';
+      return patientRecord?.fullNameAr || patientRecord?.fullName || user?.displayName || 'مريض دايلي كير';
     }
-    return patientRecord?.fullName || user?.displayName || 'Ahmed Mahmoud';
+    return patientRecord?.fullName || user?.displayName || 'DialyCare Patient';
   }, [isAr, patientRecord, user]);
 
   return (
@@ -182,7 +203,7 @@ export default function PatientProfilePage() {
         <div className="space-y-0.5 overflow-hidden">
           <h1 className="text-2xl font-black truncate">{fullNameDisplay}</h1>
           <p className="text-xs text-blue-100 font-mono tracking-wide truncate">
-            @{user?.username || 'patient1'} • ID: {patientRecord?.id || patientId}
+            @{user?.username || 'patient'} • ID: {activePatientId}
           </p>
           <div className="pt-1">
             <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/90 text-white text-[11px] font-extrabold">
@@ -207,7 +228,7 @@ export default function PatientProfilePage() {
           <div className="pt-2 flex items-center justify-between">
             <span className="text-slate-500 font-medium">{isAr ? 'رقم الهاتف:' : 'Phone:'}</span>
             <span className="font-semibold text-slate-800 font-mono">
-              {patientRecord?.phone || '+20 101 234 5678'}
+              {patientRecord?.phone || (isAr ? 'غير مسجل' : 'Not provided')}
             </span>
           </div>
 

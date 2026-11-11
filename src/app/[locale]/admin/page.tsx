@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
@@ -26,6 +26,8 @@ import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { AdminClinicalQuickPanel } from '@/components/admin/AdminClinicalQuickPanel';
+import { STORAGE_KEYS } from '@/lib/data-store';
 import type { Patient } from '@/lib/types';
 import {
   getPatients,
@@ -64,68 +66,106 @@ export default function AdminDashboardPage() {
   const [overallAvg, setOverallAvg] = useState({ ttt: 0, fluid: 0, diet: 0, total: 0 });
   const [threshold, setThreshold] = useState(70);
 
+  const loadDashboardData = useCallback(() => {
+    try {
+      const settings = getAdminSettings();
+      const configuredThreshold = settings.adherenceThreshold || 70;
+      setThreshold(configuredThreshold);
+
+      const rawPatients = getPatients();
+      const withMetrics: PatientWithMetrics[] = rawPatients.map((p) => ({
+        ...p,
+        metrics: getPatientMetrics(p.id),
+      }));
+      setPatients(withMetrics);
+
+      // Trend data for 7 days
+      const trend = getAdherenceTrendData(7);
+      setTrendData(trend);
+
+      // Notifications count: Total this week (last 7 days)
+      const notifs = getNotifications();
+      const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const thisWeekNotifs = notifs.filter(
+        (n) => new Date(n.sentAt).getTime() >= oneWeekAgo
+      );
+      setNotificationsCount(thisWeekNotifs.length);
+
+      // Active today count: patients who logged adherence, fluid, or diet today
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayLogs = getAdherenceLogs(undefined, undefined, {
+        start: todayStr,
+      });
+      const activeIds = new Set(todayLogs.map((l) => l.patientId));
+      rawPatients.forEach((p) => {
+        const fLogs = getFluidLogs(p.id, todayStr);
+        if (fLogs.length > 0) activeIds.add(p.id);
+        const dLogs = getDietLogs(p.id, todayStr);
+        if (dLogs.length > 0) activeIds.add(p.id);
+      });
+      setActiveTodayCount(activeIds.size);
+
+      // Calculate averages across patients
+      if (withMetrics.length > 0) {
+        const sumTtt = withMetrics.reduce((acc, p) => acc + p.metrics.tttAdherence, 0);
+        const sumFluid = withMetrics.reduce((acc, p) => acc + p.metrics.fluidAdherence, 0);
+        const sumDiet = withMetrics.reduce((acc, p) => acc + p.metrics.dietAdherence, 0);
+
+        const avgTtt = Math.round(sumTtt / withMetrics.length);
+        const avgFluid = Math.round(sumFluid / withMetrics.length);
+        const avgDiet = Math.round(sumDiet / withMetrics.length);
+        const total = Math.round((avgTtt + avgFluid + avgDiet) / 3);
+
+        setOverallAvg({ ttt: avgTtt, fluid: avgFluid, diet: avgDiet, total });
+      } else {
+        setOverallAvg({ ttt: 0, fluid: 0, diet: 0, total: 0 });
+      }
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      try {
-        const settings = getAdminSettings();
-        const configuredThreshold = settings.adherenceThreshold || 70;
-        setThreshold(configuredThreshold);
-
-        const rawPatients = getPatients();
-        const withMetrics: PatientWithMetrics[] = rawPatients.map((p) => ({
-          ...p,
-          metrics: getPatientMetrics(p.id),
-        }));
-        setPatients(withMetrics);
-
-        // Trend data for 7 days
-        const trend = getAdherenceTrendData(7);
-        setTrendData(trend);
-
-        // Notifications count: Total this week (last 7 days)
-        const notifs = getNotifications();
-        const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const thisWeekNotifs = notifs.filter(
-          (n) => new Date(n.sentAt).getTime() >= oneWeekAgo
-        );
-        setNotificationsCount(thisWeekNotifs.length);
-
-        // Active today count: patients who logged adherence, fluid, or diet today
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const todayLogs = getAdherenceLogs(undefined, undefined, {
-          start: todayStr,
-        });
-        const activeIds = new Set(todayLogs.map((l) => l.patientId));
-        rawPatients.forEach((p) => {
-          const fLogs = getFluidLogs(p.id, todayStr);
-          if (fLogs.length > 0) activeIds.add(p.id);
-          const dLogs = getDietLogs(p.id, todayStr);
-          if (dLogs.length > 0) activeIds.add(p.id);
-        });
-        setActiveTodayCount(activeIds.size);
-
-        // Calculate averages across patients
-        if (withMetrics.length > 0) {
-          const sumTtt = withMetrics.reduce((acc, p) => acc + p.metrics.tttAdherence, 0);
-          const sumFluid = withMetrics.reduce((acc, p) => acc + p.metrics.fluidAdherence, 0);
-          const sumDiet = withMetrics.reduce((acc, p) => acc + p.metrics.dietAdherence, 0);
-
-          const avgTtt = Math.round(sumTtt / withMetrics.length);
-          const avgFluid = Math.round(sumFluid / withMetrics.length);
-          const avgDiet = Math.round(sumDiet / withMetrics.length);
-          const total = Math.round((avgTtt + avgFluid + avgDiet) / 3);
-
-          setOverallAvg({ ttt: avgTtt, fluid: avgFluid, diet: avgDiet, total });
-        }
-      } catch (error) {
-        console.error('Failed to load dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
+      loadDashboardData();
     }, 0);
 
-    return () => clearTimeout(timer);
-  }, []);
+    const handleSync = () => {
+      loadDashboardData();
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (
+        e.key === null ||
+        e.key === STORAGE_KEYS.PATIENTS ||
+        e.key === STORAGE_KEYS.DIALYSIS_SESSIONS ||
+        e.key === STORAGE_KEYS.LAB_RESULTS ||
+        e.key === STORAGE_KEYS.PATIENT_MEDICATIONS ||
+        e.key === STORAGE_KEYS.ADHERENCE_LOGS ||
+        e.key === STORAGE_KEYS.FLUID_LOGS ||
+        e.key === STORAGE_KEYS.DIET_LOGS ||
+        e.key === STORAGE_KEYS.NOTIFICATIONS
+      ) {
+        loadDashboardData();
+      }
+    };
+
+    window.addEventListener('dialycare_sessions_updated', handleSync);
+    window.addEventListener('dialycare_labs_updated', handleSync);
+    window.addEventListener('dialycare_medications_updated', handleSync);
+    window.addEventListener('dialycare_notifications_updated', handleSync);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('dialycare_sessions_updated', handleSync);
+      window.removeEventListener('dialycare_labs_updated', handleSync);
+      window.removeEventListener('dialycare_medications_updated', handleSync);
+      window.removeEventListener('dialycare_notifications_updated', handleSync);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [loadDashboardData]);
 
   // Filter non-adherent patients based on threshold
   const nonAdherentPatients = patients.filter(
@@ -348,6 +388,13 @@ export default function AdminDashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* Doctor Immediate Clinical Quick Actions: Record Dialysis Session & Lab Results (12 Tests) */}
+      <AdminClinicalQuickPanel
+        id="clinical-quick-panel"
+        showEmbeddedViews={false}
+        onDataUpdated={loadDashboardData}
+      />
 
       {/* Overview Cards Row (4 cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

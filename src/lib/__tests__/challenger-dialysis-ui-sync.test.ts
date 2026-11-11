@@ -472,8 +472,8 @@ assert.match(
 );
 assert.match(
   adminPageSrc,
-  /<DialysisSessionModal[\s\S]*isOpen=\{dialysisModalOpen\}[\s\S]*patientId=\{patient\.id\}[\s\S]*recordedBy="doctor"/,
-  'Admin page must mount DialysisSessionModal with recordedBy="doctor"'
+  /<DialysisSessionModal[\s\S]*isOpen=\{dialysisModalOpen\}[\s\S]*patientId=\{patient\.id\}[\s\S]*recordedBy=\{user\?\.displayName \|\| user\?\.username \|\| 'doctor'\}/,
+  'Admin page must mount DialysisSessionModal with doctor recordedBy attribution'
 );
 console.log('  ✓ Doctor Portal (admin/patients/[id]/page.tsx) integration verified');
 

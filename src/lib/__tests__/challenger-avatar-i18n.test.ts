@@ -555,8 +555,8 @@ test('4.2: Patient Activity Log (patient/log/page.tsx) imports and mounts Patien
 
   // Check props passed
   assert.ok(
-    code.includes('patientId={patientId}') && code.includes('adherenceMetrics='),
-    'patient/log/page.tsx must supply patientId and adherenceMetrics props to PatientCoachingAvatar'
+    code.includes('patientId={activePatientId}') && code.includes('adherenceMetrics='),
+    'patient/log/page.tsx must supply patientId={activePatientId} and adherenceMetrics props to PatientCoachingAvatar'
   );
 });
 

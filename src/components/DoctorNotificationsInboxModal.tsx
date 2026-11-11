@@ -92,9 +92,10 @@ export function DoctorNotificationsInboxModal({
       isOpen={isOpen}
       onClose={onClose}
       maxWidth="lg"
+      closeLabel={isAr ? 'إغلاق النافذة' : 'Close dialog'}
       title={
         <div className="flex items-center gap-2.5">
-          <span className="text-2xl" role="img" aria-label="Messages">
+          <span className="text-2xl" role="img" aria-label={isAr ? 'الرسائل' : 'Messages'}>
             🩺
           </span>
           <div className="flex items-center gap-2">
@@ -136,10 +137,10 @@ export function DoctorNotificationsInboxModal({
         </div>
       }
     >
-      <div className="space-y-3.5 max-h-[60vh] overflow-y-auto pr-1">
+      <div className="space-y-3.5">
         {notifications.length === 0 ? (
           <div className="text-center py-12 px-4 rounded-2xl bg-slate-50 border border-dashed border-slate-200">
-            <span className="text-4xl block mb-2" role="img" aria-label="Inbox">
+            <span className="text-4xl block mb-2" role="img" aria-label={isAr ? 'صندوق الوارد' : 'Inbox'}>
               📬
             </span>
             <h4 className="text-sm font-extrabold text-slate-800">

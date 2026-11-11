@@ -34,8 +34,10 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { PatientMedicationSection } from '@/components/patient/PatientMedicationSection';
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
+import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
 
-type LogTab = 'medication' | 'fluid' | 'diet' | 'dialysis';
+type LogTab = 'medication' | 'fluid' | 'diet' | 'dialysis' | 'labs';
+const VALID_LOG_TABS: LogTab[] = ['medication', 'fluid', 'diet', 'dialysis', 'labs'];
 
 function LogContent() {
   const { user } = useAuth();
@@ -48,8 +50,17 @@ function LogContent() {
   const tCommon = useTranslations('common');
   const tFluidAlerts = useTranslations('fluidAlerts');
 
-  const initialTab = (searchParams.get('tab') as LogTab) || 'medication';
+  const rawTabParam = searchParams.get('tab') as LogTab | null;
+  const initialTab: LogTab = rawTabParam && VALID_LOG_TABS.includes(rawTabParam) ? rawTabParam : 'medication';
   const [activeTab, setActiveTab] = useState<LogTab>(initialTab);
+  const [prevTabParam, setPrevTabParam] = useState<LogTab | null>(rawTabParam);
+
+  if (rawTabParam !== prevTabParam) {
+    setPrevTabParam(rawTabParam);
+    if (rawTabParam && VALID_LOG_TABS.includes(rawTabParam)) {
+      setActiveTab(rawTabParam);
+    }
+  }
 
   // Sync tab with query param
   const handleTabChange = (tab: LogTab) => {
@@ -77,6 +88,8 @@ function LogContent() {
   const [selectedMealType, setSelectedMealType] = useState<MealType>('breakfast');
   const [selectedChecklist, setSelectedChecklist] = useState<string[]>([]);
 
+  const toastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const loadAllLogs = React.useCallback(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
     const startOfToday = new Date();
@@ -92,12 +105,14 @@ function LogContent() {
       null;
     setPatientRecord(currentPatient);
 
-    const adh = getAdherenceLogs(patientId, undefined, {
+    const activeId = currentPatient?.id || patientId;
+
+    const adh = getAdherenceLogs(activeId, undefined, {
       start: startOfToday.toISOString(),
       end: endOfToday.toISOString(),
     });
-    const fl = getFluidLogs(patientId, todayStr);
-    const dl = getDietLogs(patientId, todayStr);
+    const fl = getFluidLogs(activeId, todayStr);
+    const dl = getDietLogs(activeId, todayStr);
     const dCheck = getDietChecklist();
 
     setAdherenceLogs(adh);
@@ -106,15 +121,39 @@ function LogContent() {
     setDietChecklistItems(dCheck);
   }, [patientId]);
 
+  const activePatientId = patientRecord?.id || patientId;
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAllLogs();
+
+    const handleSync = () => {
+      loadAllLogs();
+    };
+    window.addEventListener('dialycare_labs_updated', handleSync);
+    window.addEventListener('dialycare_sessions_updated', handleSync);
+    window.addEventListener('dialycare_medications_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      window.removeEventListener('dialycare_labs_updated', handleSync);
+      window.removeEventListener('dialycare_sessions_updated', handleSync);
+      window.removeEventListener('dialycare_medications_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, [loadAllLogs]);
 
   const showNotification = (msg: string) => {
     setSuccessBanner(msg);
-    setTimeout(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
       setSuccessBanner(null);
+      toastTimerRef.current = null;
     }, 3500);
   };
 
@@ -155,14 +194,14 @@ function LogContent() {
 
     startTransition(() => {
       addFluidLog({
-        patientId,
+        patientId: activePatientId,
         amountMl,
         unit: 'ml',
         loggedAt: new Date().toISOString(),
       });
 
       addAdherenceLog({
-        patientId,
+        patientId: activePatientId,
         type: 'fluid',
         status: 'done',
         loggedAt: new Date().toISOString(),
@@ -196,14 +235,14 @@ function LogContent() {
 
     startTransition(() => {
       addFluidLog({
-        patientId,
+        patientId: activePatientId,
         amountMl: amountInMl,
         unit: fluidUnit,
         loggedAt: new Date().toISOString(),
       });
 
       addAdherenceLog({
-        patientId,
+        patientId: activePatientId,
         type: 'fluid',
         status: 'done',
         loggedAt: new Date().toISOString(),
@@ -254,14 +293,14 @@ function LogContent() {
     e.preventDefault();
     startTransition(() => {
       addDietLog({
-        patientId,
+        patientId: activePatientId,
         checklist: selectedChecklist,
         mealType: selectedMealType,
         loggedAt: new Date().toISOString(),
       });
 
       addAdherenceLog({
-        patientId,
+        patientId: activePatientId,
         type: 'diet',
         status: 'done',
         loggedAt: new Date().toISOString(),
@@ -312,7 +351,7 @@ function LogContent() {
 
       {/* Patient Coaching Avatar Character "Dr. Dialy" (R4) */}
       <PatientCoachingAvatar
-        patientId={patientId}
+        patientId={activePatientId}
         adherenceMetrics={{
           fluidPercentage,
           adherenceScore: fluidStatus === 'critical' ? 45 : fluidStatus === 'warning' ? 70 : 95,
@@ -320,7 +359,7 @@ function LogContent() {
       />
 
       {/* Tabs Header */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-200/80 rounded-2xl">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1 bg-slate-200/80 rounded-2xl">
         <button
           type="button"
           onClick={() => handleTabChange('medication')}
@@ -386,6 +425,24 @@ function LogContent() {
           <span>🩺</span>
           <span>{isAr ? 'جلسة الغسيل' : 'Dialysis'}</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('labs')}
+          data-testid="patient-log-labs-tab-btn"
+          aria-label={isAr ? 'نتائج التحاليل المخبرية — للعرض فقط' : 'Lab Results — Read-Only View'}
+          className={`
+            col-span-2 sm:col-span-1 min-h-[50px] rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer
+            ${
+              activeTab === 'labs'
+                ? 'bg-white text-teal-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }
+          `}
+        >
+          <span>🔬</span>
+          <span>{isAr ? 'التحاليل' : 'Labs'}</span>
+        </button>
       </div>
 
       {/* =================================================== */}
@@ -394,7 +451,7 @@ function LogContent() {
       {activeTab === 'medication' && (
         <div className="space-y-4">
           <PatientMedicationSection
-            patientId={patientId}
+            patientId={activePatientId}
             onAdherenceLogged={() => loadAllLogs()}
           />
 
@@ -956,10 +1013,29 @@ function LogContent() {
       {activeTab === 'dialysis' && (
         <div className="space-y-4">
           <DialysisSessionHistory
-            patientId={patientId}
+            patientId={activePatientId}
             canRecord={true}
             canManage={false}
             onRecordClick={() => setIsDialysisModalOpen(true)}
+          />
+        </div>
+      )}
+
+      {/* =================================================== */}
+      {/* 5. CLINICAL LAB RESULTS TAB (R5 — READ-ONLY FOR PATIENT) */}
+      {/* =================================================== */}
+      {activeTab === 'labs' && (
+        <div className="space-y-3" data-testid="patient-log-labs-panel">
+          <div className="px-4 py-3 rounded-2xl bg-teal-50 border border-teal-200/80 text-xs sm:text-sm font-bold text-teal-900 flex items-center gap-2">
+            <span aria-hidden="true">🔬</span>
+            <span>
+              {isAr
+                ? 'نتائج التحاليل المخبرية يتم إدخالها وتحديثها بواسطة الطبيب المعالج فقط (للعرض فقط).'
+                : 'Laboratory test results are recorded and updated exclusively by your doctor (read-only).'}
+            </span>
+          </div>
+          <PatientLabResultsView
+            patientId={activePatientId}
           />
         </div>
       )}
@@ -968,7 +1044,7 @@ function LogContent() {
       <DialysisSessionModal
         isOpen={isDialysisModalOpen}
         onClose={() => setIsDialysisModalOpen(false)}
-        patientId={patientId}
+        patientId={activePatientId}
         recordedBy={user?.uid || 'patient'}
         onSessionRecorded={(saved) => {
           loadAllLogs();

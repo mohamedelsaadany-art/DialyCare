@@ -780,28 +780,21 @@ console.log('\n>>> SUITE 6: ADVERSARIAL EMPTY STRING & PROBING');
 resetHarness();
 
 runChallengerTest('ADV-1: Calling getPatientMedications with empty string ""', () => {
-  /**
-   * Code in data-store.ts:
-   * if (patientId) { meds = meds.filter((m) => m.patientId === patientId); }
-   * If patientId is "", if ("") evaluates to false!
-   * Therefore it returns ALL medications instead of filtering by m.patientId === "".
-   */
   const medsEmpty = dataStore.getPatientMedications('');
-  console.log(`         [OBSERVATION] getPatientMedications("") returned ${medsEmpty.length} items (falsy check bypass)`);
-  // All demo meds returned because "" is falsy in if(patientId)
-  assertTrue(medsEmpty.length >= 3, 'Empty string is falsy so if (patientId) does not filter');
+  console.log(`         [OBSERVATION] getPatientMedications("") returned ${medsEmpty.length} items (strict tenant isolation)`);
+  assertEq(medsEmpty.length, 0, 'Empty patientId string must strictly return 0 medications');
 });
 
 runChallengerTest('ADV-2: Calling getDialysisSessions with empty string ""', () => {
   const sessionsEmpty = dataStore.getDialysisSessions('');
-  console.log(`         [OBSERVATION] getDialysisSessions("") returned ${sessionsEmpty.length} items (falsy check bypass)`);
-  assertTrue(sessionsEmpty.length >= 2, 'Empty string is falsy so if (patientId) does not filter');
+  console.log(`         [OBSERVATION] getDialysisSessions("") returned ${sessionsEmpty.length} items (strict tenant isolation)`);
+  assertEq(sessionsEmpty.length, 0, 'Empty patientId string must strictly return 0 dialysis sessions');
 });
 
 runChallengerTest('ADV-3: Calling getPatientLabResults with empty string ""', () => {
   const labsEmpty = dataStore.getPatientLabResults('');
-  console.log(`         [OBSERVATION] getPatientLabResults("") returned ${labsEmpty.length} items (falsy check bypass)`);
-  assertTrue(labsEmpty.length >= 1, 'Empty string is falsy so if (patientId) does not filter');
+  console.log(`         [OBSERVATION] getPatientLabResults("") returned ${labsEmpty.length} items (strict tenant isolation)`);
+  assertEq(labsEmpty.length, 0, 'Empty patientId string must strictly return 0 lab results');
 });
 
 runChallengerTest('ADV-4: High volume churn (100 medications batch creation & deletion)', () => {

@@ -87,22 +87,40 @@ export default function PatientRemindersPage() {
     const fl = getFluidLogs(activeId, todayStr);
     const dl = getDietLogs(activeId, todayStr);
 
-    setReminders(r.length > 0 ? r : getReminders('patient-1'));
+    const fallbackReminders =
+      r.length > 0
+        ? r
+        : tmpl.map((t) => ({
+            id: `rem_${activeId}_${t.id}`,
+            patientId: activeId,
+            templateId: t.id,
+            type: t.type,
+            time: t.defaultTime,
+            isActive: true,
+            useCustomSchedule: false,
+          }));
+    setReminders(fallbackReminders);
     setTemplates(tmpl);
     setAdherenceLogs(logs);
     setFluidLogs(fl);
     setDietLogs(dl);
   }, [patientId]);
 
+  const refreshTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    };
   }, [fetchData]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
     fetchData();
-    setTimeout(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
       setIsRefreshing(false);
     }, 400);
   };

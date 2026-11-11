@@ -42,11 +42,37 @@ const DEFAULT_PATIENT_USER: User = {
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
+const DEFAULT_PATIENT2_USER: User = {
+  uid: 'patient-2',
+  role: 'patient',
+  username: 'patient2',
+  displayName: 'Fatima El-Sayed (فاطمة السيد)',
+  language: 'ar',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+const DEFAULT_DEMO_ACCOUNTS: StoredAccount[] = [
+  { username: 'admin', password: 'admin123', user: DEFAULT_ADMIN_USER },
+  { username: 'patient1', password: 'patient123', user: DEFAULT_PATIENT_USER },
+  { username: 'patient2', password: 'patient123', user: DEFAULT_PATIENT2_USER },
+];
+
 function getStoredAccounts(): StoredAccount[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = window.localStorage.getItem(AUTH_ACCOUNTS_KEY);
-    return raw ? (JSON.parse(raw) as StoredAccount[]) : [];
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is StoredAccount =>
+        Boolean(item) &&
+        typeof item === 'object' &&
+        typeof (item as StoredAccount).username === 'string' &&
+        typeof (item as StoredAccount).password === 'string' &&
+        Boolean((item as StoredAccount).user) &&
+        typeof (item as StoredAccount).user.uid === 'string'
+    );
   } catch {
     return [];
   }
@@ -59,6 +85,31 @@ function saveStoredAccounts(accounts: StoredAccount[]): void {
   } catch (error) {
     console.error('Failed to save auth accounts to localStorage:', error);
   }
+}
+
+function ensureDefaultDemoAccounts(): StoredAccount[] {
+  const existing = getStoredAccounts();
+  if (typeof window === 'undefined') return existing;
+
+  const existingUsernames = new Set(
+    existing.map((acc) => acc.username.toLowerCase())
+  );
+  let modified = false;
+  const merged = [...existing];
+
+  for (const demoAcc of DEFAULT_DEMO_ACCOUNTS) {
+    if (!existingUsernames.has(demoAcc.username.toLowerCase())) {
+      merged.push(demoAcc);
+      existingUsernames.add(demoAcc.username.toLowerCase());
+      modified = true;
+    }
+  }
+
+  if (modified || window.localStorage.getItem(AUTH_ACCOUNTS_KEY) === null) {
+    saveStoredAccounts(merged);
+  }
+
+  return merged;
 }
 
 /**
@@ -113,9 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Load existing session on client mount
+  // Load existing session and ensure default demo accounts on client mount
   useEffect(() => {
     try {
+      ensureDefaultDemoAccounts();
       const storedUser =
         window.localStorage.getItem(CURRENT_USER_KEY) ||
         window.sessionStorage.getItem(CURRENT_USER_KEY);
@@ -153,20 +205,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
+      const accounts = ensureDefaultDemoAccounts();
+
       // Check Hardcoded Admin Account (case-insensitive username)
       if (cleanUsername.toLowerCase() === 'admin' && cleanPassword === 'admin123') {
         persistSession(DEFAULT_ADMIN_USER);
         return true;
       }
 
-      // Check Hardcoded Demo Patient Account (case-insensitive username)
+      // Check Hardcoded Demo Patient Accounts (case-insensitive username)
       if (cleanUsername.toLowerCase() === 'patient1' && cleanPassword === 'patient123') {
         persistSession(DEFAULT_PATIENT_USER);
         return true;
       }
 
+      if (cleanUsername.toLowerCase() === 'patient2' && cleanPassword === 'patient123') {
+        persistSession(DEFAULT_PATIENT2_USER);
+        return true;
+      }
+
       // Check dynamically stored accounts
-      const accounts = getStoredAccounts();
       const match = accounts.find(
         (acc) =>
           acc.username.toLowerCase() === cleanUsername.toLowerCase() &&

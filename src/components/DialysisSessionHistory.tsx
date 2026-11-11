@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import type { DialysisSession } from '@/lib/types';
 import { getDialysisSessions, deleteDialysisSession } from '@/lib/data-store';
@@ -16,6 +16,48 @@ export interface DialysisSessionHistoryProps {
   canManage?: boolean;
   className?: string;
   onRecordClick?: () => void;
+}
+
+function localizeLegEdema(level: string | undefined, isAr: boolean): string {
+  switch (level) {
+    case 'mild':
+      return isAr ? 'بسيط (+1)' : 'Mild (+1)';
+    case 'moderate':
+      return isAr ? 'متوسط (+2)' : 'Moderate (+2)';
+    case 'severe':
+      return isAr ? 'شديد (+3/+4)' : 'Severe (+3/+4)';
+    case 'none':
+    default:
+      return isAr ? 'لا يوجد' : 'None';
+  }
+}
+
+function localizeLungCrackles(level: string | undefined, isAr: boolean): string {
+  switch (level) {
+    case 'lower_bases':
+      return isAr ? 'أسفل الرئتين' : 'Lower Bases';
+    case 'mid_lung':
+      return isAr ? 'منتصف الرئتين' : 'Mid-Lung Fields';
+    case 'all_areas':
+      return isAr ? 'جميع أجزاء الصدر' : 'All Chest Areas';
+    case 'none':
+    default:
+      return isAr ? 'صافية (لا يوجد)' : 'Clear (None)';
+  }
+}
+
+function localizeDyspnea(level: string | undefined, isAr: boolean): string {
+  switch (level) {
+    case 'mild':
+      return isAr ? 'بسيط عند المجهود' : 'Mild on exertion';
+    case 'moderate':
+      return isAr ? 'متوسط مع الحركة' : 'Moderate with activity';
+    case 'severe':
+      return isAr ? 'شديد أثناء الراحة' : 'Severe at rest';
+    case 'none':
+    default:
+      return isAr ? 'لا يوجد' : 'None';
+  }
 }
 
 export function DialysisSessionHistory({
@@ -35,6 +77,7 @@ export function DialysisSessionHistory({
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadSessions = useCallback(() => {
     const list = getDialysisSessions(patientId);
@@ -55,13 +98,20 @@ export function DialysisSessionHistory({
     return () => {
       window.removeEventListener('dialycare_sessions_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
     };
   }, [loadSessions]);
 
   const showToast = (msg: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
     setToastMessage(msg);
-    setTimeout(() => {
+    toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
+      toastTimerRef.current = null;
     }, 3500);
   };
 
@@ -102,13 +152,13 @@ export function DialysisSessionHistory({
     <Card className={`p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/90 shadow-xs ${className}`}>
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="mb-4 p-3.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-sm shadow-md flex items-center justify-between animate-in slide-in-from-top-2">
+        <div className="mb-4 p-3.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-sm shadow-md flex items-center justify-between gap-2 animate-in slide-in-from-top-2">
           <span>{toastMessage}</span>
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="p-1 hover:bg-emerald-700 rounded-lg text-white"
-            aria-label="Dismiss notification"
+            className="min-h-[48px] min-w-[48px] flex items-center justify-center p-2 hover:bg-emerald-700 rounded-xl text-white cursor-pointer shrink-0"
+            aria-label={isAr ? 'إغلاق الإشعار' : 'Dismiss notification'}
           >
             ✕
           </button>
@@ -117,11 +167,11 @@ export function DialysisSessionHistory({
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#1e6bb8] flex items-center justify-center text-2xl shrink-0 shadow-inner">
             🩺
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
                 {tSession('sessionHistory') || (isAr ? 'سجل جلسات الغسيل السابقة' : 'Dialysis Treatment History')}
@@ -138,8 +188,9 @@ export function DialysisSessionHistory({
           </div>
         </div>
 
-        {canRecord && (
+        {canRecord === true && (
           <Button
+            type="button"
             variant="primary"
             size="md"
             onClick={handleOpenRecord}
@@ -165,10 +216,28 @@ export function DialysisSessionHistory({
                   : 'No dialysis sessions logged yet for this patient.')}
             </p>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              {isAr
-                ? 'اضغط على زر "تسجيل جلسة غسيل جديدة" أعلاه لتدوين بيانات الجلسة والمؤشرات الحيوية الـ 14.'
-                : 'Click "Record Dialysis Session" above to log session parameters and vitals.'}
+              {canRecord === true
+                ? isAr
+                  ? 'اضغط على زر "تسجيل جلسة غسيل جديدة" لتدوين بيانات الجلسة والمؤشرات الحيوية الـ 14.'
+                  : 'Click "Record Dialysis Session" to log session parameters and vitals.'
+                : isAr
+                ? 'ستظهر هنا تفاصيل جلسات الغسيل المسجلة في ملفك السريري.'
+                : 'Recorded hemodialysis sessions and clinical metrics will appear here.'}
             </p>
+            {canRecord === true && (
+              <div className="mt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenRecord}
+                  className="min-h-[48px] font-bold"
+                  data-testid="empty-record-dialysis-session-btn"
+                >
+                  ➕ {tSession('recordSession') || (isAr ? 'تسجيل جلسة غسيل جديدة' : 'Record Dialysis Session')}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           sessions.map((session) => {
@@ -192,9 +261,15 @@ export function DialysisSessionHistory({
                   role="button"
                   tabIndex={0}
                   aria-expanded={isExpanded}
-                  aria-label={`Dialysis session on ${session.sessionDate}`}
+                  aria-label={
+                    isAr
+                      ? `جلسة الغسيل بتاريخ ${session.sessionDate}`
+                      : `Dialysis session on ${session.sessionDate}`
+                  }
                   onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
                     if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
                       toggleExpand(session.id);
                     }
                   }}
@@ -236,7 +311,7 @@ export function DialysisSessionHistory({
                         <span className="font-mono font-bold text-[#1e6bb8]">
                           {preVitals ? `${preVitals.systolic}/${preVitals.diastolic}` : 'N/A'}
                         </span>
-                        {' → '}
+                        {isAr ? ' ← ' : ' → '}
                         <span className="font-mono font-bold text-slate-800">
                           {endVitals ? `${endVitals.systolic}/${endVitals.diastolic}` : 'N/A'}
                         </span>{' '}
@@ -256,7 +331,7 @@ export function DialysisSessionHistory({
                   </div>
 
                   {/* Middle: Weights */}
-                  <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100 shrink-0">
+                  <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100 shrink-0">
                     <div className="text-center px-2">
                       <span className="block text-[10px] font-bold text-slate-400 uppercase">
                         {isAr ? 'قبل الجلسة' : 'Pre-Weight'}
@@ -266,7 +341,7 @@ export function DialysisSessionHistory({
                       </span>
                     </div>
 
-                    <span className="text-slate-300 font-bold">→</span>
+                    <span className="text-slate-300 font-bold">{isAr ? '←' : '→'}</span>
 
                     <div className="text-center px-2">
                       <span className="block text-[10px] font-bold text-slate-400 uppercase">
@@ -283,14 +358,14 @@ export function DialysisSessionHistory({
                           {isAr ? 'صافي الفقد' : 'Loss'}
                         </span>
                         <span className="font-mono font-black text-xs text-emerald-700">
-                          -{weightLoss.toFixed(2)} kg
+                          -{weightLoss.toFixed(2)} {isAr ? 'كجم' : 'kg'}
                         </span>
                       </div>
                     )}
                   </div>
 
                   {/* Right: Expand & Actions */}
-                  <div className="flex items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -298,31 +373,32 @@ export function DialysisSessionHistory({
                         toggleExpand(session.id);
                       }}
                       className="min-h-[48px] px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
-                      aria-label="Toggle all 14 clinical metrics"
+                      aria-expanded={isExpanded}
+                      aria-label={isAr ? 'عرض أو إخفاء الـ 14 معياراً السريرياً' : 'Toggle all 14 clinical metrics'}
                     >
                       <span>{isExpanded ? (isAr ? 'إخفاء التفاصيل' : 'Hide Vitals') : (isAr ? 'عرض الـ 14 معيار' : 'All 14 Metrics')}</span>
                       <span>{isExpanded ? '▲' : '▼'}</span>
                     </button>
 
-                    {canManage && (
+                    {canManage === true && (
                       <button
                         type="button"
                         onClick={(e) => handleEditSession(session, e)}
-                        className="min-h-[48px] px-3 py-2 rounded-xl text-xs font-bold text-[#1e6bb8] bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+                        className="min-h-[48px] min-w-[48px] px-3.5 py-2 rounded-xl text-xs font-bold text-[#1e6bb8] bg-blue-50 hover:bg-blue-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
                         title={isAr ? 'تعديل الجلسة' : 'Edit Session'}
-                        aria-label="Edit session"
+                        aria-label={isAr ? 'تعديل الجلسة' : 'Edit session'}
                       >
                         ✏️ {isAr ? 'تعديل' : 'Edit'}
                       </button>
                     )}
 
-                    {canManage && (
+                    {canManage === true && (
                       <button
                         type="button"
                         onClick={(e) => handleDelete(session.id, e)}
-                        className="min-h-[48px] px-3 py-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors cursor-pointer"
+                        className="min-h-[48px] min-w-[48px] px-3 py-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex items-center justify-center cursor-pointer"
                         title={isAr ? 'حذف الجلسة' : 'Delete Session'}
-                        aria-label="Delete session"
+                        aria-label={isAr ? 'حذف الجلسة' : 'Delete session'}
                       >
                         🗑️
                       </button>
@@ -374,15 +450,15 @@ export function DialysisSessionHistory({
                         <div className="text-xs font-semibold text-slate-800 space-y-0.5">
                           <p>
                             <strong>{isAr ? 'تورم الساقين:' : 'Edema:'}</strong>{' '}
-                            <span className="capitalize">{session.fluidStatus?.legEdema || 'none'}</span>
+                            <span>{localizeLegEdema(session.fluidStatus?.legEdema, isAr)}</span>
                           </p>
                           <p>
                             <strong>{isAr ? 'أصوات الرئة:' : 'Crackles:'}</strong>{' '}
-                            <span className="capitalize">{session.fluidStatus?.lungCrackles || 'none'}</span>
+                            <span>{localizeLungCrackles(session.fluidStatus?.lungCrackles, isAr)}</span>
                           </p>
                           <p>
                             <strong>{isAr ? 'ضيق التنفس:' : 'Dyspnea:'}</strong>{' '}
-                            <span className="capitalize">{session.fluidStatus?.dyspnea || 'none'}</span>
+                            <span>{localizeDyspnea(session.fluidStatus?.dyspnea, isAr)}</span>
                           </p>
                         </div>
                       </div>
@@ -477,8 +553,9 @@ export function DialysisSessionHistory({
           setIsRecordModalOpen(false);
           setSelectedSessionForModal(null);
         }}
-        patientId={patientId || 'patient-1'}
+        patientId={selectedSessionForModal?.patientId || patientId || 'patient-1'}
         patientName={patientName}
+        recordedBy={selectedSessionForModal?.recordedBy}
         initialSession={selectedSessionForModal}
         onSessionRecorded={(savedSession) => {
           loadSessions();

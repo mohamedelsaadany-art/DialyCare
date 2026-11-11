@@ -154,7 +154,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
+              className="md:hidden min-w-[48px] min-h-[48px] flex items-center justify-center p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
               aria-label="Toggle Navigation Menu"
             >
               <MenuIcon className="w-6 h-6" />
@@ -211,7 +211,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <button
               type="button"
               onClick={handleLogout}
-              className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+              className="min-w-[48px] min-h-[48px] flex items-center justify-center p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
               title={tCommon('logout') || 'Sign Out'}
               aria-label={tCommon('logout') || 'Sign Out'}
             >
@@ -241,7 +241,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   key={item.href}
                   href={item.href}
                   className={`
-                    flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all duration-150
+                    flex items-center gap-3 px-3.5 py-2.5 min-h-[48px] rounded-xl font-medium text-sm transition-all duration-150
                     ${
                       isActive
                         ? 'bg-[#1e6bb8] text-white shadow-xs'
@@ -255,6 +255,27 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               );
             })}
           </nav>
+
+          {/* Doctor Quick Clinical Shortcuts */}
+          <div className="pt-4 mt-4 border-t border-slate-200/80 space-y-1.5">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1">
+              {isRtl ? 'التسجيل السريري للطبيب' : 'Doctor Clinical Tools'}
+            </div>
+            <Link
+              href={`/${locale}/admin/patients#admin-clinical-section`}
+              className="flex items-center gap-2.5 px-3 py-2.5 min-h-[48px] rounded-xl text-xs font-bold bg-blue-50/80 text-[#1e6bb8] hover:bg-blue-100 border border-blue-200/70 transition-colors"
+            >
+              <span aria-hidden="true">🩺🔬</span>
+              <span>{isRtl ? 'تسجيل الغسيل والتحاليل' : 'Record Dialysis & Labs'}</span>
+            </Link>
+            <Link
+              href={`/${locale}/admin/patients#admin-medications-section`}
+              className="flex items-center gap-2.5 px-3 py-2.5 min-h-[48px] rounded-xl text-xs font-bold bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/70 transition-colors"
+            >
+              <span aria-hidden="true">💊</span>
+              <span>{isRtl ? 'أدوية المرضى' : 'Patient Medications'}</span>
+            </Link>
+          </div>
 
           {/* Quick System Badge at Bottom */}
           <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl mt-4">
@@ -294,7 +315,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  className="min-w-[48px] min-h-[48px] flex items-center justify-center p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  aria-label="Close Navigation Menu"
                 >
                   <CloseIcon className="w-5 h-5" />
                 </button>
@@ -327,7 +349,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       href={item.href}
                       onClick={() => setMobileMenuOpen(false)}
                       className={`
-                        flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm
+                        flex items-center gap-3 px-3 py-2.5 min-h-[48px] rounded-xl font-medium text-sm
                         ${
                           isActive
                             ? 'bg-[#1e6bb8] text-white'
@@ -342,6 +364,25 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 })}
               </nav>
 
+              <div className="pt-3 border-t border-slate-100 space-y-1.5">
+                <Link
+                  href={`/${locale}/admin/patients#admin-clinical-section`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 min-h-[48px] rounded-xl text-xs font-bold bg-blue-50 text-[#1e6bb8] border border-blue-200/70"
+                >
+                  <span aria-hidden="true">🩺🔬</span>
+                  <span>{isRtl ? 'تسجيل الغسيل والتحاليل' : 'Record Dialysis & Labs'}</span>
+                </Link>
+                <Link
+                  href={`/${locale}/admin/patients#admin-medications-section`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 min-h-[48px] rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/70"
+                >
+                  <span aria-hidden="true">💊</span>
+                  <span>{isRtl ? 'أدوية المرضى' : 'Patient Medications'}</span>
+                </Link>
+              </div>
+
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-[#1e6bb8] text-white flex items-center justify-center font-bold text-xs uppercase">
@@ -349,13 +390,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   </div>
                   <div className="text-xs">
                     <p className="font-semibold text-slate-900">{user.displayName || user.username}</p>
-                    <p className="text-slate-500">Administrator</p>
+                    <p className="text-slate-500">{isRtl ? 'طبيب مسؤول' : 'Administrator'}</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="p-2 text-slate-400 hover:text-red-600 rounded-lg"
+                  className="min-w-[48px] min-h-[48px] flex items-center justify-center p-2 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
                   aria-label="Logout"
                 >
                   <LogoutIcon className="w-5 h-5 rtl:rotate-180" />

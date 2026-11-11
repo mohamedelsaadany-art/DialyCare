@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import type { PatientLabRecord } from '@/lib/types';
-import { getPatientLabResults } from '@/lib/data-store';
+import { getPatientLabResults, STORAGE_KEYS } from '@/lib/data-store';
 import { CLINICAL_12_LAB_TESTS } from '@/components/admin/PatientLabResultsModal';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -28,34 +28,66 @@ export function PatientLabResultsView({
 
   const [labRecords, setLabRecords] = useState<PatientLabRecord[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const lastPatientIdRef = useRef<string>('');
+  const prevRecordIdsRef = useRef<Set<string>>(new Set());
+  const prevNewestIdRef = useRef<string | null>(null);
 
-  const loadLabs = useCallback(() => {
+  const loadLabs = useCallback((preferNewestOnMutation = false) => {
     if (!patientId) {
+      lastPatientIdRef.current = '';
+      prevRecordIdsRef.current = new Set();
+      prevNewestIdRef.current = null;
       setLabRecords([]);
+      setSelectedRecordId(null);
       return;
     }
-    const results = getPatientLabResults(patientId);
-    setLabRecords(results);
-    if (results.length > 0 && !selectedRecordId) {
-      setSelectedRecordId(results[0].id);
+
+    const patientChanged = lastPatientIdRef.current !== patientId;
+    if (patientChanged) {
+      lastPatientIdRef.current = patientId;
+      prevRecordIdsRef.current = new Set();
+      prevNewestIdRef.current = null;
     }
-  }, [patientId, selectedRecordId]);
+
+    const results = getPatientLabResults(patientId);
+    const newlyAddedRecord = results.find((r) => !prevRecordIdsRef.current.has(r.id));
+    const newestChanged = Boolean(results[0] && results[0].id !== prevNewestIdRef.current);
+
+    prevRecordIdsRef.current = new Set(results.map((r) => r.id));
+    prevNewestIdRef.current = results[0]?.id ?? null;
+
+    setLabRecords(results);
+    setSelectedRecordId((prevId) => {
+      if (results.length === 0) return null;
+      if (patientChanged) return results[0].id;
+      if (preferNewestOnMutation && (newlyAddedRecord || newestChanged)) {
+        return newlyAddedRecord?.id || results[0].id;
+      }
+      if (prevId && results.some((r) => r.id === prevId)) return prevId;
+      return results[0].id;
+    });
+  }, [patientId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLabs();
+    loadLabs(false);
   }, [loadLabs]);
 
   // Reactive listener for lab changes across components/tabs
   useEffect(() => {
-    const handleUpdate = () => {
-      loadLabs();
+    const handleCustomUpdate = () => {
+      loadLabs(true);
     };
-    window.addEventListener('dialycare_labs_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === null || e.key === STORAGE_KEYS.LAB_RESULTS) {
+        loadLabs(true);
+      }
+    };
+    window.addEventListener('dialycare_labs_updated', handleCustomUpdate);
+    window.addEventListener('storage', handleStorageUpdate);
     return () => {
-      window.removeEventListener('dialycare_labs_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('dialycare_labs_updated', handleCustomUpdate);
+      window.removeEventListener('storage', handleStorageUpdate);
     };
   }, [loadLabs]);
 
@@ -96,12 +128,12 @@ export function PatientLabResultsView({
     <Card className={`p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/90 shadow-xs ${className}`}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center text-2xl shrink-0 shadow-inner">
             🔬
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
                 {tLabs('title') || (isAr ? 'نتائج التحاليل المخبرية السريرية' : 'Clinical Laboratory Results')}
               </h2>
@@ -125,8 +157,8 @@ export function PatientLabResultsView({
             <select
               value={currentRecord?.id || ''}
               onChange={(e) => setSelectedRecordId(e.target.value)}
-              className="min-h-[48px] px-3 py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8] cursor-pointer"
-              aria-label="Select lab panel date"
+              className="min-h-[48px] max-w-full px-3 py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8] cursor-pointer"
+              aria-label={isAr ? 'اختر تاريخ لوحة التحاليل' : 'Select lab panel date'}
             >
               {labRecords.map((r, i) => (
                 <option key={r.id} value={r.id}>
@@ -136,19 +168,26 @@ export function PatientLabResultsView({
             </select>
           )}
 
-          {canEdit && (
+          {canEdit === true && (
             <Button
+              type="button"
               variant="primary"
               size="md"
               onClick={() => onEditClick?.(currentRecord)}
               className="min-h-[48px] font-extrabold shadow-sm"
               data-testid="enter-lab-results-btn"
             >
-              <span>✏️</span>
-              <span>
-                {currentRecord
-                  ? tLabs('enterLabs') || (isAr ? 'تعديل التحاليل' : 'Update Lab Panel')
-                  : tLabs('enterLabs') || (isAr ? 'إدخال التحاليل' : 'Enter Lab Results')}
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true">✏️</span>
+                <span>
+                  {currentRecord
+                    ? isAr
+                      ? 'تعديل التحاليل'
+                      : 'Update Lab Panel'
+                    : isAr
+                      ? 'إدخال التحاليل'
+                      : 'Enter Lab Results'}
+                </span>
               </span>
             </Button>
           )}
@@ -165,7 +204,7 @@ export function PatientLabResultsView({
             {tLabs('noLabs') || (isAr ? 'لا توجد نتائج تحاليل مسجلة لهذا المريض بعد' : 'No laboratory results recorded yet.')}
           </p>
           <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-            {canEdit
+            {canEdit === true
               ? isAr
                 ? 'اضغط على زر "إدخال التحاليل" بالأعلى لإدراج نتائج الفحوصات الـ 12 للمريض.'
                 : 'Click "Enter Lab Results" above to record the patient’s clinical panel.'
@@ -173,13 +212,15 @@ export function PatientLabResultsView({
               ? 'يقوم الطبيب المعالج بتسجيل نتائج التحاليل الدورية فور صدورها من المختبر.'
               : 'Your nephrologist will post your monthly dialysis lab panel here.'}
           </p>
-          {canEdit && (
+          {canEdit === true && (
             <div className="mt-4">
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => onEditClick?.(null)}
+                onClick={() => onEditClick?.(currentRecord)}
                 className="min-h-[48px] font-bold"
+                data-testid="empty-enter-lab-results-btn"
               >
                 ➕ {tLabs('enterLabs') || (isAr ? 'إدخال التحاليل الآن' : 'Enter Lab Results Now')}
               </Button>

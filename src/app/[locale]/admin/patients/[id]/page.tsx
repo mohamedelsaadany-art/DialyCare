@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
+import { useAuth } from '@/lib/auth-context';
 import {
   LineChart,
   Line,
@@ -29,7 +30,7 @@ import { PatientLabResultsView } from '@/components/patient/PatientLabResultsVie
 import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
-import { addNotification, getPatientNotifications } from '@/lib/data-store';
+import { addNotification, getPatientNotifications, getPatientLabResults, STORAGE_KEYS } from '@/lib/data-store';
 import {
   getPatients,
   updatePatient,
@@ -126,6 +127,7 @@ const DIRECT_PATIENT_TEMPLATES: MessageTemplate[] = [
 export default function PatientDetailPage() {
   const locale = useLocale();
   const params = useParams();
+  const { user } = useAuth();
   const patientId = params?.id as string;
   const isRtl = locale === 'ar';
 
@@ -143,6 +145,19 @@ export default function PatientDetailPage() {
   const [communications, setCommunications] = useState<Notification[]>([]);
   const [useCustomSchedule, setUseCustomSchedule] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      if (notifCloseTimerRef.current) {
+        clearTimeout(notifCloseTimerRef.current);
+      }
+    };
+  }, []);
 
   // Edit patient modal
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -178,6 +193,7 @@ export default function PatientDetailPage() {
   // Lab Results modal
   const [labModalOpen, setLabModalOpen] = useState(false);
   const [selectedLabRecord, setSelectedLabRecord] = useState<PatientLabRecord | null>(null);
+  const [latestLabRecord, setLatestLabRecord] = useState<PatientLabRecord | null>(null);
 
   // Dialysis Session modal
   const [dialysisModalOpen, setDialysisModalOpen] = useState(false);
@@ -205,6 +221,10 @@ export default function PatientDetailPage() {
       dialysisSchedule: found.dialysisSchedule,
       isActive: found.isActive,
     });
+
+    // Latest Lab Record for quick update access
+    const labs = getPatientLabResults(found.id);
+    setLatestLabRecord(labs[0] || null);
 
     // Metrics & History
     const calculatedMetrics = getPatientMetrics(found.id);
@@ -352,7 +372,15 @@ export default function PatientDetailPage() {
   // Reactive synchronization across tabs and local events
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'DIALYCARE_NOTIFICATIONS') {
+      if (
+        e.key === null ||
+        e.key === STORAGE_KEYS.NOTIFICATIONS ||
+        e.key === STORAGE_KEYS.LAB_RESULTS ||
+        e.key === STORAGE_KEYS.DIALYSIS_SESSIONS ||
+        e.key === STORAGE_KEYS.PATIENT_MEDICATIONS ||
+        e.key === STORAGE_KEYS.PATIENTS ||
+        e.key === STORAGE_KEYS.ADHERENCE_LOGS
+      ) {
         loadPatientData();
       }
     };
@@ -361,9 +389,15 @@ export default function PatientDetailPage() {
     };
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('dialycare_notifications_updated', handleCustomUpdate);
+    window.addEventListener('dialycare_labs_updated', handleCustomUpdate);
+    window.addEventListener('dialycare_sessions_updated', handleCustomUpdate);
+    window.addEventListener('dialycare_medications_updated', handleCustomUpdate);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('dialycare_notifications_updated', handleCustomUpdate);
+      window.removeEventListener('dialycare_labs_updated', handleCustomUpdate);
+      window.removeEventListener('dialycare_sessions_updated', handleCustomUpdate);
+      window.removeEventListener('dialycare_medications_updated', handleCustomUpdate);
     };
   }, [loadPatientData]);
 
@@ -496,7 +530,10 @@ export default function PatientDetailPage() {
     // Refresh clinical records and timeline immediately
     loadPatientData();
 
-    setTimeout(() => {
+    if (notifCloseTimerRef.current) {
+      clearTimeout(notifCloseTimerRef.current);
+    }
+    notifCloseTimerRef.current = setTimeout(() => {
       setNotifModalOpen(false);
       setNotifSuccess(false);
       setSelectedTemplateKey('');
@@ -504,10 +541,15 @@ export default function PatientDetailPage() {
       setNotifTitleAr('');
       setNotifMsgEn('');
       setNotifMsgAr('');
+      notifCloseTimerRef.current = null;
     }, 1200);
 
-    setTimeout(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
+      toastTimerRef.current = null;
     }, 4500);
   };
 
@@ -602,8 +644,9 @@ export default function PatientDetailPage() {
                   </span>
                   <button
                     type="button"
+                    data-compact-control="true"
                     onClick={handleToggleActiveStatus}
-                    aria-label="Toggle patient active status"
+                    aria-label={isRtl ? 'تبديل حالة تفعيل المريض' : 'Toggle patient active status'}
                     className={`w-7 h-4 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-200 ${
                       patient.isActive ? 'bg-emerald-500' : 'bg-slate-300'
                     }`}
@@ -645,7 +688,49 @@ export default function PatientDetailPage() {
           <div className="flex flex-wrap items-center gap-2.5">
             <Button
               variant="primary"
-              size="sm"
+              size="md"
+              onClick={() => setDialysisModalOpen(true)}
+              data-testid="patient-detail-record-dialysis-btn"
+              title={isRtl ? 'تسجيل جلسة غسيل كلوي (14 معيار)' : 'Record Dialysis Session (14 Fields)'}
+              aria-label={isRtl ? 'تسجيل جلسة غسيل كلوي' : 'Record Dialysis Session'}
+              className="min-h-[48px] bg-[#1e6bb8] hover:bg-blue-700 font-bold"
+            >
+              🩺 {isRtl ? 'تسجيل جلسة غسيل' : 'Record Dialysis Session'}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => {
+                setSelectedLabRecord(null);
+                setLabModalOpen(true);
+              }}
+              data-testid="patient-detail-enter-labs-btn"
+              title={isRtl ? 'إدخال تحاليل مخبرية جديدة (12 تحليل)' : 'Enter New Lab Results (12 Tests)'}
+              className="min-h-[48px] border-teal-300 bg-teal-50/70 text-teal-900 hover:bg-teal-100 font-bold"
+            >
+              🔬 {latestLabRecord ? (isRtl ? 'تحاليل جديدة' : 'New Lab Panel') : (isRtl ? 'إدخال التحاليل المخبرية' : 'Enter Lab Results')}
+            </Button>
+
+            {latestLabRecord && (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  setSelectedLabRecord(latestLabRecord);
+                  setLabModalOpen(true);
+                }}
+                data-testid="patient-detail-update-latest-labs-btn"
+                title={isRtl ? `تحديث آخر تحاليل (${latestLabRecord.testDate})` : `Update Latest Lab Results (${latestLabRecord.testDate})`}
+                className="min-h-[48px] border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-bold"
+              >
+                ✏️ {isRtl ? `تحديث آخر تحاليل (${latestLabRecord.testDate})` : `Update Latest Labs (${latestLabRecord.testDate})`}
+              </Button>
+            )}
+
+            <Button
+              variant="primary"
+              size="md"
               onClick={() => {
                 setSelectedTemplateKey('');
                 setNotifTitleEn('');
@@ -659,48 +744,26 @@ export default function PatientDetailPage() {
               aria-label={isRtl ? 'إرسال تنبيه للمريض / Send Message' : 'Send Message / إرسال تنبيه للمريض'}
               title={isRtl ? 'إرسال تنبيه للمريض' : 'Send Message'}
               data-testid="send-patient-message-btn"
+              className="min-h-[48px]"
             >
               {isRtl ? 'إرسال تنبيه للمريض' : 'Send Message'}
             </Button>
 
             <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setDialysisModalOpen(true)}
-              data-testid="patient-detail-record-dialysis-btn"
-              title={isRtl ? 'تسجيل جلسة غسيل كلوي (14 معيار)' : 'Record Dialysis Session (14 Fields)'}
-              aria-label={isRtl ? 'تسجيل جلسة غسيل كلوي' : 'Record Dialysis Session'}
-              className="bg-[#1e6bb8] hover:bg-blue-700 font-bold"
-            >
-              🩺 {isRtl ? 'تسجيل جلسة غسيل' : 'Record Dialysis'}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSelectedLabRecord(null);
-                setLabModalOpen(true);
-              }}
-              data-testid="patient-detail-enter-labs-btn"
-              title={isRtl ? 'إدخال / تحديث التحاليل المخبرية' : 'Enter / Update Lab Results'}
-            >
-              🔬 {isRtl ? 'إدخال التحاليل' : 'Enter Labs'}
-            </Button>
-
-            <Button
               variant="secondary"
-              size="sm"
+              size="md"
               onClick={() => setEditModalOpen(true)}
               leftIcon={<EditIcon className="w-4 h-4" />}
+              className="min-h-[48px]"
             >
               {tAdmin('editPatient') || (isRtl ? 'تعديل الملف' : 'Edit Profile')}
             </Button>
 
             <Button
               variant={patient.isActive ? 'danger' : 'success'}
-              size="sm"
+              size="md"
               onClick={handleToggleActiveStatus}
+              className="min-h-[48px]"
             >
               {patient.isActive
                 ? isRtl ? 'تعطيل الحساب' : 'Deactivate'
@@ -941,7 +1004,9 @@ export default function PatientDetailPage() {
                   <td className="py-3 px-4 text-center">
                     <button
                       type="button"
+                      data-compact-control="true"
                       onClick={() => handleToggleReminder(rem)}
+                      aria-label={isRtl ? 'تبديل تفعيل التذكير' : 'Toggle reminder active status'}
                       className={`
                         w-10 h-5 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200
                         ${rem.isActive ? 'bg-emerald-500' : 'bg-slate-300'}
@@ -1366,11 +1431,19 @@ export default function PatientDetailPage() {
         isOpen={labModalOpen}
         onClose={() => setLabModalOpen(false)}
         patientId={patient.id}
+        patientName={isRtl ? patient.fullNameAr || patient.fullName : patient.fullName}
+        recordedBy={user?.displayName || user?.username || 'doctor'}
         existingRecord={selectedLabRecord}
         onSaved={() => {
           loadPatientData();
           setToastMessage(isRtl ? 'تم حفظ وتحديث نتائج التحاليل بنجاح ✅' : 'Lab results updated successfully ✅');
-          setTimeout(() => setToastMessage(null), 3500);
+          if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+          }
+          toastTimerRef.current = setTimeout(() => {
+            setToastMessage(null);
+            toastTimerRef.current = null;
+          }, 3500);
         }}
       />
 
@@ -1380,7 +1453,7 @@ export default function PatientDetailPage() {
         onClose={() => setDialysisModalOpen(false)}
         patientId={patient.id}
         patientName={isRtl ? patient.fullNameAr || patient.fullName : patient.fullName}
-        recordedBy="doctor"
+        recordedBy={user?.displayName || user?.username || 'doctor'}
         onSessionRecorded={(savedSession) => {
           loadPatientData();
           setToastMessage(
@@ -1388,7 +1461,13 @@ export default function PatientDetailPage() {
               ? `تم تسجيل جلسة الغسيل الكلوي (${savedSession.sessionDate}) بنجاح ✅`
               : `Dialysis session for ${savedSession.sessionDate} recorded successfully ✅`
           );
-          setTimeout(() => setToastMessage(null), 3500);
+          if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+          }
+          toastTimerRef.current = setTimeout(() => {
+            setToastMessage(null);
+            toastTimerRef.current = null;
+          }, 3500);
         }}
       />
     </div>

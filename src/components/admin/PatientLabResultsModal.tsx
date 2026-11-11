@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import type { PatientLabRecord, LabTestValues } from '@/lib/types';
 import { savePatientLabResults } from '@/lib/data-store';
@@ -147,6 +147,8 @@ export interface PatientLabResultsModalProps {
   isOpen: boolean;
   onClose: () => void;
   patientId: string;
+  patientName?: string;
+  recordedBy?: string;
   existingRecord?: PatientLabRecord | null;
   onSaved?: (record: PatientLabRecord) => void;
 }
@@ -155,6 +157,8 @@ export function PatientLabResultsModal({
   isOpen,
   onClose,
   patientId,
+  patientName,
+  recordedBy: recordedByProp,
   existingRecord,
   onSaved,
 }: PatientLabResultsModalProps) {
@@ -164,17 +168,18 @@ export function PatientLabResultsModal({
   const tCommon = useTranslations('common');
 
   const [testDate, setTestDate] = useState<string>('');
-  const [recordedBy, setRecordedBy] = useState<string>('Dr. Nephrologist');
+  const [recordedBy, setRecordedBy] = useState<string>(recordedByProp || 'Dr. Nephrologist');
   const [notes, setNotes] = useState<string>('');
   const [values, setValues] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const formBodyRef = useRef<HTMLDivElement>(null);
 
-  // Initialize form when opened or when existingRecord changes
+  // Initialize form when opened, patient changes, or existingRecord/recordedBy changes
   useEffect(() => {
     if (isOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setTestDate(existingRecord?.testDate || new Date().toISOString().slice(0, 10));
-      setRecordedBy(existingRecord?.recordedBy || 'Dr. Nephrologist');
+      setRecordedBy(existingRecord?.recordedBy || recordedByProp || 'Dr. Nephrologist');
       setNotes(existingRecord?.notes || '');
       const valMap: Record<string, string> = {};
       if (existingRecord?.values) {
@@ -187,7 +192,7 @@ export function PatientLabResultsModal({
       setValues(valMap);
       setErrorMessage(null);
     }
-  }, [isOpen, existingRecord]);
+  }, [isOpen, existingRecord, patientId, recordedByProp]);
 
   const handleValueChange = (key: string, val: string) => {
     setValues((prev) => ({
@@ -206,29 +211,41 @@ export function PatientLabResultsModal({
     return 'normal';
   };
 
+  const showError = (msg: string) => {
+    setErrorMessage(msg);
+    formBodyRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     if (!testDate) {
-      setErrorMessage(isAr ? 'يرجى تحديد تاريخ الفحص المخبري' : 'Please select test date');
+      showError(isAr ? 'يرجى تحديد تاريخ الفحص المخبري' : 'Please select test date');
       return;
     }
 
     // Convert string map to numeric LabTestValues
     const parsedValues: LabTestValues = {};
     let enteredCount = 0;
-    CLINICAL_12_LAB_TESTS.forEach((def) => {
+    for (const def of CLINICAL_12_LAB_TESTS) {
       const raw = values[def.key];
       if (raw !== undefined && raw.trim() !== '') {
         const num = parseFloat(raw);
-        if (!isNaN(num)) {
-          parsedValues[def.key] = num;
-          enteredCount++;
+        if (isNaN(num) || num < 0) {
+          showError(
+            isAr
+              ? `يرجى إدخال قيمة صحيحة (غير سالبة) لتحليل ${def.nameAr}`
+              : `Please enter a valid non-negative value for ${def.nameEn}`
+          );
+          return;
         }
+        parsedValues[def.key] = num;
+        enteredCount++;
       }
-    });
+    }
 
     if (enteredCount === 0) {
-      setErrorMessage(
+      showError(
         isAr
           ? 'يرجى إدخال قيمة تحليل مخبري واحد على الأقل'
           : 'Please enter at least one laboratory test value'
@@ -240,7 +257,7 @@ export function PatientLabResultsModal({
       ...(existingRecord?.id ? { id: existingRecord.id } : {}),
       patientId,
       testDate,
-      recordedBy: recordedBy || 'Dr. Nephrologist',
+      recordedBy: recordedBy.trim() || recordedByProp || 'Dr. Nephrologist',
       recordedAt: new Date().toISOString(),
       values: parsedValues,
       notes: notes.trim() || undefined,
@@ -255,28 +272,48 @@ export function PatientLabResultsModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
+      closeLabel={isAr ? 'إغلاق نافذة التحاليل' : 'Close lab results dialog'}
       title={
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <span className="text-2xl" role="img" aria-hidden="true">
             🔬
           </span>
           <span className="font-black text-slate-900 text-lg">
             {existingRecord
-              ? tLabs('enterLabs') || (isAr ? 'تعديل نتائج التحاليل المخبرية' : 'Edit Clinical Lab Panel')
-              : tLabs('enterLabs') || (isAr ? 'إدخال نتائج التحاليل المخبرية' : 'Enter Clinical Lab Results')}
+              ? isAr
+                ? 'تعديل نتائج التحاليل المخبرية'
+                : 'Update Clinical Lab Panel'
+              : isAr
+                ? 'إدخال نتائج التحاليل المخبرية'
+                : 'Enter Clinical Lab Results'}
           </span>
+          <Badge variant="info" size="sm" className="font-bold">
+            {patientName ? `${patientName} (${patientId})` : patientId}
+          </Badge>
         </div>
       }
       description={
-        isAr
-          ? 'إدخال وتحديث نتائج الفحوصات الدورية الـ 12 مع المسميات الثنائية والمعدلات المستهدفة لمرضى الغسيل'
-          : 'Enter and update all 12 routine clinical hemodialysis lab tests with side-by-side bilingual terms'
+        <>
+          <span className="font-bold text-slate-700">
+            {isAr ? 'المريض:' : 'Patient:'}{' '}
+            {patientName ? `${patientName} (${patientId})` : patientId}
+          </span>
+          {' — '}
+          {isAr
+            ? 'إدخال وتحديث نتائج الفحوصات الدورية الـ 12 مع المسميات الثنائية والمعدلات المستهدفة لمرضى الغسيل'
+            : 'Enter and update all 12 routine clinical hemodialysis lab tests with side-by-side bilingual terms'}
+        </>
       }
       maxWidth="2xl"
+      noBodyPadding
     >
-      <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+      <form onSubmit={handleSubmit} noValidate className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div
+          ref={formBodyRef}
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 space-y-5"
+        >
         {errorMessage && (
-          <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
+          <div role="alert" className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
             ⚠️ {errorMessage}
           </div>
         )}
@@ -311,7 +348,7 @@ export function PatientLabResultsModal({
 
         {/* 12 Tests Grid with Side-by-Side Bilingual Labels */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
               {isAr ? 'الفحوصات السريرية الـ 12 المعتمدة' : '12 Clinical Laboratory Investigations'}
             </h3>
@@ -320,7 +357,7 @@ export function PatientLabResultsModal({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto p-1 pr-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {CLINICAL_12_LAB_TESTS.map((test) => {
               const currentVal = values[test.key] || '';
               const status = getTestStatus(test, currentVal);
@@ -390,18 +427,19 @@ export function PatientLabResultsModal({
                 ? 'سجل التوصيات بخصوص جرعات مثبتات الفوسفات، إبر الحديد، أو تعديل خطة العلاج...'
                 : 'e.g. Phosphate binders adequate, ferritin within target, continue current dosing...'
             }
-            className="w-full p-3 text-sm rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
+            className="w-full min-h-[48px] p-3 text-sm rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
           />
         </div>
+        </div>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+        {/* Sticky Footer Actions */}
+        <div className="shrink-0 px-4 py-3 sm:px-6 sm:py-4 [@media(max-height:520px)]:py-2 border-t border-slate-100 bg-white flex flex-wrap items-center justify-end gap-2 sm:gap-3">
           <Button
             type="button"
             variant="secondary"
             size="md"
             onClick={onClose}
-            className="min-h-[48px] font-bold"
+            className="min-h-[48px] px-3.5 sm:px-5 text-sm sm:text-base font-bold"
           >
             {tCommon('cancel') || (isAr ? 'إلغاء' : 'Cancel')}
           </Button>
@@ -409,7 +447,7 @@ export function PatientLabResultsModal({
             type="submit"
             variant="primary"
             size="md"
-            className="min-h-[48px] font-extrabold"
+            className="min-h-[48px] px-4 sm:px-5 text-sm sm:text-base font-extrabold"
           >
             💾 {tLabs('saveLabs') || (isAr ? 'حفظ نتائج التحاليل' : 'Save Laboratory Results')}
           </Button>
