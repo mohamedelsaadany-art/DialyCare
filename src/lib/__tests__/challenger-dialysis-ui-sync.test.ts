@@ -273,13 +273,17 @@ assert.strictEqual(updatedSession.accessInfectionSigns, false, 'Updated infectio
 assert.strictEqual(updatedSession.notes, 'Infection resolved. Excellent tolerance.');
 console.log('  ✓ Edit mode prefill and session update lifecycle verified');
 
-// 2.3 Cancel Reset Verification in Component Source
+// 2.3 Cancel Reset Verification in Component Source (Zero pre-filled clinical defaults)
 assert.match(
   modalSrc,
-  /setComplianceRating\(5\);[\s\S]*setPreWeightKg\('70'\);[\s\S]*setPostWeightKg\('68'\);[\s\S]*setDurationHours\(4\);[\s\S]*setAccessType\('AVF'\);[\s\S]*setMachineSodiumMeqL\('138'\);/,
-  'Modal must reinitialize form state to default clinical values upon reopening without initialSession'
+  /setComplianceRating\(undefined\);[\s\S]*setPreWeightKg\(''\);[\s\S]*setPostWeightKg\(''\);[\s\S]*setDurationHours\(undefined\);[\s\S]*setAccessType\(undefined\);[\s\S]*setMachineSodiumMeqL\(''\);/,
+  'Modal must reinitialize form state to empty values without pre-filled clinical defaults upon reopening without initialSession'
 );
-console.log('  ✓ Reset on cancel/reopen verified in modal lifecycle code\n');
+assert.ok(
+  !/const\s+DEFAULT_VITALS/.test(modalSrc) && !/useState\('70'\)/.test(modalSrc) && !/useState\('68'\)/.test(modalSrc),
+  'DialysisSessionModal must not contain pre-filled clinical numeric defaults'
+);
+console.log('  ✓ Empty-default reset on cancel/reopen verified in modal lifecycle code\n');
 
 // ============================================================================
 // SUITE 3: Reactive Listener Attachment, Sorting & History Lifecycle
@@ -714,6 +718,68 @@ for (const ctrl of historyControls) {
   }
 }
 console.log('  ✓ All clinical interactive elements in DialysisSessionHistory enforce min-48px touch targets');
+
+// 6.3 Empty Form Defaults & Partial Clinical Submission Verification
+const medManagerPath = path.join(projectRoot, 'src/components/admin/PatientMedicationManager.tsx');
+const labModalPath = path.join(projectRoot, 'src/components/admin/PatientLabResultsModal.tsx');
+const newPatientPath = path.join(projectRoot, 'src/app/[locale]/admin/patients/new/page.tsx');
+const profilePath = path.join(projectRoot, 'src/app/[locale]/patient/profile/page.tsx');
+const adminPatientDetailPath = path.join(projectRoot, 'src/app/[locale]/admin/patients/[id]/page.tsx');
+const tipsPagePath = path.join(projectRoot, 'src/app/[locale]/admin/tips/page.tsx');
+
+const medManagerSrc = fs.readFileSync(medManagerPath, 'utf-8');
+const labModalSrc = fs.readFileSync(labModalPath, 'utf-8');
+const newPatientSrc = fs.readFileSync(newPatientPath, 'utf-8');
+const profileSrc = fs.readFileSync(profilePath, 'utf-8');
+const adminPatientDetailSrc = fs.readFileSync(adminPatientDetailPath, 'utf-8');
+const tipsPageSrc = fs.readFileSync(tipsPagePath, 'utf-8');
+
+assert.ok(
+  !/useState<string\[\]>\(\['08:00'\]\)/.test(medManagerSrc) && !/\|\|\s*'08:00'/.test(medManagerSrc),
+  'PatientMedicationManager must not pre-fill or fall back to 08:00'
+);
+assert.ok(
+  !/\|\|\s*'Dr\. Nephrologist'/.test(labModalSrc),
+  'PatientLabResultsModal must not fall back to hardcoded Dr. Nephrologist default'
+);
+assert.ok(
+  !/useState\('1000'\)/.test(newPatientSrc) && !/Number\(fluidLimit\)\s*\|\|\s*1000/.test(newPatientSrc),
+  'New patient creation page must not pre-fill or fall back fluidLimit to 1000'
+);
+assert.ok(
+  !/useState<string>\('1000'\)/.test(profileSrc),
+  'Patient profile fluid limit input must not pre-fill 1000'
+);
+assert.ok(
+  !/time:\s*'08:00'/.test(adminPatientDetailSrc),
+  'Admin custom reminder modal must not pre-fill 08:00'
+);
+assert.ok(
+  !/useState\('1'\)/.test(tipsPageSrc),
+  'Admin tips modal must not pre-fill order 1'
+);
+
+// Partial dialysis session save/update round-trip without optional fields
+resetEnvironment();
+const partialSession = addDialysisSession({
+  patientId: 'patient-partial-empty',
+  sessionDate: '2026-04-01',
+  recordedBy: 'doctor',
+  notes: 'Partial check-in note only',
+});
+assert.ok(partialSession.id, 'Partial dialysis session with note only must save cleanly');
+assert.strictEqual(partialSession.preWeightKg, undefined, 'Omitted preWeightKg must stay undefined');
+assert.strictEqual(partialSession.ultrafiltrationVolumeMl, undefined, 'Omitted UF volume must stay undefined');
+assert.strictEqual(partialSession.vitals, undefined, 'Omitted vitals must stay undefined');
+
+const fetchedPartial = getDialysisSessions('patient-partial-empty');
+assert.strictEqual(fetchedPartial.length, 1);
+assert.strictEqual(fetchedPartial[0].notes, 'Partial check-in note only');
+assert.ok(
+  /غير مسجل/.test(historySrc) && /Not recorded/.test(historySrc),
+  'DialysisSessionHistory must safely localize omitted fluid status fields'
+);
+console.log('  ✓ Empty form defaults and partial clinical session handling verified');
 
 console.log('\n================================================================');
 console.log('ALL CHALLENGER DIALYSIS UI & INTEGRATION TESTS PASSED! (EXIT 0)');

@@ -39,7 +39,7 @@ export default function PatientProfilePage() {
 
   const [patientRecord, setPatientRecord] = useState<Patient | null>(null);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
-  const [fluidLimitInput, setFluidLimitInput] = useState<string>('1000');
+  const [fluidLimitInput, setFluidLimitInput] = useState<string>('');
   const [isLimitSaved, setIsLimitSaved] = useState<boolean>(false);
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
@@ -75,7 +75,7 @@ export default function PatientProfilePage() {
 
     // Load saved fluid limit once per resolved patient (do not overwrite active typing)
     const fallbackFluidLimit =
-      current?.fluidLimit && current.fluidLimit > 0 ? String(current.fluidLimit) : '1000';
+      current?.fluidLimit && current.fluidLimit > 0 ? String(current.fluidLimit) : '';
     let savedFluidLimit = fallbackFluidLimit;
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(resolvedFluidLimitKey);
@@ -411,6 +411,7 @@ export default function PatientProfilePage() {
               min="200"
               max="5000"
               step="50"
+              placeholder="1000"
               value={fluidLimitInput}
               onChange={(e) => setFluidLimitInput(e.target.value)}
               className="flex-1"

@@ -470,8 +470,8 @@ runTestCase('Tier 1 - R2.1: Session model validates all 14 clinical fields', () 
   expectStrictEqual(saved.accessType, 'AVF');
   expectStrictEqual(saved.dialysateFlowRateMlMin, 500);
   expectStrictEqual(saved.ultrafiltrationVolumeMl, 2600);
-  expectStrictEqual(saved.vitals.endSession.systolic, 125);
-  expectStrictEqual(saved.vitals.endSession.heartRate, 80);
+  expectStrictEqual(saved.vitals?.endSession?.systolic, 125);
+  expectStrictEqual(saved.vitals?.endSession?.heartRate, 80);
 });
 
 runTestCase('Tier 1 - R2.2: Session unshifting prepends newest session to index 0', () => {
@@ -888,8 +888,8 @@ runTestCase('Tier 2 - R2.6: Extreme blood pressure boundaries (hypotension vs hy
     recordedAt: new Date().toISOString(),
   });
 
-  expectStrictEqual(session.vitals.preSession.systolic, 250);
-  expectStrictEqual(session.vitals.endSession.systolic, 50);
+  expectStrictEqual(session.vitals?.preSession?.systolic, 250);
+  expectStrictEqual(session.vitals?.endSession?.systolic, 50);
 });
 
 runTestCase('Tier 2 - R2.7: Heart rate boundaries (bradycardia 40 bpm vs tachycardia 180 bpm)', () => {
@@ -919,8 +919,8 @@ runTestCase('Tier 2 - R2.7: Heart rate boundaries (bradycardia 40 bpm vs tachyca
     recordedAt: new Date().toISOString(),
   });
 
-  expectStrictEqual(session.vitals.preSession.heartRate, 40);
-  expectStrictEqual(session.vitals.endSession.heartRate, 180);
+  expectStrictEqual(session.vitals?.preSession?.heartRate, 40);
+  expectStrictEqual(session.vitals?.endSession?.heartRate, 180);
 });
 
 runTestCase('Tier 2 - R2.8: Temperature boundaries (hypothermia 35.0°C vs hyperpyrexia 41.0°C)', () => {
@@ -1237,6 +1237,9 @@ runTestCase('Tier 3 - Pairwise 2 (R2 + R3): Post-dialysis weight update vs dry w
     recordedAt: new Date().toISOString(),
   });
 
+  if (session.postWeightKg === undefined) {
+    throw new Error('Expected postWeightKg on session');
+  }
   const newLimits = calculateFluidLimits(session.postWeightKg);
   expectStrictEqual(newLimits.warningMl, 1360, 'Warning limit for 68kg must be 1360 mL');
   expectStrictEqual(newLimits.criticalMl, 1768, 'Critical limit for 68kg must be 1768 mL');
@@ -1387,7 +1390,7 @@ runTestCase('Tier 4 - Scenario 1: Chronic Hemodialysis Intake & Prescription Cyc
   // 4. Verification of historical log retrieval
   const sessions = testGetDialysisSessions('patient-rw-1');
   expectStrictEqual(sessions.length, 1);
-  expectStrictEqual(sessions[0].vitals.preSession.systolic, 155);
+  expectStrictEqual(sessions[0].vitals?.preSession?.systolic, 155);
 });
 
 runTestCase('Tier 4 - Scenario 2: Fluid Overload Crisis & Alarm Loop', () => {
@@ -1531,8 +1534,11 @@ runTestCase('Tier 4 - Scenario 4: Post-Session Vital Sign Anomaly Audit', () => 
   });
 
   // Verify detection of 70 mmHg systolic drop between preSession and after3hr
-  const preSys = session.vitals.preSession.systolic;
-  const hr3Sys = session.vitals.after3hr!.systolic;
+  const preSys = session.vitals?.preSession?.systolic;
+  const hr3Sys = session.vitals?.after3hr?.systolic;
+  if (preSys === undefined || hr3Sys === undefined) {
+    throw new Error('Expected preSession and after3hr systolic readings');
+  }
   const systolicDrop = preSys - hr3Sys;
   expectStrictEqual(systolicDrop, 70); // 160 - 90 = 70 mmHg drop
   expectOk(systolicDrop > 20, 'Clinically significant intradialytic hypotension detected');

@@ -72,7 +72,12 @@ function computePatientMedicationDoseSlots(
 
   const statuses: Record<string, AdherenceStatus | 'pending'> = {};
   activeMeds.forEach((med) => {
-    const times = med.scheduleTimes && med.scheduleTimes.length > 0 ? med.scheduleTimes : [med.scheduleTime];
+    const times =
+      med.scheduleTimes && med.scheduleTimes.length > 0
+        ? med.scheduleTimes
+        : med.scheduleTime
+          ? [med.scheduleTime]
+          : [''];
     times.forEach((t) => {
       const slotKey = `${med.id}_${t}`;
       const matchingLog = logs.find((l) => {
@@ -104,7 +109,12 @@ function computePatientMedicationDoseSlots(
   }> = [];
 
   activeMeds.forEach((med) => {
-    const times = med.scheduleTimes && med.scheduleTimes.length > 0 ? med.scheduleTimes : [med.scheduleTime];
+    const times =
+      med.scheduleTimes && med.scheduleTimes.length > 0
+        ? med.scheduleTimes
+        : med.scheduleTime
+          ? [med.scheduleTime]
+          : [''];
     times.forEach((t) => {
       const slotKey = `${med.id}_${t}`;
       list.push({

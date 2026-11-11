@@ -47,7 +47,7 @@ export default function NewPatientPage() {
   const [phone, setPhone] = useState('');
   const [dialysisSchedule, setDialysisSchedule] = useState<'SMW' | 'STT'>('SMW');
   const [centerName, setCenterName] = useState('');
-  const [fluidLimit, setFluidLimit] = useState('1000');
+  const [fluidLimit, setFluidLimit] = useState('');
 
   // Reminder Schedule Option
   const [useDefaultReminders, setUseDefaultReminders] = useState(true);
@@ -125,7 +125,7 @@ export default function NewPatientPage() {
         ...patientData,
         username: username.trim(),
         centerName: centerName.trim(),
-        fluidLimit: Number(fluidLimit) || 1000,
+        fluidLimit: fluidLimit.trim() ? Number(fluidLimit) : undefined,
       } as unknown as Partial<Patient>);
 
       // 2. Create Reminders

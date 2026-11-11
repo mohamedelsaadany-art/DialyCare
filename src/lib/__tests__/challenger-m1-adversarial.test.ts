@@ -223,18 +223,42 @@ runChallengerTest('SES-1: Seeded demo sessions for patient-1 have 14 clinical fi
   const s1 = sessions[0];
 
   // Verify all 14 clinical fields
-  assertTrue([1, 2, 3, 4, 5].includes(s1.complianceRating), 'Field 1: complianceRating 1-5');
+  assertTrue(
+    s1.complianceRating !== undefined && [1, 2, 3, 4, 5].includes(s1.complianceRating),
+    'Field 1: complianceRating 1-5'
+  );
   assertTrue(typeof s1.preWeightKg === 'number' && s1.preWeightKg > 0, 'Field 2: preWeightKg');
   assertTrue(typeof s1.postWeightKg === 'number' && s1.postWeightKg > 0, 'Field 3: postWeightKg');
-  assertTrue(Boolean(s1.vitals.preSession && s1.vitals.after1hr && s1.vitals.after2hr && s1.vitals.after3hr && s1.vitals.endSession), 'Field 4&5: 5-timepoint vitals');
+  assertTrue(
+    Boolean(
+      s1.vitals?.preSession &&
+        s1.vitals?.after1hr &&
+        s1.vitals?.after2hr &&
+        s1.vitals?.after3hr &&
+        s1.vitals?.endSession
+    ),
+    'Field 4&5: 5-timepoint vitals'
+  );
   assertTrue(typeof s1.temperatureC === 'number', 'Field 6: temperatureC');
-  assertTrue(Boolean(s1.fluidStatus.legEdema && s1.fluidStatus.lungCrackles && s1.fluidStatus.dyspnea), 'Field 7: fluidStatus');
+  assertTrue(
+    Boolean(s1.fluidStatus?.legEdema && s1.fluidStatus?.lungCrackles && s1.fluidStatus?.dyspnea),
+    'Field 7: fluidStatus'
+  );
   assertTrue(typeof s1.accessInfectionSigns === 'boolean', 'Field 8: accessInfectionSigns');
-  assertTrue([1, 2, 3, 4].includes(s1.durationHours), 'Field 9: durationHours 1-4');
+  assertTrue(
+    s1.durationHours !== undefined && [1, 2, 3, 4].includes(s1.durationHours),
+    'Field 9: durationHours 1-4'
+  );
   assertTrue(typeof s1.ultrafiltrationVolumeMl === 'number', 'Field 10: ultrafiltrationVolumeMl');
   assertTrue(typeof s1.bloodFlowRateMlMin === 'number', 'Field 11: bloodFlowRateMlMin');
-  assertTrue([300, 500, 700, 800].includes(s1.dialysateFlowRateMlMin), 'Field 12: dialysateFlowRateMlMin');
-  assertTrue(['AVF', 'AVG', 'Permcath', 'Mahurkar'].includes(s1.accessType), 'Field 13: accessType');
+  assertTrue(
+    s1.dialysateFlowRateMlMin !== undefined && [300, 500, 700, 800].includes(s1.dialysateFlowRateMlMin),
+    'Field 12: dialysateFlowRateMlMin'
+  );
+  assertTrue(
+    s1.accessType !== undefined && ['AVF', 'AVG', 'Permcath', 'Mahurkar'].includes(s1.accessType),
+    'Field 13: accessType'
+  );
   assertTrue(typeof s1.machineSodiumMeqL === 'number', 'Field 14: machineSodiumMeqL');
 });
 

@@ -197,6 +197,9 @@ test('T1.3: Fields 2 & 3 - Pre-dialysis & post-dialysis weights with optional gr
   verifyEqual(added.postWeightGrams, 200, 'postWeightGrams');
 
   // Total weight difference calculation
+  if (added.preWeightKg === undefined || added.postWeightKg === undefined) {
+    throw new Error('Expected preWeightKg and postWeightKg on added session');
+  }
   const preTotalGrams = added.preWeightKg * 1000 + (added.preWeightGrams || 0);
   const postTotalGrams = added.postWeightKg * 1000 + (added.postWeightGrams || 0);
   const weightLossGrams = preTotalGrams - postTotalGrams;
@@ -213,20 +216,27 @@ test('T1.4: Fields 4 & 5 - Blood pressure & Heart rate at exact 5 timepoints', (
   ];
   const sessions = dataStore.getDialysisSessions('patient-1');
   const vitals = sessions[0].vitals;
+  if (!vitals) {
+    throw new Error('Expected vitals on seeded session');
+  }
 
   verifyEqual(Object.keys(vitals).length, 5, 'Vitals object must contain exactly 5 timepoints');
   for (const tp of timepoints) {
-    verify(vitals[tp] !== undefined, `Timepoint ${tp} must exist`);
-    verify(typeof vitals[tp].systolic === 'number' && vitals[tp].systolic > 0, `${tp}.systolic`);
-    verify(typeof vitals[tp].diastolic === 'number' && vitals[tp].diastolic > 0, `${tp}.diastolic`);
-    verify(typeof vitals[tp].heartRate === 'number' && vitals[tp].heartRate > 0, `${tp}.heartRate`);
+    const tpVitals = vitals[tp];
+    verify(tpVitals !== undefined, `Timepoint ${tp} must exist`);
+    if (tpVitals) {
+      verify(typeof tpVitals.systolic === 'number' && tpVitals.systolic > 0, `${tp}.systolic`);
+      verify(typeof tpVitals.diastolic === 'number' && tpVitals.diastolic > 0, `${tp}.diastolic`);
+      verify(typeof tpVitals.heartRate === 'number' && tpVitals.heartRate > 0, `${tp}.heartRate`);
+    }
   }
 });
 
 test('T1.5: Field 6 - Body Temperature (°C once per session)', () => {
   const sessions = dataStore.getDialysisSessions('patient-1');
-  verifyEqual(typeof sessions[0].temperatureC, 'number', 'Temperature must be a number');
-  verify(sessions[0].temperatureC >= 35.0 && sessions[0].temperatureC <= 42.0, 'Temperature within clinical bounds');
+  const temp = sessions[0].temperatureC;
+  verifyEqual(typeof temp, 'number', 'Temperature must be a number');
+  verify(temp !== undefined && temp >= 35.0 && temp <= 42.0, 'Temperature within clinical bounds');
 });
 
 test('T1.6: Field 7 - Fluid status assessment (Leg edema, Lung crackles, Dyspnea)', () => {
@@ -240,9 +250,9 @@ test('T1.6: Field 7 - Fluid status assessment (Leg edema, Lung crackles, Dyspnea
       lungCrackles: cracklesLevels[i],
       dyspnea: dyspneaLevels[i],
     };
-    verify(edemaLevels.includes(fs.legEdema), `Valid edema level: ${fs.legEdema}`);
-    verify(cracklesLevels.includes(fs.lungCrackles), `Valid crackles level: ${fs.lungCrackles}`);
-    verify(dyspneaLevels.includes(fs.dyspnea), `Valid dyspnea level: ${fs.dyspnea}`);
+    verify(fs.legEdema !== undefined && edemaLevels.includes(fs.legEdema), `Valid edema level: ${fs.legEdema}`);
+    verify(fs.lungCrackles !== undefined && cracklesLevels.includes(fs.lungCrackles), `Valid crackles level: ${fs.lungCrackles}`);
+    verify(fs.dyspnea !== undefined && dyspneaLevels.includes(fs.dyspnea), `Valid dyspnea level: ${fs.dyspnea}`);
   }
 });
 
@@ -261,14 +271,16 @@ test('T1.8: Field 9 - Treatment duration (1, 2, 3, 4 hours enum)', () => {
 
 test('T1.9: Field 10 - Ultrafiltration volume (mL)', () => {
   const sessions = dataStore.getDialysisSessions('patient-1');
-  verifyEqual(typeof sessions[0].ultrafiltrationVolumeMl, 'number', 'UF volume is number');
-  verify(sessions[0].ultrafiltrationVolumeMl >= 0, 'UF volume non-negative');
+  const uf = sessions[0].ultrafiltrationVolumeMl;
+  verifyEqual(typeof uf, 'number', 'UF volume is number');
+  verify(uf !== undefined && uf >= 0, 'UF volume non-negative');
 });
 
 test('T1.10: Field 11 - Blood flow rate (mL/min)', () => {
   const sessions = dataStore.getDialysisSessions('patient-1');
-  verifyEqual(typeof sessions[0].bloodFlowRateMlMin, 'number', 'Blood flow rate is number');
-  verify(sessions[0].bloodFlowRateMlMin >= 100 && sessions[0].bloodFlowRateMlMin <= 500, 'Physiological blood flow range');
+  const bf = sessions[0].bloodFlowRateMlMin;
+  verifyEqual(typeof bf, 'number', 'Blood flow rate is number');
+  verify(bf !== undefined && bf >= 100 && bf <= 500, 'Physiological blood flow range');
 });
 
 test('T1.11: Field 12 - Dialysate flow rate (300, 500, 700, 800 mL/min)', () => {
@@ -287,8 +299,9 @@ test('T1.12: Field 13 - Access type (AVF, AVG, Permcath, Mahurkar)', () => {
 
 test('T1.13: Field 14 - Sodium concentration in machine (mEq/L)', () => {
   const sessions = dataStore.getDialysisSessions('patient-1');
-  verifyEqual(typeof sessions[0].machineSodiumMeqL, 'number', 'Sodium concentration is number');
-  verify(sessions[0].machineSodiumMeqL >= 130 && sessions[0].machineSodiumMeqL <= 150, 'Standard dialysis sodium range');
+  const sodium = sessions[0].machineSodiumMeqL;
+  verifyEqual(typeof sodium, 'number', 'Sodium concentration is number');
+  verify(sodium !== undefined && sodium >= 130 && sodium <= 150, 'Standard dialysis sodium range');
 });
 
 test('T1.14: Session CRUD full cycle and reactive event dispatch', () => {

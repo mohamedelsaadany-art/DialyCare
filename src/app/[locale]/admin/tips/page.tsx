@@ -47,7 +47,7 @@ export default function CoachingTipsManagerPage() {
   const [formTitleAr, setFormTitleAr] = useState('');
   const [formContentEn, setFormContentEn] = useState('');
   const [formContentAr, setFormContentAr] = useState('');
-  const [formOrder, setFormOrder] = useState('1');
+  const [formOrder, setFormOrder] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
   const [formError, setFormError] = useState('');
 
@@ -99,7 +99,7 @@ export default function CoachingTipsManagerPage() {
     setFormTitleAr('');
     setFormContentEn('');
     setFormContentAr('');
-    setFormOrder(`${tips.length + 1}`);
+    setFormOrder('');
     setFormIsActive(true);
     setFormError('');
     setModalOpen(true);
@@ -139,7 +139,7 @@ export default function CoachingTipsManagerPage() {
       return;
     }
 
-    const orderNum = parseInt(formOrder, 10) || 1;
+    const orderNum = parseInt(formOrder, 10) || (editingTip ? editingTip.order : tips.length + 1);
 
     if (editingTip) {
       // Update
@@ -446,9 +446,9 @@ export default function CoachingTipsManagerPage() {
             <Input
               label={isRtl ? 'ترتيب الظهور' : 'Display Sequence Order'}
               type="number"
+              placeholder={String(tips.length + 1)}
               value={formOrder}
               onChange={(e) => setFormOrder(e.target.value)}
-              required
             />
           </div>
 

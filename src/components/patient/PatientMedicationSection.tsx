@@ -63,7 +63,12 @@ export function PatientMedicationSection({
     // Compute status map for each dose slot: key = `${medId}_${time}`
     const statuses: Record<string, AdherenceStatus | 'pending'> = {};
     activeMeds.forEach((med) => {
-      const times = med.scheduleTimes && med.scheduleTimes.length > 0 ? med.scheduleTimes : [med.scheduleTime];
+      const times =
+        med.scheduleTimes && med.scheduleTimes.length > 0
+          ? med.scheduleTimes
+          : med.scheduleTime
+          ? [med.scheduleTime]
+          : [''];
       times.forEach((t) => {
         const slotKey = `${med.id}_${t}`;
         // Find matching adherence log for this med & time, or any log for this med today
@@ -116,7 +121,12 @@ export function PatientMedicationSection({
   const doseSlots: DoseSlot[] = useMemo(() => {
     const list: DoseSlot[] = [];
     medications.forEach((med) => {
-      const times = med.scheduleTimes && med.scheduleTimes.length > 0 ? med.scheduleTimes : [med.scheduleTime];
+      const times =
+        med.scheduleTimes && med.scheduleTimes.length > 0
+          ? med.scheduleTimes
+          : med.scheduleTime
+          ? [med.scheduleTime]
+          : [''];
       times.forEach((t) => {
         const slotKey = `${med.id}_${t}`;
         list.push({
@@ -304,7 +314,10 @@ export function PatientMedicationSection({
                     </span>
 
                     <span className="inline-flex items-center gap-1 font-bold text-slate-700 bg-blue-50/70 text-[#1e6bb8] px-2.5 py-0.5 rounded-lg border border-blue-200">
-                      🕒 <span className="font-mono">{slot.time}</span>
+                      🕒{' '}
+                      <span className="font-mono">
+                        {slot.time || (isAr ? 'حسب الإرشادات' : 'As directed')}
+                      </span>
                     </span>
                   </div>
 

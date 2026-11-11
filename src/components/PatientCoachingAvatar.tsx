@@ -1005,7 +1005,7 @@ export function PatientCoachingAvatar({
                       ? med.scheduleTimes
                       : med.scheduleTime
                       ? [med.scheduleTime]
-                      : ['08:00'];
+                      : [];
 
                   return (
                     <div
@@ -1025,14 +1025,20 @@ export function PatientCoachingAvatar({
                           {isAr ? med.instructionsAr || med.instructions : med.instructions || 'With meal'}
                         </p>
                         <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                          {timesList.map((time, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold"
-                            >
-                              🕒 {time}
+                          {timesList.length > 0 ? (
+                            timesList.map((time, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold"
+                              >
+                                🕒 {time}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                              🕒 {isAr ? 'حسب الإرشادات' : 'As directed'}
                             </span>
-                          ))}
+                          )}
                         </div>
                       </div>
 

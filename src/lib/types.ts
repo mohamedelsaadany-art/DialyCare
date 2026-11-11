@@ -145,7 +145,7 @@ export interface PatientMedication {
   name: string;             // Drug name (e.g. "Sevelamer Carbonate 800mg" / "سيفيلامير")
   nameAr?: string;          // Optional Arabic name
   dose: string;             // Dose (e.g. "800 mg" or "1 tablet")
-  scheduleTime: string;     // Primary time string "HH:mm" (e.g. "08:00")
+  scheduleTime?: string;    // Optional primary time string "HH:mm" (e.g. "08:00")
   scheduleTimes?: string[]; // Array of times if multiple doses per day (e.g. ["08:00", "14:00", "20:00"])
   instructions?: string;    // Clinical notes (e.g. "Take with meals")
   instructionsAr?: string;  // Arabic clinical notes
@@ -164,23 +164,23 @@ export type DialysateFlowRate = 300 | 500 | 700 | 800; // mL/min
 export type SessionDurationHours = 1 | 2 | 3 | 4;
 
 export interface VitalsTimepoint {
-  systolic: number;   // mmHg (e.g. 130)
-  diastolic: number;  // mmHg (e.g. 80)
-  heartRate: number;  // bpm (e.g. 72)
+  systolic?: number;   // mmHg (e.g. 130)
+  diastolic?: number;  // mmHg (e.g. 80)
+  heartRate?: number;  // bpm (e.g. 72)
 }
 
 export interface DialysisSessionVitals {
-  preSession: VitalsTimepoint;
-  after1hr: VitalsTimepoint;
-  after2hr: VitalsTimepoint;
-  after3hr: VitalsTimepoint;
-  endSession: VitalsTimepoint;
+  preSession?: VitalsTimepoint;
+  after1hr?: VitalsTimepoint;
+  after2hr?: VitalsTimepoint;
+  after3hr?: VitalsTimepoint;
+  endSession?: VitalsTimepoint;
 }
 
 export interface DialysisFluidStatus {
-  legEdema: LegEdemaLevel;
-  lungCrackles: LungCracklesLevel;
-  dyspnea: DyspneaLevel;
+  legEdema?: LegEdemaLevel;
+  lungCrackles?: LungCracklesLevel;
+  dyspnea?: DyspneaLevel;
 }
 
 export interface DialysisSession {
@@ -191,45 +191,45 @@ export interface DialysisSession {
   recordedAt?: string;       // ISO timestamp
 
   // Field 1: Medical compliance rating (1-5 scale)
-  complianceRating: 1 | 2 | 3 | 4 | 5;
+  complianceRating?: 1 | 2 | 3 | 4 | 5;
 
   // Field 2: Pre-dialysis weight (kg + grams)
-  preWeightKg: number;
+  preWeightKg?: number;
   preWeightGrams?: number;
 
   // Field 3: Post-dialysis weight (kg + grams)
-  postWeightKg: number;
+  postWeightKg?: number;
   postWeightGrams?: number;
 
   // Field 4 & 5: Blood pressure & Heart rate at 5 timepoints
-  vitals: DialysisSessionVitals;
+  vitals?: DialysisSessionVitals;
 
   // Field 6: Temperature (°C)
-  temperatureC: number;
+  temperatureC?: number;
 
   // Field 7: Fluid status assessment
-  fluidStatus: DialysisFluidStatus;
+  fluidStatus?: DialysisFluidStatus;
 
   // Field 8: Vascular access inspection: signs of infection (yes / no)
-  accessInfectionSigns: boolean;
+  accessInfectionSigns?: boolean;
 
   // Field 9: Session duration (1 / 2 / 3 / 4 hours)
-  durationHours: SessionDurationHours;
+  durationHours?: SessionDurationHours;
 
   // Field 10: Ultrafiltration volume (mL)
-  ultrafiltrationVolumeMl: number;
+  ultrafiltrationVolumeMl?: number;
 
   // Field 11: Blood flow rate (mL/min)
-  bloodFlowRateMlMin: number;
+  bloodFlowRateMlMin?: number;
 
   // Field 12: Dialysate flow rate (300 / 500 / 700 / 800 mL/min)
-  dialysateFlowRateMlMin: DialysateFlowRate;
+  dialysateFlowRateMlMin?: DialysateFlowRate;
 
   // Field 13: Access type (AVF / AVG / Permcath / Mahurkar)
-  accessType: DialysisAccessType;
+  accessType?: DialysisAccessType;
 
   // Field 14: Sodium concentration in dialysis machine (mEq/L)
-  machineSodiumMeqL: number;
+  machineSodiumMeqL?: number;
 
   notes?: string;
 }

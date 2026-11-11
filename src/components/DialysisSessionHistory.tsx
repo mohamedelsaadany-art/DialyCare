@@ -20,44 +20,54 @@ export interface DialysisSessionHistoryProps {
 
 function localizeLegEdema(level: string | undefined, isAr: boolean): string {
   switch (level) {
+    case 'none':
+      return isAr ? 'لا يوجد' : 'None';
     case 'mild':
       return isAr ? 'بسيط (+1)' : 'Mild (+1)';
     case 'moderate':
       return isAr ? 'متوسط (+2)' : 'Moderate (+2)';
     case 'severe':
       return isAr ? 'شديد (+3/+4)' : 'Severe (+3/+4)';
-    case 'none':
     default:
-      return isAr ? 'لا يوجد' : 'None';
+      return isAr ? 'غير مسجل' : 'Not recorded';
   }
 }
 
 function localizeLungCrackles(level: string | undefined, isAr: boolean): string {
   switch (level) {
+    case 'none':
+      return isAr ? 'صافية (لا يوجد)' : 'Clear (None)';
     case 'lower_bases':
       return isAr ? 'أسفل الرئتين' : 'Lower Bases';
     case 'mid_lung':
       return isAr ? 'منتصف الرئتين' : 'Mid-Lung Fields';
     case 'all_areas':
       return isAr ? 'جميع أجزاء الصدر' : 'All Chest Areas';
-    case 'none':
     default:
-      return isAr ? 'صافية (لا يوجد)' : 'Clear (None)';
+      return isAr ? 'غير مسجل' : 'Not recorded';
   }
 }
 
 function localizeDyspnea(level: string | undefined, isAr: boolean): string {
   switch (level) {
+    case 'none':
+      return isAr ? 'لا يوجد' : 'None';
     case 'mild':
       return isAr ? 'بسيط عند المجهود' : 'Mild on exertion';
     case 'moderate':
       return isAr ? 'متوسط مع الحركة' : 'Moderate with activity';
     case 'severe':
       return isAr ? 'شديد أثناء الراحة' : 'Severe at rest';
-    case 'none':
     default:
-      return isAr ? 'لا يوجد' : 'None';
+      return isAr ? 'غير مسجل' : 'Not recorded';
   }
+}
+
+function formatTimepointBp(tp: { systolic?: number; diastolic?: number } | undefined): string {
+  if (!tp || (tp.systolic === undefined && tp.diastolic === undefined)) return '—';
+  const sys = tp.systolic !== undefined ? String(tp.systolic) : '—';
+  const dia = tp.diastolic !== undefined ? String(tp.diastolic) : '—';
+  return `${sys}/${dia}`;
 }
 
 export function DialysisSessionHistory({
@@ -143,7 +153,8 @@ export function DialysisSessionHistory({
     setExpandedSessionId((prev) => (prev === id ? null : id));
   };
 
-  const formatWeight = (kg: number, grams?: number) => {
+  const formatWeight = (kg?: number, grams?: number) => {
+    if (kg === undefined || kg === null || isNaN(kg)) return '—';
     const total = kg + (grams || 0) / 1000;
     return `${total.toFixed(2)} ${isAr ? 'كجم' : 'kg'}`;
   };
@@ -242,9 +253,11 @@ export function DialysisSessionHistory({
         ) : (
           sessions.map((session) => {
             const isExpanded = expandedSessionId === session.id;
-            const preTotal = session.preWeightKg + (session.preWeightGrams || 0) / 1000;
-            const postTotal = session.postWeightKg + (session.postWeightGrams || 0) / 1000;
-            const weightLoss = preTotal - postTotal;
+            const hasPreWeight = session.preWeightKg !== undefined && session.preWeightKg !== null;
+            const hasPostWeight = session.postWeightKg !== undefined && session.postWeightKg !== null;
+            const preTotal = hasPreWeight ? (session.preWeightKg as number) + (session.preWeightGrams || 0) / 1000 : null;
+            const postTotal = hasPostWeight ? (session.postWeightKg as number) + (session.postWeightGrams || 0) / 1000 : null;
+            const weightLoss = preTotal !== null && postTotal !== null ? preTotal - postTotal : 0;
 
             const preVitals = session.vitals?.preSession;
             const endVitals = session.vitals?.endSession;
@@ -280,28 +293,35 @@ export function DialysisSessionHistory({
                       <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
                         📅 {session.sessionDate}
                       </span>
-                      <Badge
-                        variant={session.complianceRating >= 4 ? 'success' : session.complianceRating >= 3 ? 'warning' : 'danger'}
-                        size="sm"
-                        className="font-bold"
-                      >
-                        ⭐ {session.complianceRating}/5 {isAr ? 'التزام' : 'Compliance'}
-                      </Badge>
-                      <Badge variant="neutral" size="sm" className="font-bold">
-                        ⏱️ {session.durationHours} {isAr ? 'ساعات' : 'hrs'}
-                      </Badge>
-                      <Badge variant="info" size="sm" className="font-bold">
-                        💉 {session.accessType}
-                      </Badge>
-                      {session.accessInfectionSigns ? (
-                        <Badge variant="danger" size="sm" className="font-bold animate-pulse">
-                          ⚠️ {isAr ? 'اشتباه التهاب بالوصلة!' : 'Access Infection Alert!'}
-                        </Badge>
-                      ) : (
-                        <Badge variant="success" size="sm" className="font-bold">
-                          ✓ {isAr ? 'الوصلة سليمة' : 'Clean Access'}
+                      {session.complianceRating !== undefined && (
+                        <Badge
+                          variant={session.complianceRating >= 4 ? 'success' : session.complianceRating >= 3 ? 'warning' : 'danger'}
+                          size="sm"
+                          className="font-bold"
+                        >
+                          ⭐ {session.complianceRating}/5 {isAr ? 'التزام' : 'Compliance'}
                         </Badge>
                       )}
+                      {session.durationHours !== undefined && (
+                        <Badge variant="neutral" size="sm" className="font-bold">
+                          ⏱️ {session.durationHours} {isAr ? 'ساعات' : 'hrs'}
+                        </Badge>
+                      )}
+                      {session.accessType && (
+                        <Badge variant="info" size="sm" className="font-bold">
+                          💉 {session.accessType}
+                        </Badge>
+                      )}
+                      {session.accessInfectionSigns !== undefined &&
+                        (session.accessInfectionSigns ? (
+                          <Badge variant="danger" size="sm" className="font-bold animate-pulse">
+                            ⚠️ {isAr ? 'اشتباه التهاب بالوصلة!' : 'Access Infection Alert!'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="success" size="sm" className="font-bold">
+                            ✓ {isAr ? 'الوصلة سليمة' : 'Clean Access'}
+                          </Badge>
+                        ))}
                     </div>
 
                     {/* Vitals Summary: Pre vs End */}
@@ -309,23 +329,27 @@ export function DialysisSessionHistory({
                       <span>
                         <strong className="text-slate-800">{isAr ? 'ضغط الدم (بداية/نهاية):' : 'BP (Pre/End):'}</strong>{' '}
                         <span className="font-mono font-bold text-[#1e6bb8]">
-                          {preVitals ? `${preVitals.systolic}/${preVitals.diastolic}` : 'N/A'}
+                          {formatTimepointBp(preVitals)}
                         </span>
                         {isAr ? ' ← ' : ' → '}
                         <span className="font-mono font-bold text-slate-800">
-                          {endVitals ? `${endVitals.systolic}/${endVitals.diastolic}` : 'N/A'}
+                          {formatTimepointBp(endVitals)}
                         </span>{' '}
                         mmHg
                       </span>
 
                       <span>
                         <strong className="text-slate-800">{isAr ? 'الحرارة:' : 'Temp:'}</strong>{' '}
-                        <span className="font-mono font-bold">{session.temperatureC}°C</span>
+                        <span className="font-mono font-bold">
+                          {session.temperatureC !== undefined ? `${session.temperatureC}°C` : '—'}
+                        </span>
                       </span>
 
                       <span>
                         <strong className="text-slate-800">{isAr ? 'سحب الماء UF:' : 'UF Vol:'}</strong>{' '}
-                        <span className="font-mono font-bold text-blue-600">{session.ultrafiltrationVolumeMl} mL</span>
+                        <span className="font-mono font-bold text-blue-600">
+                          {session.ultrafiltrationVolumeMl !== undefined ? `${session.ultrafiltrationVolumeMl} mL` : '—'}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -429,10 +453,10 @@ export function DialysisSessionHistory({
                                 {isAr ? tp.nameAr : tp.nameEn}
                               </span>
                               <span className="block text-sm font-mono font-black text-slate-900 mt-0.5">
-                                {vp ? `${vp.systolic}/${vp.diastolic}` : '—'}
+                                {formatTimepointBp(vp)}
                               </span>
                               <span className="block text-[11px] font-mono font-bold text-red-600">
-                                ❤️ {vp ? `${vp.heartRate} bpm` : '—'}
+                                ❤️ {vp?.heartRate !== undefined ? `${vp.heartRate} bpm` : '—'}
                               </span>
                             </div>
                           );
@@ -471,15 +495,21 @@ export function DialysisSessionHistory({
                         <div className="text-xs font-semibold text-slate-800 space-y-0.5">
                           <p>
                             <strong>{isAr ? 'تدفق الدم:' : 'Blood Flow:'}</strong>{' '}
-                            <span className="font-mono text-[#1e6bb8]">{session.bloodFlowRateMlMin} mL/min</span>
+                            <span className="font-mono text-[#1e6bb8]">
+                              {session.bloodFlowRateMlMin !== undefined ? `${session.bloodFlowRateMlMin} mL/min` : '—'}
+                            </span>
                           </p>
                           <p>
                             <strong>{isAr ? 'تدفق سائل الغسيل:' : 'Dialysate:'}</strong>{' '}
-                            <span className="font-mono text-slate-800">{session.dialysateFlowRateMlMin} mL/min</span>
+                            <span className="font-mono text-slate-800">
+                              {session.dialysateFlowRateMlMin !== undefined ? `${session.dialysateFlowRateMlMin} mL/min` : '—'}
+                            </span>
                           </p>
                           <p>
                             <strong>{isAr ? 'صوديوم الماكينة:' : 'Sodium:'}</strong>{' '}
-                            <span className="font-mono text-slate-800">{session.machineSodiumMeqL} mEq/L</span>
+                            <span className="font-mono text-slate-800">
+                              {session.machineSodiumMeqL !== undefined ? `${session.machineSodiumMeqL} mEq/L` : '—'}
+                            </span>
                           </p>
                         </div>
                       </div>
@@ -491,14 +521,19 @@ export function DialysisSessionHistory({
                         </span>
                         <div className="text-xs font-semibold text-slate-800 space-y-0.5">
                           <p>
-                            <strong>{isAr ? 'نوع المدخل:' : 'Type:'}</strong> {session.accessType}
+                            <strong>{isAr ? 'نوع المدخل:' : 'Type:'}</strong> {session.accessType || '—'}
                           </p>
                           <p>
-                            <strong>{isAr ? 'مدة الجلسة:' : 'Duration:'}</strong> {session.durationHours} {isAr ? 'ساعات' : 'Hours'}
+                            <strong>{isAr ? 'مدة الجلسة:' : 'Duration:'}</strong>{' '}
+                            {session.durationHours !== undefined
+                              ? `${session.durationHours} ${isAr ? 'ساعات' : 'Hours'}`
+                              : '—'}
                           </p>
                           <p>
                             <strong>{isAr ? 'علامات التهاب:' : 'Infection:'}</strong>{' '}
-                            {session.accessInfectionSigns ? (
+                            {session.accessInfectionSigns === undefined ? (
+                              <span className="text-slate-500">{isAr ? 'غير مسجل' : 'Not recorded'}</span>
+                            ) : session.accessInfectionSigns ? (
                               <span className="text-red-600 font-bold">{isAr ? 'نعم (يوجد)' : 'Yes'}</span>
                             ) : (
                               <span className="text-emerald-600 font-bold">{isAr ? 'لا (سليم)' : 'No (Clean)'}</span>
@@ -523,7 +558,9 @@ export function DialysisSessionHistory({
                           </p>
                           <p>
                             <strong>{isAr ? 'حجم السحب:' : 'UF Volume:'}</strong>{' '}
-                            <span className="font-mono text-blue-600 font-bold">{session.ultrafiltrationVolumeMl} mL</span>
+                            <span className="font-mono text-blue-600 font-bold">
+                              {session.ultrafiltrationVolumeMl !== undefined ? `${session.ultrafiltrationVolumeMl} mL` : '—'}
+                            </span>
                           </p>
                         </div>
                       </div>

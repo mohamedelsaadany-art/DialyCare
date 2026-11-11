@@ -259,6 +259,14 @@ runTest('2.1 Extreme weights: cachectic (30 kg) and bariatric (180 kg) weights',
   assert.strictEqual(sessionHeavy.preWeightGrams, 800);
 
   // Verify total weight loss calculation precision
+  if (
+    sessionSmall.preWeightKg === undefined ||
+    sessionSmall.postWeightKg === undefined ||
+    sessionHeavy.preWeightKg === undefined ||
+    sessionHeavy.postWeightKg === undefined
+  ) {
+    throw new Error('Expected preWeightKg and postWeightKg on weight sessions');
+  }
   const smallTotalPre = sessionSmall.preWeightKg + (sessionSmall.preWeightGrams || 0) / 1000;
   const smallTotalPost = sessionSmall.postWeightKg + (sessionSmall.postWeightGrams || 0) / 1000;
   const smallLoss = Number((smallTotalPre - smallTotalPost).toFixed(3));
@@ -300,9 +308,9 @@ runTest('2.2 Grams boundary conditions (0g, 500g, 950g, 999g) without float dist
       accessType: 'AVF',
       machineSodiumMeqL: 138,
     });
+    assert.strictEqual(s.preWeightKg, 70);
     assert.strictEqual(s.preWeightGrams, g);
-    assert.strictEqual(s.postWeightGrams, g);
-    const computedPre = s.preWeightKg + (s.preWeightGrams || 0) / 1000;
+    const computedPre = (s.preWeightKg ?? 0) + (s.preWeightGrams || 0) / 1000;
     assert.strictEqual(computedPre, 70 + g / 1000);
   }
 });
@@ -339,6 +347,9 @@ runTest('2.3 Intradialytic weight gain (preWeight < postWeight) handled safely',
   });
 
   assert.ok(paradoxSession.id);
+  if (paradoxSession.preWeightKg === undefined || paradoxSession.postWeightKg === undefined) {
+    throw new Error('Expected preWeightKg and postWeightKg on paradoxSession');
+  }
   const preTot = paradoxSession.preWeightKg + (paradoxSession.preWeightGrams || 0) / 1000;
   const postTot = paradoxSession.postWeightKg + (paradoxSession.postWeightGrams || 0) / 1000;
   const netLoss = preTot - postTot;
@@ -385,13 +396,13 @@ runTest('3.1 Complete 5-timepoint telemetry: crisis hypertension & bradycardia/t
     machineSodiumMeqL: 140,
   });
 
-  assert.strictEqual(session.vitals.preSession.systolic, 240);
-  assert.strictEqual(session.vitals.preSession.diastolic, 135);
-  assert.strictEqual(session.vitals.preSession.heartRate, 115);
-  assert.strictEqual(session.vitals.after1hr.heartRate, 38);
-  assert.strictEqual(session.vitals.after3hr.systolic, 68);
-  assert.strictEqual(session.vitals.after3hr.heartRate, 135);
-  assert.strictEqual(session.vitals.endSession.systolic, 118);
+  assert.strictEqual(session.vitals?.preSession?.systolic, 240);
+  assert.strictEqual(session.vitals?.preSession?.diastolic, 135);
+  assert.strictEqual(session.vitals?.preSession?.heartRate, 115);
+  assert.strictEqual(session.vitals?.after1hr?.heartRate, 38);
+  assert.strictEqual(session.vitals?.after3hr?.systolic, 68);
+  assert.strictEqual(session.vitals?.after3hr?.heartRate, 135);
+  assert.strictEqual(session.vitals?.endSession?.systolic, 118);
 });
 
 runTest('3.2 Missing / zero / partial timepoint values handled gracefully in store', () => {
@@ -424,10 +435,10 @@ runTest('3.2 Missing / zero / partial timepoint values handled gracefully in sto
     machineSodiumMeqL: 138,
   });
 
-  assert.strictEqual(session.vitals.after2hr.systolic, 0);
+  assert.strictEqual(session.vitals?.after2hr?.systolic, 0);
   assert.strictEqual(session.durationHours, 1);
   const fetched = getDialysisSessions('patient-short')[0];
-  assert.strictEqual(fetched.vitals.endSession.systolic, 125);
+  assert.strictEqual(fetched.vitals?.endSession?.systolic, 125);
 });
 
 // ----------------------------------------------------------------------------
@@ -520,9 +531,9 @@ runTest('5.1 Full 64 combinatorial permutations of edema x crackles x dyspnea', 
           notes: `Permutation #${comboCount}: edema=${edema}, crackles=${crackles}, dyspnea=${dyspnea}`,
         });
 
-        assert.strictEqual(s.fluidStatus.legEdema, edema);
-        assert.strictEqual(s.fluidStatus.lungCrackles, crackles);
-        assert.strictEqual(s.fluidStatus.dyspnea, dyspnea);
+        assert.strictEqual(s.fluidStatus?.legEdema, edema);
+        assert.strictEqual(s.fluidStatus?.lungCrackles, crackles);
+        assert.strictEqual(s.fluidStatus?.dyspnea, dyspnea);
       }
     }
   }
@@ -967,7 +978,7 @@ runTest('8.4 Update operations: updates specified fields while keeping remaining
   assert.strictEqual(updated.patientId, 'patient-mutate');
   assert.strictEqual(updated.preWeightKg, 75);
   assert.strictEqual(updated.preWeightGrams, 500);
-  assert.strictEqual(updated.vitals.preSession.systolic, 140);
+  assert.strictEqual(updated.vitals?.preSession?.systolic, 140);
   assert.strictEqual(updated.temperatureC, 36.6);
   assert.strictEqual(updated.ultrafiltrationVolumeMl, 3300);
   assert.strictEqual(updated.accessType, 'AVF');

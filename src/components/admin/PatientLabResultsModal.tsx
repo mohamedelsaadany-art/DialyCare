@@ -168,7 +168,7 @@ export function PatientLabResultsModal({
   const tCommon = useTranslations('common');
 
   const [testDate, setTestDate] = useState<string>('');
-  const [recordedBy, setRecordedBy] = useState<string>(recordedByProp || 'Dr. Nephrologist');
+  const [recordedBy, setRecordedBy] = useState<string>(recordedByProp || '');
   const [notes, setNotes] = useState<string>('');
   const [values, setValues] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -179,7 +179,7 @@ export function PatientLabResultsModal({
     if (isOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setTestDate(existingRecord?.testDate || new Date().toISOString().slice(0, 10));
-      setRecordedBy(existingRecord?.recordedBy || recordedByProp || 'Dr. Nephrologist');
+      setRecordedBy(existingRecord?.recordedBy || recordedByProp || '');
       setNotes(existingRecord?.notes || '');
       const valMap: Record<string, string> = {};
       if (existingRecord?.values) {
@@ -257,7 +257,7 @@ export function PatientLabResultsModal({
       ...(existingRecord?.id ? { id: existingRecord.id } : {}),
       patientId,
       testDate,
-      recordedBy: recordedBy.trim() || recordedByProp || 'Dr. Nephrologist',
+      recordedBy: recordedBy.trim() || recordedByProp || '',
       recordedAt: new Date().toISOString(),
       values: parsedValues,
       notes: notes.trim() || undefined,

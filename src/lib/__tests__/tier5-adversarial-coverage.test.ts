@@ -214,6 +214,9 @@ registerTest('1.4: Deep Immutability: Mutating nested vitals or fluidStatus of r
   const sessions = getDialysisSessions('patient-1');
   assert.ok(sessions.length > 0, 'Expected seeded sessions');
 
+  if (!sessions[0].vitals?.preSession || !sessions[0].fluidStatus) {
+    throw new Error('Expected seeded vitals.preSession and fluidStatus');
+  }
   const originalSystolic = sessions[0].vitals.preSession.systolic;
   const originalEdema = sessions[0].fluidStatus.legEdema;
 
@@ -223,12 +226,12 @@ registerTest('1.4: Deep Immutability: Mutating nested vitals or fluidStatus of r
 
   const reFetched = getDialysisSessions('patient-1');
   assert.strictEqual(
-    reFetched[0].vitals.preSession.systolic,
+    reFetched[0].vitals?.preSession?.systolic,
     originalSystolic,
     'Nested vitals systolic must remain defensively unmutated'
   );
   assert.strictEqual(
-    reFetched[0].fluidStatus.legEdema,
+    reFetched[0].fluidStatus?.legEdema,
     originalEdema,
     'Nested fluidStatus must remain defensively unmutated'
   );
@@ -502,7 +505,7 @@ registerTest('2.7: Dose Slot Chronological Sorting: Sorts morning, noon, and nig
   // Flatten and sort by military time
   const slots: Array<{ name: string; time: string }> = [];
   mockMeds.forEach((m) => {
-    (m.scheduleTimes || [m.scheduleTime]).forEach((t) => {
+    (m.scheduleTimes || (m.scheduleTime ? [m.scheduleTime] : [''])).forEach((t) => {
       slots.push({ name: m.name, time: t });
     });
   });
@@ -593,12 +596,12 @@ registerTest('3.1: 14-Field Schema Completeness: All 14 clinical fields persist 
   assert.strictEqual(completeSession.preWeightGrams, 400);
   assert.strictEqual(completeSession.postWeightKg, 70);
   assert.strictEqual(completeSession.postWeightGrams, 100);
-  assert.strictEqual(completeSession.vitals.preSession.systolic, 145);
-  assert.strictEqual(completeSession.vitals.endSession.heartRate, 70);
+  assert.strictEqual(completeSession.vitals?.preSession?.systolic, 145);
+  assert.strictEqual(completeSession.vitals?.endSession?.heartRate, 70);
   assert.strictEqual(completeSession.temperatureC, 36.8);
-  assert.strictEqual(completeSession.fluidStatus.legEdema, 'mild');
-  assert.strictEqual(completeSession.fluidStatus.lungCrackles, 'lower_bases');
-  assert.strictEqual(completeSession.fluidStatus.dyspnea, 'mild');
+  assert.strictEqual(completeSession.fluidStatus?.legEdema, 'mild');
+  assert.strictEqual(completeSession.fluidStatus?.lungCrackles, 'lower_bases');
+  assert.strictEqual(completeSession.fluidStatus?.dyspnea, 'mild');
   assert.strictEqual(completeSession.accessInfectionSigns, false);
   assert.strictEqual(completeSession.durationHours, 4);
   assert.strictEqual(completeSession.ultrafiltrationVolumeMl, 3300);
@@ -642,9 +645,9 @@ registerTest('3.2: Hemodynamic Crisis: System safely logs intradialytic hypotens
     notes: 'Trendelenburg position applied at hr 3 with 200 mL normal saline bolus.',
   });
 
-  assert.strictEqual(hypotensiveSession.vitals.after3hr.systolic, 65);
-  assert.strictEqual(hypotensiveSession.vitals.after3hr.diastolic, 40);
-  assert.strictEqual(hypotensiveSession.vitals.after3hr.heartRate, 125);
+  assert.strictEqual(hypotensiveSession.vitals?.after3hr?.systolic, 65);
+  assert.strictEqual(hypotensiveSession.vitals?.after3hr?.diastolic, 40);
+  assert.strictEqual(hypotensiveSession.vitals?.after3hr?.heartRate, 125);
 });
 
 registerTest('3.3: Dialysate Flow Rates & Sodium Limits: Validates clinical enum selections (300, 500, 700, 800 mL/min)', () => {
@@ -854,8 +857,8 @@ registerTest('3.9: Session Update & Partial Mutation: Updating duration or ratin
   assert.strictEqual(updated.durationHours, 4);
   assert.strictEqual(updated.notes, 'Extended session to 4 hours.');
   // Vitals must remain untouched
-  assert.strictEqual(updated.vitals.preSession.systolic, 150);
-  assert.strictEqual(updated.vitals.endSession.heartRate, 68);
+  assert.strictEqual(updated.vitals?.preSession?.systolic, 150);
+  assert.strictEqual(updated.vitals?.endSession?.heartRate, 68);
 
   // Deletion test
   const deleted = deleteDialysisSession(session.id);
@@ -1501,7 +1504,7 @@ registerTest('7.2: Acute Fluid Overload Emergency Loop (R3 alarm + R4 advice + R
   });
 
   assert.strictEqual(emergencySession.ultrafiltrationVolumeMl, 3500);
-  assert.strictEqual(emergencySession.fluidStatus.lungCrackles, 'all_areas');
+  assert.strictEqual(emergencySession.fluidStatus?.lungCrackles, 'all_areas');
 });
 
 registerTest('7.3: Full Translation Dictionary Parity: 100% key match between en.json and ar.json for all 5 features', () => {
@@ -1732,6 +1735,9 @@ registerTest('8.5: Paradoxical Interdialytic Fluid Balance & Negative Ultrafiltr
   assert.strictEqual(paradoxicalSession.postWeightKg, 69);
   assert.strictEqual(paradoxicalSession.postWeightGrams, 500);
 
+  if (paradoxicalSession.preWeightKg === undefined || paradoxicalSession.postWeightKg === undefined) {
+    throw new Error('Expected preWeightKg and postWeightKg on paradoxicalSession');
+  }
   const delta =
     paradoxicalSession.preWeightKg +
     (paradoxicalSession.preWeightGrams ?? 0) / 1000 -
@@ -1752,7 +1758,12 @@ registerTest('8.6: Multi-Medication Exact Minute Collision in Dose Slot Generato
 
   const slots: Array<{ slotKey: string; medId: string; time: string }> = [];
   collidingMeds.forEach((med) => {
-    const times = med.scheduleTimes && med.scheduleTimes.length > 0 ? med.scheduleTimes : [med.scheduleTime];
+    const times =
+      med.scheduleTimes && med.scheduleTimes.length > 0
+        ? med.scheduleTimes
+        : med.scheduleTime
+          ? [med.scheduleTime]
+          : [''];
     times.forEach((t) => {
       slots.push({
         slotKey: `${med.id}_${t}`,
@@ -1836,7 +1847,7 @@ registerTest('8.9: Missing/Corrupted Properties in Session & Lab Records: Deep d
 
   // Re-fetch should have vitals.preSession intact
   const refetched = getDialysisSessions('patient-clone-check');
-  assert.ok(refetched[0].vitals.preSession, 'Defensive clone protects against property deletion');
+  assert.ok(refetched[0].vitals?.preSession, 'Defensive clone protects against property deletion');
 });
 
 // ============================================================================

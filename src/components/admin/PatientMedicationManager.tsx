@@ -59,8 +59,8 @@ export function PatientMedicationManager({
   const [formName, setFormName] = useState('');
   const [formNameAr, setFormNameAr] = useState('');
   const [formDose, setFormDose] = useState('');
-  const [formScheduleTime, setFormScheduleTime] = useState('08:00');
-  const [formScheduleTimes, setFormScheduleTimes] = useState<string[]>(['08:00']);
+  const [formScheduleTime, setFormScheduleTime] = useState('');
+  const [formScheduleTimes, setFormScheduleTimes] = useState<string[]>(['']);
   const [formInstructions, setFormInstructions] = useState('');
   const [formInstructionsAr, setFormInstructionsAr] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
@@ -125,8 +125,8 @@ export function PatientMedicationManager({
     setFormName('');
     setFormNameAr('');
     setFormDose('');
-    setFormScheduleTime('08:00');
-    setFormScheduleTimes(['08:00']);
+    setFormScheduleTime('');
+    setFormScheduleTimes(['']);
     setFormInstructions('');
     setFormInstructionsAr('');
     setFormIsActive(true);
@@ -139,8 +139,14 @@ export function PatientMedicationManager({
     setFormName(med.name);
     setFormNameAr(med.nameAr || '');
     setFormDose(med.dose);
-    setFormScheduleTime(med.scheduleTime || '08:00');
-    setFormScheduleTimes(med.scheduleTimes && med.scheduleTimes.length > 0 ? med.scheduleTimes : [med.scheduleTime || '08:00']);
+    setFormScheduleTime(med.scheduleTime || '');
+    setFormScheduleTimes(
+      med.scheduleTimes && med.scheduleTimes.length > 0
+        ? med.scheduleTimes
+        : med.scheduleTime
+        ? [med.scheduleTime]
+        : ['']
+    );
     setFormInstructions(med.instructions || '');
     setFormInstructionsAr(med.instructionsAr || '');
     setFormIsActive(med.isActive !== false);
@@ -149,7 +155,7 @@ export function PatientMedicationManager({
   };
 
   const handleAddTimeSlot = () => {
-    setFormScheduleTimes((prev) => [...prev, '14:00']);
+    setFormScheduleTimes((prev) => [...prev, '']);
   };
 
   const handleRemoveTimeSlot = (index: number) => {
@@ -184,7 +190,7 @@ export function PatientMedicationManager({
     }
 
     const uniqueTimes = Array.from(new Set(formScheduleTimes.map((t) => t.trim()))).filter(Boolean);
-    const primaryTime = uniqueTimes[0] || formScheduleTime || '08:00';
+    const primaryTime = uniqueTimes[0] || formScheduleTime.trim() || undefined;
 
     if (editingMedId) {
       const updated = updatePatientMedication(editingMedId, {
@@ -192,7 +198,7 @@ export function PatientMedicationManager({
         nameAr: formNameAr.trim() || undefined,
         dose: formDose.trim(),
         scheduleTime: primaryTime,
-        scheduleTimes: uniqueTimes.length > 0 ? uniqueTimes : [primaryTime],
+        scheduleTimes: uniqueTimes.length > 0 ? uniqueTimes : undefined,
         instructions: formInstructions.trim() || undefined,
         instructionsAr: formInstructionsAr.trim() || undefined,
         isActive: formIsActive,
@@ -211,7 +217,7 @@ export function PatientMedicationManager({
         nameAr: formNameAr.trim() || undefined,
         dose: formDose.trim(),
         scheduleTime: primaryTime,
-        scheduleTimes: uniqueTimes.length > 0 ? uniqueTimes : [primaryTime],
+        scheduleTimes: uniqueTimes.length > 0 ? uniqueTimes : undefined,
         instructions: formInstructions.trim() || undefined,
         instructionsAr: formInstructionsAr.trim() || undefined,
         isActive: formIsActive,
@@ -349,7 +355,12 @@ export function PatientMedicationManager({
           </div>
         ) : (
           medications.map((med) => {
-            const times = med.scheduleTimes && med.scheduleTimes.length > 0 ? med.scheduleTimes : [med.scheduleTime];
+            const times =
+              med.scheduleTimes && med.scheduleTimes.length > 0
+                ? med.scheduleTimes
+                : med.scheduleTime
+                ? [med.scheduleTime]
+                : [];
             return (
               <div
                 key={med.id}
@@ -380,7 +391,7 @@ export function PatientMedicationManager({
                     <span className="inline-flex items-center gap-1 font-bold text-slate-800">
                       🕒 {isAr ? 'المواعيد:' : 'Schedule:'}
                       <span className="font-mono font-semibold text-slate-700">
-                        {times.join(', ')}
+                        {times.length > 0 ? times.join(', ') : isAr ? 'حسب الإرشادات' : 'As directed'}
                       </span>
                     </span>
                   </div>
@@ -516,7 +527,6 @@ export function PatientMedicationManager({
                     type="time"
                     value={timeVal}
                     onChange={(e) => handleTimeSlotChange(idx, e.target.value)}
-                    required
                     className="flex-1 min-h-[48px] px-3 py-2 text-sm font-mono font-bold rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
                   />
                   {formScheduleTimes.length > 1 && (

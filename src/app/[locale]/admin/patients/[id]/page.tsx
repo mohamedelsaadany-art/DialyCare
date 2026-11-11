@@ -187,7 +187,7 @@ export default function PatientDetailPage() {
     isActive: boolean;
   }>({
     type: 'ttt',
-    time: '08:00',
+    time: '',
     isActive: true,
   });
 
@@ -446,7 +446,7 @@ export default function PatientDetailPage() {
   // Add new reminder
   const handleAddReminderSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patient) return;
+    if (!patient || !newReminder.time.trim()) return;
 
     const created = addReminder({
       id: `rem_custom_${Date.now()}`,
@@ -933,7 +933,10 @@ export default function PatientDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setAddReminderOpen(true)}
+              onClick={() => {
+                setNewReminder({ type: 'ttt', time: '', isActive: true });
+                setAddReminderOpen(true);
+              }}
               leftIcon={<PlusIcon className="w-3.5 h-3.5" />}
             >
               {tReminders('addReminder') || (isRtl ? 'إضافة تذكير خاص' : 'Add Custom Reminder')}

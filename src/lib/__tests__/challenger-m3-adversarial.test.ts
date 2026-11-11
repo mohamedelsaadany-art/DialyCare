@@ -123,12 +123,12 @@ assert.strictEqual(created.bloodFlowRateMlMin, 400);
 assert.strictEqual(created.dialysateFlowRateMlMin, 700);
 assert.strictEqual(created.accessType, 'AVG');
 assert.strictEqual(created.machineSodiumMeqL, 140);
-assert.strictEqual(created.fluidStatus.legEdema, 'moderate');
-assert.strictEqual(created.fluidStatus.lungCrackles, 'lower_bases');
-assert.strictEqual(created.fluidStatus.dyspnea, 'mild');
-assert.strictEqual(created.vitals.preSession.systolic, 155);
-assert.strictEqual(created.vitals.endSession.diastolic, 76);
-assert.strictEqual(created.vitals.endSession.heartRate, 72);
+assert.strictEqual(created.fluidStatus?.legEdema, 'moderate');
+assert.strictEqual(created.fluidStatus?.lungCrackles, 'lower_bases');
+assert.strictEqual(created.fluidStatus?.dyspnea, 'mild');
+assert.strictEqual(created.vitals?.preSession?.systolic, 155);
+assert.strictEqual(created.vitals?.endSession?.diastolic, 76);
+assert.strictEqual(created.vitals?.endSession?.heartRate, 72);
 
 // Check that it's in localStorage directly
 const rawStorage = mockStorage['DIALYCARE_DIALYSIS_SESSIONS'];
@@ -149,13 +149,16 @@ const retrieved = dataStore.getDialysisSessions('patient-adv-1');
 assert.strictEqual(retrieved.length, 1);
 
 // Attempt mutation on retrieved object
+if (!retrieved[0].vitals?.preSession) {
+  throw new Error('Expected vitals.preSession on retrieved session');
+}
 retrieved[0].ultrafiltrationVolumeMl = 9999;
 retrieved[0].vitals.preSession.systolic = 999;
 
 // Re-query: must be unaffected
 const freshQuery = dataStore.getDialysisSessions('patient-adv-1');
 assert.strictEqual(freshQuery[0].ultrafiltrationVolumeMl, 3500, 'Storage must not be mutated via memory leak');
-assert.strictEqual(freshQuery[0].vitals.preSession.systolic, 155, 'Nested vitals must not be mutated via memory leak');
+assert.strictEqual(freshQuery[0].vitals?.preSession?.systolic, 155, 'Nested vitals must not be mutated via memory leak');
 
 console.log('✓ Test 2 passed: Immutability and defensive copying verified.');
 
@@ -304,8 +307,8 @@ const shockSession = dataStore.addDialysisSession({
 });
 
 assert.strictEqual(shockSession.ultrafiltrationVolumeMl, 0);
-assert.strictEqual(shockSession.vitals.after3hr.systolic, 65);
-assert.strictEqual(shockSession.vitals.after3hr.diastolic, 40);
+assert.strictEqual(shockSession.vitals?.after3hr?.systolic, 65);
+assert.strictEqual(shockSession.vitals?.after3hr?.diastolic, 40);
 assert.strictEqual(shockSession.temperatureC, 38.5);
 assert.strictEqual(shockSession.accessInfectionSigns, true);
 assert.strictEqual(shockSession.postWeightKg, 66);
