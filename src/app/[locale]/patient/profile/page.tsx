@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import {
   getPatients,
+  updatePatient,
   getAdherenceLogs,
   getFluidLogs,
   getDietLogs,
@@ -69,7 +70,9 @@ export default function PatientProfilePage() {
     const resolvedFluidLimitKey = `DIALYCARE_FLUID_LIMIT_${activeId}`;
 
     // Load saved fluid limit once per resolved patient (do not overwrite active typing)
-    let savedFluidLimit = '1000';
+    const fallbackFluidLimit =
+      current?.fluidLimit && current.fluidLimit > 0 ? String(current.fluidLimit) : '1000';
+    let savedFluidLimit = fallbackFluidLimit;
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(resolvedFluidLimitKey);
       if (saved) {
@@ -77,7 +80,7 @@ export default function PatientProfilePage() {
       }
       if (loadedLimitForIdRef.current !== activeId) {
         loadedLimitForIdRef.current = activeId;
-        setFluidLimitInput(saved || '1000');
+        setFluidLimitInput(saved || fallbackFluidLimit);
       }
       if ('Notification' in window) {
         setNotificationPermission(Notification.permission);
@@ -144,6 +147,7 @@ export default function PatientProfilePage() {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(activeFluidLimitKey, String(val));
     }
+    updatePatient(activePatientId, { fluidLimit: val });
     loadProfileMetrics();
     setIsLimitSaved(true);
     if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
@@ -246,7 +250,8 @@ export default function PatientProfilePage() {
               {isAr ? 'مركز الغسيل الكلوي:' : 'Dialysis Center:'}
             </span>
             <span className="font-semibold text-slate-800">
-              {isAr ? 'مركز دايلي كير التخصصي' : 'DialyCare Specialized Center'}
+              {patientRecord?.centerName?.trim() ||
+                (isAr ? 'مركز دايلي كير التخصصي' : 'DialyCare Specialized Center')}
             </span>
           </div>
         </div>

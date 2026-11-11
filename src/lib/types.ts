@@ -19,6 +19,9 @@ export interface Patient {
   fullName: string;
   fullNameAr: string;
   phone?: string;
+  username?: string;
+  centerName?: string;
+  fluidLimit?: number;
   dialysisSchedule: DialysisScheduleType;
   reminderSchedule?: string | Record<string, unknown>;
   dryWeightKg?: number;
