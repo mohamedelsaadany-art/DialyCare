@@ -442,11 +442,22 @@ export function PatientCoachingAvatar({
       };
     }
 
+    const metricDef = CORE_LAB_METRICS.find((m) => m.key === selectedLabMetric);
+    const unrecordedFallback = () => ({
+      title: isAr
+        ? `${metricDef?.nameAr || selectedLabMetric}: غير مسجل في هذا الفحص`
+        : `${metricDef?.nameEn || selectedLabMetric}: Not Recorded in This Panel`,
+      advice: isAr
+        ? 'لم يتم إدخال قيمة هذا التحليل في أحدث سجل مخبري لك. اضغط على أي تحليل يحمل قيمة رقمية بالأعلى لقراءة توجيه الطبيب.'
+        : 'This marker was not included in your latest saved panel. Tap any recorded metric above to view clinical guidance.',
+      status: 'normal',
+    });
+
     const vals = latestLabRecord.values;
     switch (selectedLabMetric) {
       case 'hemoglobin': {
         const val = vals.hemoglobin;
-        if (val === undefined) return null;
+        if (val === undefined) return unrecordedFallback();
         if (val < 10.0) {
           return {
             title: isAr ? `الهيموجلوبين منخفض (${val} g/dL)` : `Hemoglobin is Low (${val} g/dL)`,
@@ -475,7 +486,7 @@ export function PatientCoachingAvatar({
       }
       case 'phosphorus': {
         const val = vals.phosphorus;
-        if (val === undefined) return null;
+        if (val === undefined) return unrecordedFallback();
         if (val > 5.5) {
           return {
             title: isAr ? `الفسفور مرتفع (${val} mg/dL)` : `Phosphorus is Elevated (${val} mg/dL)`,
@@ -504,7 +515,7 @@ export function PatientCoachingAvatar({
       }
       case 'calcium': {
         const val = vals.calcium;
-        if (val === undefined) return null;
+        if (val === undefined) return unrecordedFallback();
         if (val > 10.2) {
           return {
             title: isAr ? `الكالسيوم مرتفع (${val} mg/dL)` : `Calcium is Elevated (${val} mg/dL)`,
@@ -533,7 +544,7 @@ export function PatientCoachingAvatar({
       }
       case 'urea': {
         const val = vals.urea;
-        if (val === undefined) return null;
+        if (val === undefined) return unrecordedFallback();
         if (val > 150) {
           return {
             title: isAr ? `اليوريا مرتفعة (${val} mg/dL)` : `Urea is Elevated (${val} mg/dL)`,
@@ -553,7 +564,7 @@ export function PatientCoachingAvatar({
       }
       case 'creatinine': {
         const val = vals.creatinine;
-        if (val === undefined) return null;
+        if (val === undefined) return unrecordedFallback();
         return {
           title: isAr ? `الكرياتينين مستقر (${val} mg/dL)` : `Creatinine is Stable (${val} mg/dL)`,
           advice: isAr
@@ -564,7 +575,7 @@ export function PatientCoachingAvatar({
       }
       case 'albumin': {
         const val = vals.albumin;
-        if (val === undefined) return null;
+        if (val === undefined) return unrecordedFallback();
         if (val < 4.0) {
           return {
             title: isAr ? `الألبومين يحتاج تعزيزاً (${val} g/dL)` : `Albumin Needs Boost (${val} g/dL)`,
@@ -929,6 +940,10 @@ export function PatientCoachingAvatar({
                         ? isAr
                           ? 'اليوم موعد جلستك!'
                           : 'Treatment Day Today!'
+                        : dialysisInfo.daysUntilNext === 1
+                        ? isAr
+                          ? 'غداً بإذن الله'
+                          : 'Tomorrow'
                         : isAr
                         ? `بعد ${dialysisInfo.daysUntilNext} أيام`
                         : `In ${dialysisInfo.daysUntilNext} days`}
