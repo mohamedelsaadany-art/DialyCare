@@ -79,6 +79,16 @@ const TEST_SUITES: TestSuiteDefinition[] = [
     name: '7. Dialysis Schedule Options (R6) Strict Verification Suite',
     importPath: './dialysis-schedule-r6.test',
   },
+  {
+    id: 'challenger-adherence-survey',
+    name: '8. Dialysis Treatment Adherence Questionnaire (R7) Comprehensive Suite',
+    importPath: './challenger-adherence-survey.test',
+  },
+  {
+    id: 'clinical-ux-audit',
+    name: '9. Clinical UX & Quality Review Audit Suite',
+    importPath: './clinical-ux-audit.test',
+  },
 ];
 
 async function runMasterTestSuite(): Promise<void> {

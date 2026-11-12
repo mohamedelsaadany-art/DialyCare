@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/lib/__tests__/patient-features.test.ts && npx tsx src/lib/__tests__/patient-messaging.test.ts && npx tsx src/lib/__tests__/pwa-verification.test.ts"
+    "test": "npx tsx src/lib/__tests__/patient-features.test.ts && npx tsx src/lib/__tests__/patient-messaging.test.ts && npx tsx src/lib/__tests__/pwa-verification.test.ts && npx tsx src/lib/__tests__/challenger-adherence-survey.test.ts && npx tsx src/lib/__tests__/clinical-ux-audit.test.ts"
   },
   "dependencies": {
     "firebase": "^13.2.0",
@@ -27,6 +27,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
+    "playwright": "^1.65.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

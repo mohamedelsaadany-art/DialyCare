@@ -22,9 +22,20 @@ import {
   deleteReminder as dsDeleteReminder,
   getReminderTemplates as dsGetReminderTemplates,
   updateReminderTemplate as dsUpdateReminderTemplate,
+  getAdherenceSurveys as dsGetAdherenceSurveys,
+  saveAdherenceSurvey as dsSaveAdherenceSurvey,
+  getPatientSurveyStatus as dsGetPatientSurveyStatus,
+  setDoctorSurveyActivation as dsSetDoctorSurveyActivation,
+  sendSurveyReminderNotification as dsSendSurveyReminderNotification,
   initDataStore,
   STORAGE_KEYS,
 } from '@/lib/data-store';
+
+export const getAdherenceSurveys = dsGetAdherenceSurveys;
+export const saveAdherenceSurvey = dsSaveAdherenceSurvey;
+export const getPatientSurveyStatus = dsGetPatientSurveyStatus;
+export const setDoctorSurveyActivation = dsSetDoctorSurveyActivation;
+export const sendSurveyReminderNotification = dsSendSurveyReminderNotification;
 import type {
   AdherenceLog,
 } from '@/lib/types';

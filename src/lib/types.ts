@@ -262,3 +262,42 @@ export interface PatientLabRecord {
   notes?: string;
 }
 
+// ==========================================
+// R7: DIALYSIS TREATMENT ADHERENCE QUESTIONNAIRE
+// ==========================================
+export type QuestionnaireOptionValue = 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface AdherenceSurveySubmission {
+  id: string;
+  patientId: string;
+  submittedAt: string; // ISO timestamp
+  cycleNumber: number; // 1 = baseline/initial, 2 = Month 1, 3 = Month 2, 4 = Month 3, etc.
+  cycleLabelAr: string;
+  cycleLabelEn: string;
+  answers: Record<number, QuestionnaireOptionValue>; // 1 to 20 -> 1 to 6
+  overallScorePercent: number;
+  sectionScores: {
+    dialysisPercent: number;
+    medicationsPercent: number;
+    dietPercent: number;
+    fluidsPercent: number;
+  };
+  notes?: string;
+}
+
+export type SurveyDueReason = 'initial' | 'monthly_due' | 'doctor_activated' | 'completed';
+
+export interface PatientSurveyStatus {
+  isDue: boolean;
+  reason: SurveyDueReason;
+  currentCycleNumber: number;
+  cycleLabelAr: string;
+  cycleLabelEn: string;
+  lastSubmissionDate?: string;
+  nextDueDate: string;
+  daysUntilDue: number;
+  isManuallyActivatedByDoctor: boolean;
+  totalSubmissions: number;
+}
+
+

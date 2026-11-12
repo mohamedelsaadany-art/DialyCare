@@ -31,6 +31,7 @@ import { PatientLabResultsView } from '@/components/patient/PatientLabResultsVie
 import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
+import { DoctorPatientSurveyManager } from '@/components/admin/DoctorPatientSurveyManager';
 import { addNotification, getPatientNotifications, getPatientLabResults, STORAGE_KEYS } from '@/lib/data-store';
 import {
   getPatients,
@@ -380,7 +381,9 @@ export default function PatientDetailPage() {
         e.key === STORAGE_KEYS.DIALYSIS_SESSIONS ||
         e.key === STORAGE_KEYS.PATIENT_MEDICATIONS ||
         e.key === STORAGE_KEYS.PATIENTS ||
-        e.key === STORAGE_KEYS.ADHERENCE_LOGS
+        e.key === STORAGE_KEYS.ADHERENCE_LOGS ||
+        e.key === STORAGE_KEYS.ADHERENCE_SURVEYS ||
+        (e.key && e.key.startsWith('DIALYCARE_SURVEY_ACTIVATION_'))
       ) {
         loadPatientData();
       }
@@ -393,12 +396,16 @@ export default function PatientDetailPage() {
     window.addEventListener('dialycare_labs_updated', handleCustomUpdate);
     window.addEventListener('dialycare_sessions_updated', handleCustomUpdate);
     window.addEventListener('dialycare_medications_updated', handleCustomUpdate);
+    window.addEventListener('dialycare_questionnaires_updated', handleCustomUpdate);
+    window.addEventListener('dialycare_survey_updated', handleCustomUpdate);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('dialycare_notifications_updated', handleCustomUpdate);
       window.removeEventListener('dialycare_labs_updated', handleCustomUpdate);
       window.removeEventListener('dialycare_sessions_updated', handleCustomUpdate);
       window.removeEventListener('dialycare_medications_updated', handleCustomUpdate);
+      window.removeEventListener('dialycare_questionnaires_updated', handleCustomUpdate);
+      window.removeEventListener('dialycare_survey_updated', handleCustomUpdate);
     };
   }, [loadPatientData]);
 
@@ -730,6 +737,22 @@ export default function PatientDetailPage() {
             )}
 
             <Button
+              variant="outline"
+              size="md"
+              onClick={() => {
+                const el = document.getElementById('doctor-survey-manager-section');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+              data-testid="patient-detail-adherence-survey-header-btn"
+              title={isRtl ? 'استبيان الالتزام بالعلاج' : 'Adherence Survey'}
+              className="min-h-[48px] border-blue-300 bg-blue-50/70 text-blue-900 hover:bg-blue-100 font-bold"
+            >
+              📋 {isRtl ? 'استبيان الالتزام' : 'Adherence Survey'}
+            </Button>
+
+            <Button
               variant="primary"
               size="md"
               onClick={() => {
@@ -920,6 +943,13 @@ export default function PatientDetailPage() {
           setSelectedLabRecord(rec || null);
           setLabModalOpen(true);
         }}
+      />
+
+      {/* Dialysis Treatment Adherence Questionnaire Manager (R7) */}
+      <DoctorPatientSurveyManager
+        patientId={patient.id}
+        patientName={isRtl ? patient.fullNameAr || patient.fullName : patient.fullName}
+        doctorName={user?.displayName || 'Dr. Nephrologist'}
       />
 
       {/* Reminder Schedule Section */}

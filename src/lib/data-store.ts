@@ -13,7 +13,10 @@ import type {
   PatientMedication,
   DialysisSession,
   PatientLabRecord,
+  AdherenceSurveySubmission,
+  PatientSurveyStatus,
 } from './types';
+import { getCycleInfo } from './questionnaire-data';
 
 import defaultCoachingTips from '@/data/coaching-tips.json';
 import defaultReminderTemplates from '@/data/reminder-templates.json';
@@ -33,6 +36,7 @@ export const STORAGE_KEYS = {
   PATIENT_MEDICATIONS: 'DIALYCARE_PATIENT_MEDICATIONS',
   DIALYSIS_SESSIONS: 'DIALYCARE_DIALYSIS_SESSIONS',
   LAB_RESULTS: 'DIALYCARE_LAB_RESULTS',
+  ADHERENCE_SURVEYS: 'DIALYCARE_ADHERENCE_SURVEYS',
 } as const;
 
 // Safe LocalStorage helpers with deep copy to prevent in-memory mutation
@@ -514,6 +518,11 @@ export function initDataStore(): void {
   // Demo lab results
   if (!window.localStorage.getItem(STORAGE_KEYS.LAB_RESULTS)) {
     writeStorage(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  }
+
+  // Treatment Adherence Surveys
+  if (!window.localStorage.getItem(STORAGE_KEYS.ADHERENCE_SURVEYS)) {
+    writeStorage(STORAGE_KEYS.ADHERENCE_SURVEYS, []);
   }
 }
 
@@ -1127,3 +1136,196 @@ export function getPatientFluidLimits(dryWeightKg: number): PatientFluidLimits {
     critical,
   };
 }
+
+// ==========================================
+// R7: DIALYSIS TREATMENT ADHERENCE SURVEY STORE
+// ==========================================
+
+export function getDoctorSurveyActivationKey(patientId: string): string {
+  return `DIALYCARE_SURVEY_ACTIVATION_${patientId}`;
+}
+
+export function isDoctorSurveyActivated(patientId: string): boolean {
+  const key = getDoctorSurveyActivationKey(patientId);
+  if (typeof window === 'undefined') {
+    return memoryStorage.get(key) === 'true';
+  }
+  return window.localStorage.getItem(key) === 'true';
+}
+
+export function setDoctorSurveyActivation(patientId: string, activate: boolean): void {
+  const key = getDoctorSurveyActivationKey(patientId);
+  if (activate) {
+    if (typeof window === 'undefined') {
+      memoryStorage.set(key, 'true');
+    } else {
+      window.localStorage.setItem(key, 'true');
+    }
+  } else {
+    if (typeof window === 'undefined') {
+      memoryStorage.delete(key);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  }
+  dispatchStorageEvent('dialycare_questionnaires_updated');
+  dispatchStorageEvent('dialycare_survey_updated');
+  dispatchStorageEvent('storage');
+}
+
+export function getAdherenceSurveys(patientId?: string): AdherenceSurveySubmission[] {
+  initDataStore();
+  let surveys = readStorage<AdherenceSurveySubmission[]>(STORAGE_KEYS.ADHERENCE_SURVEYS, []);
+  if (patientId) {
+    surveys = surveys.filter((s) => s.patientId === patientId);
+  }
+  const sorted = [...surveys].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return timeB - timeA;
+  });
+  return cloneValue(sorted);
+}
+
+export type NewAdherenceSurveySubmission = Omit<AdherenceSurveySubmission, 'id' | 'submittedAt'> & {
+  id?: string;
+  submittedAt?: string;
+};
+
+export function saveAdherenceSurvey(
+  submission: NewAdherenceSurveySubmission
+): AdherenceSurveySubmission {
+  initDataStore();
+  const allSurveys = readStorage<AdherenceSurveySubmission[]>(STORAGE_KEYS.ADHERENCE_SURVEYS, []);
+
+  const newSubmission: AdherenceSurveySubmission = {
+    ...submission,
+    id: ('id' in submission && submission.id) ? submission.id : uuidv4(),
+    submittedAt: ('submittedAt' in submission && submission.submittedAt) ? submission.submittedAt : new Date().toISOString(),
+  };
+
+  allSurveys.unshift(newSubmission);
+  writeStorage(STORAGE_KEYS.ADHERENCE_SURVEYS, allSurveys);
+
+  // Clear manual doctor activation for this patient
+  setDoctorSurveyActivation(submission.patientId, false);
+
+  dispatchStorageEvent('dialycare_questionnaires_updated');
+  dispatchStorageEvent('dialycare_survey_updated');
+  dispatchStorageEvent('storage');
+
+  return cloneValue(newSubmission);
+}
+
+export function getPatientSurveyStatus(
+  patientId: string,
+  customNow?: Date | string
+): PatientSurveyStatus {
+  initDataStore();
+  const doctorActivated = isDoctorSurveyActivated(patientId);
+  const patientSubmissions = getAdherenceSurveys(patientId);
+  const totalSubmissions = patientSubmissions.length;
+  const lastSub = patientSubmissions[0];
+  const lastSubmissionDate = lastSub ? lastSub.submittedAt : undefined;
+
+  const nowDate = customNow ? new Date(customNow) : new Date();
+
+  // 1. Check if doctor manually activated survey
+  if (doctorActivated) {
+    const nextCycleNum = totalSubmissions + 1;
+    const cycleInfo = getCycleInfo(nextCycleNum);
+    return {
+      isDue: true,
+      reason: 'doctor_activated',
+      currentCycleNumber: nextCycleNum,
+      cycleLabelAr: cycleInfo.cycleLabelAr,
+      cycleLabelEn: cycleInfo.cycleLabelEn,
+      lastSubmissionDate,
+      nextDueDate: nowDate.toISOString().slice(0, 10),
+      daysUntilDue: 0,
+      isManuallyActivatedByDoctor: true,
+      totalSubmissions,
+    };
+  }
+
+  // 2. Check if initial baseline (0 submissions)
+  if (totalSubmissions === 0) {
+    const cycleInfo = getCycleInfo(1);
+    return {
+      isDue: true,
+      reason: 'initial',
+      currentCycleNumber: 1,
+      cycleLabelAr: cycleInfo.cycleLabelAr,
+      cycleLabelEn: cycleInfo.cycleLabelEn,
+      lastSubmissionDate: undefined,
+      nextDueDate: nowDate.toISOString().slice(0, 10),
+      daysUntilDue: 0,
+      isManuallyActivatedByDoctor: false,
+      totalSubmissions: 0,
+    };
+  }
+
+  // 3. Has existing submissions -> check 30-day interval
+  const lastDate = new Date(lastSub.submittedAt);
+  const nextDueMs = lastDate.getTime() + 30 * 24 * 60 * 60 * 1000;
+  const nextDueDateObj = new Date(nextDueMs);
+  const nextDueDate = nextDueDateObj.toISOString();
+
+  const diffMs = nextDueMs - nowDate.getTime();
+  const daysUntilDueRaw = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+
+  if (daysUntilDueRaw <= 0) {
+    // >= 30 days elapsed -> monthly cycle is due
+    const nextCycleNum = totalSubmissions + 1;
+    const cycleInfo = getCycleInfo(nextCycleNum);
+    return {
+      isDue: true,
+      reason: 'monthly_due',
+      currentCycleNumber: nextCycleNum,
+      cycleLabelAr: cycleInfo.cycleLabelAr,
+      cycleLabelEn: cycleInfo.cycleLabelEn,
+      lastSubmissionDate,
+      nextDueDate,
+      daysUntilDue: 0,
+      isManuallyActivatedByDoctor: false,
+      totalSubmissions,
+    };
+  } else {
+    // Within 30 days -> survey completed
+    const cycleInfo = getCycleInfo(lastSub.cycleNumber || totalSubmissions);
+    return {
+      isDue: false,
+      reason: 'completed',
+      currentCycleNumber: lastSub.cycleNumber || totalSubmissions,
+      cycleLabelAr: lastSub.cycleLabelAr || cycleInfo.cycleLabelAr,
+      cycleLabelEn: lastSub.cycleLabelEn || cycleInfo.cycleLabelEn,
+      lastSubmissionDate,
+      nextDueDate,
+      daysUntilDue: daysUntilDueRaw,
+      isManuallyActivatedByDoctor: false,
+      totalSubmissions,
+    };
+  }
+}
+
+export function sendSurveyReminderNotification(
+  patientId: string,
+  doctorName?: string
+): Notification {
+  initDataStore();
+  const notif: Notification = {
+    id: uuidv4(),
+    senderId: 'doctor',
+    type: 'individual',
+    recipientIds: [patientId],
+    titleAr: 'تذكير: استبيان الالتزام بالعلاج لمرضى الغسيل الكلوي 📋',
+    titleEn: 'Reminder: Dialysis Treatment Adherence Questionnaire 📋',
+    messageAr: `يرجى التكرم بملء استبيان الالتزام بالعلاج المتاح الآن في صفحة ملفك الشخصي لدعم خطتك العلاجية.${doctorName ? ` (مرسل من: ${doctorName})` : ''}`,
+    messageEn: `Please complete your treatment adherence questionnaire available in your patient profile to support your dialysis care plan.${doctorName ? ` (Sent by: ${doctorName})` : ''}`,
+    sentAt: new Date().toISOString(),
+    status: 'sent',
+  };
+
+  return addNotification(notif);
+}
+

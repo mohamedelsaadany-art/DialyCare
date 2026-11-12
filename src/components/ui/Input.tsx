@@ -22,6 +22,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       id,
       disabled,
       required,
+      type = 'text',
       ...props
     },
     ref
@@ -53,6 +54,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             id={inputId}
+            type={type}
             disabled={disabled}
             required={required}
             aria-invalid={Boolean(error)}

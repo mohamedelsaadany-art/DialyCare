@@ -25,6 +25,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { PatientAvatarSvg } from '@/components/avatar/PatientAvatarPresets';
 import { AvatarStyleSelectorModal } from '@/components/avatar/AvatarStyleSelectorModal';
+import { PatientAdherenceSurveySection } from '@/components/patient/PatientAdherenceSurveySection';
 
 export default function PatientProfilePage() {
   const { user, logout } = useAuth();
@@ -279,6 +280,9 @@ export default function PatientProfilePage() {
           </div>
         </div>
       </Card>
+
+      {/* Dialysis Treatment Adherence Questionnaire Section (R7) */}
+      <PatientAdherenceSurveySection patientId={activePatientId} />
 
       {/* Adherence Summary Card: This week's adherence rates (TTT %, Fluid %, Diet %) */}
       <Card className="p-5 bg-white rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
