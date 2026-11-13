@@ -18,8 +18,8 @@ export async function POST(request: Request) {
     const uid = uuidv4();
 
     if (type === 'doctor' || type === 'nurse' || type === 'staff') {
-      const cleanUsername = String(data.username || '').trim();
       const cleanPhone = String(data.phone || '').trim();
+      const cleanUsername = String(data.username || cleanPhone).replace(/[\s\-\(\)\+]/g, '').trim();
       const role: UserRole = (data.role as UserRole) || (type as UserRole) || 'doctor';
 
       const defaultSpecialty =
