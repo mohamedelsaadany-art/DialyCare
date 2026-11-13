@@ -93,7 +93,7 @@ Key Features:
 ## 4. Patient & Support FAQ Runbook
 
 ### Q1: How does registration and account approval work?
-**Answer:** Doctors sign up with their specialty, dialysis unit, and medical syndicate ID photo. Patients sign up with their contact info and nephrology profile. All self-registrations undergo clinical audit by the Super Administrator before activation. Users can tap the direct WhatsApp link (`+201552885823`) to expedite approval. Alternatively, doctors can register patients directly in the clinic with instant auto-generated credentials!
+**Answer:** Doctors sign up with their specialty, dialysis unit, and medical syndicate ID photo. Patients sign up with their contact info and nephrology profile. All self-registrations undergo clinical audit by the Super Administrator before activation. Users can tap the direct WhatsApp link (`+201080641670`) to expedite approval with the Senior Resident. Alternatively, doctors can register patients directly in the clinic with instant auto-generated credentials!
 
 ### Q2: How do doctor-generated patient passwords work?
 **Answer:** When a doctor registers a patient in-clinic, the system auto-generates a password using the patient's phone number followed by 3 random letters without overlap (e.g. `01012345678Xkz`), ensuring no confusing characters (`0, O, 1, l, I`) are used so elderly patients can read it effortlessly from their printed clinical access card.

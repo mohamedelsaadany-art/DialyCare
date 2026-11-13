@@ -106,8 +106,9 @@ export async function runAuthApprovalsTests(): Promise<void> {
     // TEST 2: Super Admin Password Rotation
     // ------------------------------------------------------------------------
     console.log('  Testing Super Admin password rotation & configuration...');
-    assert.strictEqual(ADMIN_CONFIG.primaryPhone, '+201552885823', 'Primary Admin contact is user test phone');
+    assert.strictEqual(ADMIN_CONFIG.primaryPhone, '+201080641670', 'Primary Admin contact is senior resident phone');
     assert.strictEqual(ADMIN_CONFIG.seniorResidentPhone, '+201080641670', 'Senior Resident contact is configured');
+    assert.strictEqual(ADMIN_CONFIG.technicalAdminPhone, '+201552885823', 'Technical Admin contact is configured');
 
     const initialPass = getAdminPassword();
     assert.strictEqual(initialPass, 'admin123', 'Default admin password is admin123');

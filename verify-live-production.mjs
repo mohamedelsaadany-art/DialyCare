@@ -58,9 +58,9 @@ async function runLiveVerification() {
     console.log('5. Testing live Approvals Center at /ar/admin/approvals ...');
     await page.goto('https://dialycare.vercel.app/ar/admin/approvals', { waitUntil: 'networkidle' });
     await page.waitForSelector('text=مركز مراجعة واعتماد الحسابات');
-    await page.waitForSelector('text=هاتف المدير المسؤول:');
-    await page.waitForSelector('text=+201552885823');
-    console.log('   ✓ Verified: Live Approvals Center loaded with Admin test phone +201552885823.');
+    await page.waitForSelector('text=هاتف المدير المسؤول');
+    await page.waitForSelector('text=+201080641670');
+    console.log('   ✓ Verified: Live Approvals Center loaded with Senior Resident phone +201080641670.');
 
     // 6. Test Doctor In-Clinic Patient Credentials Generator
     console.log('6. Testing live /ar/admin/patients/new auto-credentials...');

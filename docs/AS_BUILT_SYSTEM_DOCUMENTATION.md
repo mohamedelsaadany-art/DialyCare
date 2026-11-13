@@ -214,7 +214,7 @@ export interface GeneratedPatientCredentials {
 
 ## 5. Security, Isolation & Multi-Tenancy Rules
 
-1. **Pending Account Security Guard:** Any account with `status: 'pending'` or `status: 'rejected'` is prohibited from establishing a persistent session. The login interface immediately intercepts the attempt and surfaces the appropriate clinical review or rejection card with a direct WhatsApp contact link targeting `ADMIN_CONFIG.primaryPhone` (`+201552885823`).
+1. **Pending Account Security Guard:** Any account with `status: 'pending'` or `status: 'rejected'` is prohibited from establishing a persistent session. The login interface immediately intercepts the attempt and surfaces the appropriate clinical review or rejection card with a direct WhatsApp contact link targeting `ADMIN_CONFIG.primaryPhone` (`+201080641670` - Senior Resident).
 2. **Super Admin Restricted Access:** Only `user.role === 'admin'` can access `/admin/approvals` and rotate master credentials in `/admin/settings`.
 3. **Staff Privileges for Clinicians (`isStaff = isAdmin || isDoctor`):** Doctors (`role === 'doctor'`) have access to `/admin/patients`, clinical recording, and prescribing, but cannot approve other doctors or modify system settings.
 4. **Safe Credential Generation Algorithm ($P_{phone} + \Sigma_{safe}^3$):** In-clinic patient account creation automatically generates passwords using the patient's phone concatenated with 3 random, distinct, non-overlapping characters drawn strictly from a sanitized alphabet excluding confusing glyphs (`0, O, 1, l, I`):

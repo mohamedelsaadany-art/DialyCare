@@ -28,8 +28,9 @@ import defaultDietChecklist from '@/data/diet-checklist.json';
 
 // Administrator contacts
 export const ADMIN_CONFIG = {
-  primaryPhone: '+201552885823', // User's primary admin contact during test
-  seniorResidentPhone: '+201080641670', // Senior Resident contact for handover
+  primaryPhone: '+201080641670', // Senior Resident contact (Primary Administrator)
+  seniorResidentPhone: '+201080641670', // Senior Resident contact
+  technicalAdminPhone: '+201552885823', // Technical administrator
 };
 
 /**

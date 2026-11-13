@@ -17,14 +17,14 @@
 - **Doctor Self-Registration & Medical ID Verification:**
   - Independent registration flow for nephrologists and clinical staff: Full Name, Phone, Email, Specialty, Hospital/Center, Password.
   - Syndicate ID card photo upload with preview, size inspection, and local base64 storage.
-  - Post-registration direct WhatsApp notification targeting the Medical Administrator (`+201552885823`) to expedite account activation.
+  - Post-registration direct WhatsApp notification targeting the Senior Resident / Medical Administrator (`+201080641670`) to expedite account activation.
 - **Patient Self-Registration & 3-Step Nephrology Intake:**
   - Step 1 (Personal Info): Full name, mobile number, age, gender.
   - Step 2 (Nephrology Profile): Dialysis schedule (strict Saturday/Monday/Wednesday vs Sunday/Tuesday/Thursday), target dry weight (kg), vascular access type (AVF, AVG, Permcath, Mahurkar), and dialysis center.
   - Step 3 (Security): Password setup with automatic phone-number-as-username assignment.
 - **Clinical Pending Review Guard:**
   - Attempting to sign in with an unapproved account displays a branded clinical review status card informing the user their credentials are under review by medical administration.
-  - Direct 1-tap WhatsApp contact button to the Medical Administrator (`+201552885823`) with pre-composed bilingual inquiry text.
+  - Direct 1-tap WhatsApp contact button to the Senior Resident / Medical Administrator (`+201080641670`) with pre-composed bilingual inquiry text.
   - Rejection feedback card displaying supervisor's clinical rejection notes if registration is declined.
 - **Super Admin Approvals Management Center (`/admin/approvals`):**
   - Dedicated review dashboard restricted to Super Administrator (`admin` / `admin123`).

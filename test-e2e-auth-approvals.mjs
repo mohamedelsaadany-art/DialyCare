@@ -61,10 +61,10 @@ async function runE2E() {
     // Verify success card appears
     await page.waitForSelector('text=تم إرسال طلب الانضمام بنجاح');
     const waLink = await page.getAttribute('a:has-text("تواصل مع الإدارة الطبية عبر واتساب")', 'href');
-    if (!waLink || !waLink.includes('wa.me/201552885823')) {
-      throw new Error(`Expected WhatsApp link to target +201552885823, got: ${waLink}`);
+    if (!waLink || !waLink.includes('wa.me/201080641670')) {
+      throw new Error(`Expected WhatsApp link to target +201080641670, got: ${waLink}`);
     }
-    console.log('   ✓ Verified: Doctor registered; WhatsApp alert link targets +201552885823.');
+    console.log('   ✓ Verified: Doctor registered; WhatsApp alert link targets +201080641670.');
 
     // ------------------------------------------------------------------------
     // Journey 3: Doctor Attempts to Sign In before Approval -> Pending Card

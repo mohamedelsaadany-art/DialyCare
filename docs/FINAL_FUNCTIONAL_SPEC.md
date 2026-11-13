@@ -43,7 +43,7 @@ Patients with End-Stage Renal Disease (ESRD) face high mortality risks between h
 | **F-08** | **Treatment Adherence Survey** | 20 clinical questions, 6 ordered options, monthly cadence (M0, M1, M2, M3+). | Patient (Submit), Doctor (Review/Trigger) | `/patient/profile`, `/admin/patients/[id]` |
 | **F-09** | **PWA Offline Resilience** | Offline service worker caching, home screen install prompt, >= 48px touch targets. | All | Mobile / Desktop Browser |
 | **F-10** | **Production Sign Up / In** | Clean tabbed interface; zero mock demo buttons; phone, email, and username identifier matching. | Public / All | `/[locale]/login` |
-| **F-11** | **Doctor Self-Registration** | Doctor intake with Medical Syndicate ID photo upload and WhatsApp alert to Admin (+201552885823). | Doctor (Applicant) | `/[locale]/login?tab=signup` |
+| **F-11** | **Doctor Self-Registration** | Doctor intake with Medical Syndicate ID photo upload and WhatsApp alert to Senior Resident (+201080641670). | Doctor (Applicant) | `/[locale]/login?tab=signup` |
 | **F-12** | **Patient 3-Step Intake** | Demographics $\to$ Nephrology Profile (Schedule SMW/STT, dry weight, access type, center) $\to$ Password. | Patient (Applicant) | `/[locale]/login?tab=signup` |
 | **F-13** | **Clinical Review Guard** | Pending/rejected accounts intercepted; surfaces status card with 1-click WhatsApp inquiry. | Doctor, Patient | `/[locale]/login` |
 | **F-14** | **Approvals Center Queue** | Super Admin (`admin`/`admin123`) review center; ID photo zoom modal; 1-click Approve/Reject with reason. | Super Admin | `/[locale]/admin/approvals` |
@@ -63,7 +63,7 @@ Patients with End-Stage Renal Disease (ESRD) face high mortality risks between h
         └───> Step 3: Password setup (Username auto-assigned to Mobile Number)
         │
         ▼
-[Submission Complete] ──> Status: 'pending' ──> Surfaces WhatsApp Alert to Admin (+201552885823)
+[Submission Complete] ──> Status: 'pending' ──> Surfaces WhatsApp Alert to Senior Resident (+201080641670)
         │
         ▼
 [Login Attempt Before Approval] ──> Clinical Review Card with 1-click WhatsApp inquiry
@@ -82,7 +82,7 @@ Patients with End-Stage Renal Disease (ESRD) face high mortality risks between h
         ▼
 [Submission Complete] ──> Status: 'pending'
         │
-        ├───> Surfaces Direct 1-tap WhatsApp button to Medical Admin (+201552885823)
+        ├───> Surfaces Direct 1-tap WhatsApp button to Senior Resident (+201080641670)
         ▼
 [Super Admin in /admin/approvals]
         │
