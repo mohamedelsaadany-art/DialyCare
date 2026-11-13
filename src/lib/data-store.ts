@@ -1544,17 +1544,22 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
     const remoteAccounts: StoredAccount[] = data.accounts;
     const localAccounts = getAuthAccounts();
 
-    const mergedMap = new Map<string, StoredAccount>();
-    for (const loc of localAccounts) {
-      mergedMap.set(loc.user.uid, loc);
-    }
+    const isMatch = (a: StoredAccount, b: StoredAccount) => {
+      if (a.user.uid && b.user.uid && a.user.uid === b.user.uid) return true;
+      if (a.username && b.username && a.username.trim().toLowerCase() === b.username.trim().toLowerCase()) return true;
+      const cleanPhoneA = (a.phone || a.user.phone || '').replace(/[\s\-\(\)\+]/g, '');
+      const cleanPhoneB = (b.phone || b.user.phone || '').replace(/[\s\-\(\)\+]/g, '');
+      if (cleanPhoneA && cleanPhoneB && cleanPhoneA === cleanPhoneB) return true;
+      return false;
+    };
 
+    const result = [...localAccounts];
     let hasChanges = false;
 
     for (const rem of remoteAccounts) {
-      const loc = mergedMap.get(rem.user.uid);
-      if (!loc) {
-        mergedMap.set(rem.user.uid, rem);
+      const idx = result.findIndex((loc) => isMatch(loc, rem));
+      if (idx === -1) {
+        result.push(rem);
         hasChanges = true;
         // If it's an active approved patient, also sync to patient store
         if (rem.user.role === 'patient' && rem.user.status === 'active') {
@@ -1584,21 +1589,44 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
           }
         }
       } else {
+        const loc = result[idx];
         const remTime = new Date(rem.user.reviewedAt || rem.user.registeredAt || 0).getTime();
         const locTime = new Date(loc.user.reviewedAt || loc.user.registeredAt || 0).getTime();
-        if (remTime > locTime || rem.user.status !== loc.user.status) {
-          mergedMap.set(rem.user.uid, rem);
+        // If status differs (especially pending -> active), or cloud has review or newer timestamp:
+        if (
+          rem.user.status !== loc.user.status ||
+          remTime > locTime ||
+          (rem.user.status === 'active' && loc.user.status === 'pending')
+        ) {
+          result[idx] = rem;
           hasChanges = true;
         }
       }
     }
 
-    const merged = Array.from(mergedMap.values());
-    if (hasChanges) {
-      initDataStore();
-      writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, merged);
+    // Deduplicate array so multiple accounts for the same phone/username never coexist:
+    const deduplicated: StoredAccount[] = [];
+    for (const item of result) {
+      const existingIdx = deduplicated.findIndex((d) => isMatch(d, item));
+      if (existingIdx === -1) {
+        deduplicated.push(item);
+      } else {
+        // If current item is active and existing is not, replace it with the active one!
+        if (item.user.status === 'active' && deduplicated[existingIdx].user.status !== 'active') {
+          deduplicated[existingIdx] = item;
+          hasChanges = true;
+        }
+      }
     }
-    return merged;
+
+    if (hasChanges || deduplicated.length !== localAccounts.length) {
+      initDataStore();
+      writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, deduplicated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('dialycare_users_updated'));
+      }
+    }
+    return deduplicated;
   } catch (err) {
     console.warn('[DataStore] Failed to sync accounts from cloud:', err);
     return getAuthAccounts();
@@ -1756,7 +1784,7 @@ export function registerStaffAccount(data: {
     fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: role, role, data: { ...data, role } }),
+      body: JSON.stringify({ type: role, role, data: { ...data, uid, role } }),
     }).catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
   }
 
@@ -1833,7 +1861,7 @@ export function registerPatientAccount(data: {
     fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'patient', data }),
+      body: JSON.stringify({ type: 'patient', data: { ...data, uid } }),
     }).catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
   }
 

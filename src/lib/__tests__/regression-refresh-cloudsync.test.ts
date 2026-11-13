@@ -610,6 +610,89 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
 
     console.log('  ✓ Concurrency lock guard and clean logout eviction verified!');
 
+    // ------------------------------------------------------------------------
+    // SECTION 4: Cross-Device Doctor Approval Reconciliation & Deduplication
+    // ------------------------------------------------------------------------
+    console.log('\n--- 4. Testing Cross-Device Doctor Approval Reconciliation & Deduplication ---');
+
+    const clientDoctorUid = 'client-doc-' + Date.now();
+    const doctorPhone = '01552885823';
+    const localPendingDoctor: StoredAccount = {
+      username: doctorPhone,
+      phone: doctorPhone,
+      password: 'password123',
+      user: {
+        uid: clientDoctorUid,
+        role: 'doctor',
+        status: 'pending',
+        username: doctorPhone,
+        phone: doctorPhone,
+        displayName: 'Dr. Test Mohamed',
+        language: 'ar',
+        createdAt: new Date().toISOString(),
+      },
+    };
+    saveAuthAccounts([localPendingDoctor]);
+    const initialDoc = getAuthAccounts().find((a) => a.phone === doctorPhone);
+    assert.strictEqual(initialDoc?.user.status, 'pending', 'Local account initial status is pending');
+    count();
+
+    const serverDoctorUid = 'server-doc-' + Date.now();
+    const cloudApprovedDoctor: StoredAccount = {
+      username: doctorPhone,
+      phone: doctorPhone,
+      password: 'password123',
+      user: {
+        uid: serverDoctorUid,
+        role: 'doctor',
+        status: 'active',
+        username: doctorPhone,
+        phone: doctorPhone,
+        displayName: 'Dr. Test Mohamed',
+        language: 'ar',
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: 'Super Admin',
+        createdAt: new Date().toISOString(),
+      },
+    };
+
+    // Override fetch to return the approved cloud record
+    const reconcileFetchOriginal = globalThis.fetch;
+    (globalThis as unknown as { fetch: unknown }).fetch = async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/api/auth/accounts')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            accounts: [cloudApprovedDoctor],
+            users: [cloudApprovedDoctor.user],
+          }),
+        } as unknown as Response;
+      }
+      return reconcileFetchOriginal(url);
+    };
+
+    try {
+      const synced = await syncCloudAccounts();
+      // Should reconcile local pending to active, and deduplicate by phone
+      const docMatches = synced.filter((a) => a.phone === doctorPhone || a.username === doctorPhone);
+      assert.strictEqual(docMatches.length, 1, 'Duplicate records purged: exactly 1 account per phone');
+      count();
+      assert.strictEqual(docMatches[0].user.status, 'active', 'Doctor account reconciled to active status');
+      count();
+
+      const refreshedLocal = getAuthAccounts().filter((a) => a.phone === doctorPhone || a.username === doctorPhone);
+      assert.strictEqual(refreshedLocal.length, 1, 'Local storage deduplicated by phone');
+      count();
+      assert.strictEqual(refreshedLocal[0].user.status, 'active', 'Local storage updated to active');
+      count();
+    } finally {
+      globalThis.fetch = reconcileFetchOriginal;
+    }
+
+    console.log('  ✓ Cross-device doctor approval reconciliation & deduplication verified!');
+
     console.log('\n================================================================');
     console.log(`REGRESSION SUITE PASSED SUCCESSFULLY: ${assertions} assertions passed`);
     console.log('================================================================\n');

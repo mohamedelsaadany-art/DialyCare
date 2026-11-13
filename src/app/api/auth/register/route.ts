@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     const now = new Date().toISOString();
-    const uid = uuidv4();
+    const uid = data.uid || uuidv4();
 
     if (type === 'doctor' || type === 'nurse' || type === 'staff') {
       const cleanPhone = String(data.phone || '').trim();

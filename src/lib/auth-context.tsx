@@ -226,8 +226,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 2. Check Stored Accounts (by username, phone, or email)
       const accounts = getAuthAccounts();
-      const findMatchingAccount = (accList: typeof accounts) =>
-        accList.find((acc) => {
+      const findMatchingAccount = (accList: typeof accounts) => {
+        const matches = accList.filter((acc) => {
           const u = acc.user;
           const matchesUsername = acc.username.toLowerCase() === cleanId.toLowerCase();
           const matchesPhone = Boolean(
@@ -244,13 +244,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return (matchesUsername || matchesPhone || matchesEmail) && passwordMatches;
         });
 
+        if (matches.length === 0) return null;
+        // Prioritize active accounts over pending or rejected
+        const activeMatch = matches.find((m) => (m.user.status || 'active') === 'active');
+        return activeMatch || matches[0];
+      };
+
       let match = findMatchingAccount(accounts);
 
-      // If not found in local accounts cache, attempt cloud sync (for cross-device credentials)
-      if (!match && typeof window !== 'undefined') {
+      // If not found in local accounts cache, OR if found with status 'pending'
+      // (which occurs when registering on this device before receiving cross-device admin review),
+      // always fetch the freshest cloud account records before deciding the final status!
+      if ((!match || match.user.status === 'pending') && typeof window !== 'undefined') {
         try {
           const syncedAccounts = await syncCloudAccounts();
-          match = findMatchingAccount(syncedAccounts);
+          const cloudMatch = findMatchingAccount(syncedAccounts);
+          if (cloudMatch) {
+            match = cloudMatch;
+          }
         } catch {
           // continue with fallback
         }

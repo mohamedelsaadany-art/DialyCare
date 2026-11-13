@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { ADMIN_CONFIG } from '@/lib/data-store';
+import { ADMIN_CONFIG, syncCloudAccounts } from '@/lib/data-store';
 import type { User, DialysisAccessType } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -27,9 +27,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [signInError, setSignInError] = useState('');
+  const [statusNotice, setStatusNotice] = useState('');
   const [pendingAccount, setPendingAccount] = useState<User | null>(null);
   const [rejectedAccount, setRejectedAccount] = useState<{ user: User; reason?: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingApproval, setIsCheckingApproval] = useState(false);
+  const [approvalFeedback, setApprovalFeedback] = useState('');
 
   // Sign Up Role: 'doctor' (staff) | 'patient'
   const [signupRole, setSignupRole] = useState<'doctor' | 'patient'>('doctor');
@@ -64,10 +67,15 @@ export default function LoginPage() {
   // General error for registration
   const [regError, setRegError] = useState('');
 
+  // Proactively fetch freshest cloud accounts on mount to sync cross-device approvals
+  useEffect(() => {
+    void syncCloudAccounts();
+  }, []);
+
   // If already authenticated and active, redirect to appropriate portal
   useEffect(() => {
     if (user && !authLoading) {
-      if (user.role === 'admin' || user.role === 'doctor') {
+      if (user.role === 'admin' || user.role === 'doctor' || user.role === 'nurse' || user.role === 'staff') {
         router.push(`/${locale}/admin`);
       } else {
         router.push(`/${locale}/patient`);
@@ -75,13 +83,85 @@ export default function LoginPage() {
     }
   }, [user, authLoading, locale, router]);
 
+  // Auto-polling for pending account status: automatically clears pending notice when approved
+  useEffect(() => {
+    if (!pendingAccount) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const synced = await syncCloudAccounts();
+        const cleanPendingPhone = (pendingAccount.phone || '').replace(/[\s\-\(\)\+]/g, '');
+        const updated = synced.find(
+          (a) =>
+            a.user.uid === pendingAccount.uid ||
+            (cleanPendingPhone && a.phone && a.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPendingPhone) ||
+            a.username.toLowerCase() === pendingAccount.username.toLowerCase()
+        );
+
+        if (updated && updated.user.status === 'active') {
+          setPendingAccount(null);
+          setStatusNotice(
+            isRtl
+              ? `تهانينا ${updated.user.displayName}! تم اعتماد حسابك بنجاح. يمكنك الآن تسجيل الدخول مباشرة.`
+              : `Congratulations ${updated.user.displayName}! Your account has been approved. You can now sign in.`
+          );
+          setIdentifier(updated.username || updated.phone || '');
+        }
+      } catch {
+        // silent fallback
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [pendingAccount, isRtl]);
+
   // Clean raw phone for WhatsApp link
   const cleanAdminPhone = ADMIN_CONFIG.primaryPhone.replace(/\+/g, '').trim();
+
+  // Handle manual check of approval status
+  const handleCheckApprovalStatus = async () => {
+    if (!pendingAccount) return;
+    setIsCheckingApproval(true);
+    setApprovalFeedback('');
+    try {
+      const synced = await syncCloudAccounts();
+      const cleanPendingPhone = (pendingAccount.phone || '').replace(/[\s\-\(\)\+]/g, '');
+      const updated = synced.find(
+        (a) =>
+          a.user.uid === pendingAccount.uid ||
+          (cleanPendingPhone && a.phone && a.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPendingPhone) ||
+          a.username.toLowerCase() === pendingAccount.username.toLowerCase()
+      );
+
+      if (updated && updated.user.status === 'active') {
+        setPendingAccount(null);
+        setStatusNotice(
+          isRtl
+            ? `تهانينا ${updated.user.displayName}! تم اعتماد حسابك بنجاح من قبل الإدارة الطبية. يرجى تسجيل الدخول.`
+            : `Congratulations ${updated.user.displayName}! Your account has been approved. Please sign in.`
+        );
+        setIdentifier(updated.username || updated.phone || '');
+      } else {
+        setApprovalFeedback(
+          isRtl
+            ? 'تم التحقق من الخادم: ما زال الحساب قيد المراجعة والاعتماد لدى الإدارة الطبية.'
+            : 'Checked server: Account is still awaiting clinical review by medical admin.'
+        );
+      }
+    } catch {
+      setApprovalFeedback(
+        isRtl ? 'تعذر الاتصال بالخادم حالياً. يرجى المحاولة بعد قليل.' : 'Could not reach server. Please try again.'
+      );
+    } finally {
+      setIsCheckingApproval(false);
+    }
+  };
 
   // Handle Sign In submission
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setSignInError('');
+    setStatusNotice('');
     setPendingAccount(null);
     setRejectedAccount(null);
 
@@ -94,7 +174,7 @@ export default function LoginPage() {
     try {
       const res = await login(identifier, password, rememberMe);
       if (res.success && res.user) {
-        if (res.user.role === 'admin' || res.user.role === 'doctor') {
+        if (res.user.role === 'admin' || res.user.role === 'doctor' || res.user.role === 'nurse' || res.user.role === 'staff') {
           router.push(`/${locale}/admin`);
         } else {
           router.push(`/${locale}/patient`);
@@ -410,6 +490,22 @@ export default function LoginPage() {
                       )}
                     </div>
 
+                    {approvalFeedback && (
+                      <div className="p-3 bg-white/95 rounded-xl border border-amber-300 text-xs font-medium text-amber-900 animate-in fade-in">
+                        {approvalFeedback}
+                      </div>
+                    )}
+
+                    <Button
+                      type="button"
+                      variant="primary"
+                      className="w-full bg-[#1e6bb8] hover:bg-[#175492] text-white font-bold py-3 rounded-xl shadow-sm text-sm"
+                      onClick={handleCheckApprovalStatus}
+                      isLoading={isCheckingApproval}
+                    >
+                      {isRtl ? '🔄 التحقق من حالة الاعتماد الآن' : '🔄 Check Approval Status Now'}
+                    </Button>
+
                     <a
                       href={getPendingInquiryWhatsAppUrl(pendingAccount)}
                       target="_blank"
@@ -486,6 +582,18 @@ export default function LoginPage() {
                         {tAuth('loginSubtitle')}
                       </p>
                     </div>
+
+                    {statusNotice && (
+                      <div
+                        className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs sm:text-sm flex items-start gap-2.5 animate-in fade-in"
+                        role="status"
+                      >
+                        <svg className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="font-semibold">{statusNotice}</span>
+                      </div>
+                    )}
 
                     {signInError && (
                       <div
