@@ -40,31 +40,7 @@ export function showLocalNotification(
     ...options,
   };
 
-  // 1. In mobile browsers (e.g. Android Chrome, iOS Safari PWA), `new Notification()` throws an Illegal constructor TypeError.
-  // Using ServiceWorkerRegistration.showNotification() is the official standard for mobile and service-worker environments.
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready
-      .then((registration) => {
-        if (registration && typeof registration.showNotification === 'function') {
-          registration.showNotification(title, notificationOptions);
-        }
-      })
-      .catch((swError) => {
-        console.warn('Service worker notification failed, attempting desktop fallback:', swError);
-        try {
-          const notification = new window.Notification(title, notificationOptions);
-          notification.onclick = () => {
-            window.focus();
-            notification.close();
-          };
-        } catch {
-          // ignore
-        }
-      });
-    return null;
-  }
-
-  // 2. Desktop fallback if serviceWorker is absent
+  // 1. Attempt standard desktop Notification constructor
   try {
     const notification = new window.Notification(title, notificationOptions);
     notification.onclick = () => {
@@ -73,7 +49,24 @@ export function showLocalNotification(
     };
     return notification;
   } catch (error) {
-    console.error('Failed to show local notification:', error);
+    // Mobile browsers (e.g. Android Chrome) disallow `new Notification()` and require ServiceWorkerRegistration.showNotification()
+    if (
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      navigator.serviceWorker
+    ) {
+      navigator.serviceWorker.ready
+        .then((registration) => {
+          if (registration && typeof registration.showNotification === 'function') {
+            registration.showNotification(title, notificationOptions);
+          }
+        })
+        .catch((swError) => {
+          console.error('Service worker notification failed:', swError);
+        });
+    } else {
+      console.error('Failed to show local notification:', error);
+    }
     return null;
   }
 }
