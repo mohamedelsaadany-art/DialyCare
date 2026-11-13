@@ -54,43 +54,44 @@ Patients with End-Stage Renal Disease (ESRD) face high mortality risks between h
 
 ## 3. End-to-End User Journeys
 
-### 3.1 Patient Self-Registration & Review Journey
+### 3.1 Patient Self-Registration & Immediate Activation Journey
 ```
-[Patient Visits /login] ──> Selects [إنشاء حساب جديد] ──> [مريض غسيل كلوي]
+[Patient Visits /login] ──> Selects [إنشاء حساب جديد] ──> [مريض غسيل كلوي (تفعيل فوري)]
         │
         ├───> Step 1: Personal Demographics (Name, Mobile Phone, Age, Gender)
-        ├───> Step 2: Nephrology Profile (Schedule SMW vs STT, Dry Weight kg, Access Type, Center)
+        ├───> Step 2: Nephrology Profile (Schedule SMW vs STT, Dry Weight kg, Access Type, Viral Screening HCV/HBV/HIV, Emergency Contact, Center)
         └───> Step 3: Password setup (Username auto-assigned to Mobile Number)
         │
         ▼
-[Submission Complete] ──> Status: 'pending' ──> Surfaces WhatsApp Alert to Senior Resident (+201080641670)
+[Submission Complete] ──> Status: 'active' (Immediate Activation, Auto-Enrolled into DIALYCARE_PATIENTS)
         │
         ▼
-[Login Attempt Before Approval] ──> Clinical Review Card with 1-click WhatsApp inquiry
+[Instant Sign In Button] ──> Pre-fills phone number and transitions to sign-in tab
         │
-        ▼ (Super Admin Approves in /admin/approvals)
-        │
-[Login Attempt After Approval] ──> Successfully navigates to Patient Portal (/patient)
+        ▼
+[Patient Logs In] ──> Immediate access to Patient Portal (/patient) for fluid tracker, diet checklist & dialysis countdown
 ```
 
-### 3.2 Doctor Self-Registration & Approval Journey
+### 3.2 Clinical Staff (Doctors, Nurses & Admins) Self-Registration & Verification Journey
 ```
-[Doctor Visits /login] ──> Selects [إنشاء حساب جديد] ──> [طبيب / كادر طبي]
+[Staff Visits /login] ──> Selects [إنشاء حساب جديد] ──> [كادر طبي / تمريض / إدارة]
         │
+        ├───> Selects Role: Doctor (طبيب كلى), Nurse (تمريض كلى وغسيل كلوي), or Admin (إدارة وحدة الغسيل)
         ├───> Enters Name, Mobile Phone, Email, Specialty, Hospital/Center, Password
-        ├───> Uploads Medical Syndicate ID Card photo (Base64 file reader with preview)
+        ├───> Uploads Medical Syndicate ID / Professional License photo (Base64 file reader with preview)
         ▼
 [Submission Complete] ──> Status: 'pending'
         │
-        ├───> Surfaces Direct 1-tap WhatsApp button to Senior Resident (+201080641670)
+        ├───> Surfaces Direct 1-tap WhatsApp alert to Senior Resident on Call (+201080641670)
         ▼
 [Super Admin in /admin/approvals]
         │
+        ├───> Filters by Staff Category: All Staff, Doctors, Nurses, or Unit Admins
         ├───> Opens High-Resolution Syndicate ID Modal
-        ├───> Audits Doctor Specialty & Hospital Affiliation
-        └───> Clicks "✓ اعتماد وتفعيل الطبيب"
+        ├───> Audits Credentials, Specialty & Hospital Affiliation
+        └───> Clicks "✓ اعتماد وتفعيل الكادر"
         ▼
-[Doctor Logs In] ──> Full access to Clinical Portal (/admin) for patient records & prescribing
+[Staff Logs In] ──> Gated access to Clinical Portal (/admin) for patient records, dialysis telemetry & prescribing
 ```
 
 ### 3.3 Doctor In-Clinic Patient Provisioning Journey
