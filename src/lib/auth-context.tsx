@@ -6,6 +6,7 @@ import {
   addPatient,
   getAuthAccounts,
   saveAuthAccounts,
+  syncCloudAccounts,
   getAdminPassword,
   registerDoctorAccount,
   registerPatientAccount,
@@ -113,26 +114,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.sessionStorage.getItem(CURRENT_USER_KEY);
       if (storedUser) {
         const parsed = JSON.parse(storedUser) as User;
-        // Verify active status from accounts
+
+        // 1. Super Admin is PERMANENTLY active and immune to eviction on refresh
+        if (parsed.role === 'admin' || parsed.username?.toLowerCase() === 'admin' || parsed.uid === 'admin-1') {
+          const activeAdmin: User = {
+            ...DEFAULT_ADMIN_USER,
+            ...parsed,
+            role: 'admin',
+            status: 'active',
+          };
+          setUser(activeAdmin);
+          return;
+        }
+
+        // 2. Verify active status from accounts
         const accounts = getAuthAccounts();
         const found = accounts.find((a) => a.user.uid === parsed.uid);
         if (found) {
-          if (found.user.status !== 'active') {
+          // If explicitly rejected or pending, evict
+          if (found.user.status === 'rejected' || found.user.status === 'pending') {
             window.localStorage.removeItem(CURRENT_USER_KEY);
             window.sessionStorage.removeItem(CURRENT_USER_KEY);
             setUser(null);
             return;
           }
-          setUser(found.user);
+          // Default undefined status to active
+          const activeFound: User = {
+            ...found.user,
+            status: found.user.status || 'active',
+          };
+          setUser(activeFound);
           return;
         }
-        if (parsed.status !== 'active') {
+
+        // 3. Fallback for accounts not in local list
+        if (parsed.status === 'rejected' || parsed.status === 'pending') {
           window.localStorage.removeItem(CURRENT_USER_KEY);
           window.sessionStorage.removeItem(CURRENT_USER_KEY);
           setUser(null);
           return;
         }
-        setUser(parsed);
+        setUser({ ...parsed, status: parsed.status || 'active' });
       }
     } catch (error) {
       console.error('Failed to load user from session storage:', error);
@@ -198,23 +220,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 2. Check Stored Accounts (by username, phone, or email)
-      const accounts = getAuthAccounts();
-      const match = accounts.find((acc) => {
-        const u = acc.user;
-        const matchesUsername = acc.username.toLowerCase() === cleanId.toLowerCase();
-        const matchesPhone = Boolean(
-          (acc.phone && isPhoneMatch(acc.phone, cleanId)) ||
-          (u.phone && isPhoneMatch(u.phone, cleanId)) ||
-          (acc.username && isPhoneMatch(acc.username, cleanId)) ||
-          (cleanPhone &&
-            ((acc.phone && acc.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone) ||
-              (u.phone && u.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone)))
-        );
-        const matchesEmail = Boolean(u.email && u.email.toLowerCase() === cleanId.toLowerCase());
-        const passwordMatches = acc.password === cleanPass;
+      let accounts = getAuthAccounts();
+      const findMatchingAccount = (accList: typeof accounts) =>
+        accList.find((acc) => {
+          const u = acc.user;
+          const matchesUsername = acc.username.toLowerCase() === cleanId.toLowerCase();
+          const matchesPhone = Boolean(
+            (acc.phone && isPhoneMatch(acc.phone, cleanId)) ||
+            (u.phone && isPhoneMatch(u.phone, cleanId)) ||
+            (acc.username && isPhoneMatch(acc.username, cleanId)) ||
+            (cleanPhone &&
+              ((acc.phone && acc.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone) ||
+                (u.phone && u.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone)))
+          );
+          const matchesEmail = Boolean(u.email && u.email.toLowerCase() === cleanId.toLowerCase());
+          const passwordMatches = acc.password === cleanPass;
 
-        return (matchesUsername || matchesPhone || matchesEmail) && passwordMatches;
-      });
+          return (matchesUsername || matchesPhone || matchesEmail) && passwordMatches;
+        });
+
+      let match = findMatchingAccount(accounts);
+
+      // If not found in local accounts cache, attempt cloud sync (for cross-device credentials)
+      if (!match && typeof window !== 'undefined') {
+        try {
+          const syncedAccounts = await syncCloudAccounts();
+          match = findMatchingAccount(syncedAccounts);
+        } catch {
+          // continue with fallback
+        }
+      }
 
       if (match) {
         const userStatus = match.user.status || 'active';

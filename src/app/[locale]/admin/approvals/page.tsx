@@ -5,6 +5,7 @@ import { useLocale } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import {
   getAuthAccounts,
+  syncCloudAccounts,
   approveUserRegistration,
   rejectUserRegistration,
   ADMIN_CONFIG,
@@ -35,31 +36,47 @@ export default function RegistrationApprovalsPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
     try {
-      const accounts = getAuthAccounts();
-      const allUsers = accounts.map((a) => a.user);
-      setUsers(allUsers);
+      // 1. Immediately read local accounts so UI renders without delay
+      const localAccs = getAuthAccounts();
+      if (localAccs.length > 0) {
+        setUsers(localAccs.map((a) => a.user));
+      }
+      // 2. Fetch latest registrations from Cloud Store (Vercel Blob / Next.js backend)
+      const syncedAccs = await syncCloudAccounts();
+      setUsers(syncedAccs.map((a) => a.user));
     } catch (err) {
       console.error('Failed to load accounts for approvals:', err);
     } finally {
       setLoading(false);
+      if (isManual) setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData();
-    }, 0);
+    // Initial fetch
+    loadData();
 
-    const handleUpdate = () => loadData();
+    // Auto-poll cloud every 8 seconds for new cross-device patient registrations
+    const pollInterval = setInterval(() => {
+      loadData(false);
+    }, 8000);
+
+    const handleFocus = () => loadData(false);
+    const handleUpdate = () => loadData(false);
+
+    window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('dialycare_approvals_updated', handleUpdate);
     window.addEventListener('dialycare_users_updated', handleUpdate);
 
     return () => {
-      clearTimeout(timer);
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('dialycare_approvals_updated', handleUpdate);
       window.removeEventListener('dialycare_users_updated', handleUpdate);
@@ -262,15 +279,32 @@ export default function RegistrationApprovalsPage() {
           </button>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <input
-            type="text"
-            placeholder={isAr ? 'بحث بالاسم أو الهاتف...' : 'Search by name or phone...'}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full min-h-[48px] px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]/30"
-          />
+        {/* Actions & Search */}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={isRefreshing}
+            data-testid="sync-cloud-btn"
+            className="shrink-0 min-h-[48px] px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+            title={isAr ? 'تحديث ومزامنة طلبات التسجيل من السحابة' : 'Refresh and sync registrations from cloud'}
+          >
+            <span className={`text-base leading-none ${isRefreshing ? 'animate-spin' : ''}`}>🔄</span>
+            <span className="hidden sm:inline">
+              {isRefreshing ? (isAr ? 'جارِ المزامنة...' : 'Syncing...') : (isAr ? 'تحديث السحابة' : 'Sync Cloud')}
+            </span>
+          </button>
+
+          {/* Search */}
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              placeholder={isAr ? 'بحث بالاسم أو الهاتف...' : 'Search by name or phone...'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full min-h-[48px] px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]/30"
+            />
+          </div>
         </div>
       </div>
 
@@ -463,6 +497,31 @@ export default function RegistrationApprovalsPage() {
                           <span className="font-bold text-slate-900 text-sm truncate block">{prof?.dialysisCenter || '—'}</span>
                         </div>
                       </div>
+
+                      {/* Viral Isolation & Emergency Contact */}
+                      {(prof?.viralMarkers || prof?.emergencyContact) && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                          {prof?.viralMarkers && (
+                            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700">
+                              <span className="font-bold text-slate-500">{isAr ? 'الفيروسات:' : 'Viral:'}</span>
+                              <span className={prof.viralMarkers.hcv ? 'text-amber-700 font-bold' : 'text-slate-600'}>HCV: {prof.viralMarkers.hcv ? '+' : '-'}</span>
+                              <span>•</span>
+                              <span className={prof.viralMarkers.hbv ? 'text-red-700 font-bold' : 'text-slate-600'}>HBV: {prof.viralMarkers.hbv ? '+' : '-'}</span>
+                              <span>•</span>
+                              <span className={prof.viralMarkers.hiv ? 'text-red-700 font-bold' : 'text-slate-600'}>HIV: {prof.viralMarkers.hiv ? '+' : '-'}</span>
+                            </div>
+                          )}
+                          {prof?.emergencyContact?.name && (
+                            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700">
+                              <span className="font-bold text-slate-500">{isAr ? 'طوارئ:' : 'Emergency:'}</span>
+                              <span className="font-semibold">{prof.emergencyContact.name} ({prof.emergencyContact.relationship || (isAr ? 'قريب' : 'Relative')})</span>
+                              {prof.emergencyContact.phone && (
+                                <span dir="ltr" className="font-mono text-slate-600">{prof.emergencyContact.phone}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Right: Decision Actions */}

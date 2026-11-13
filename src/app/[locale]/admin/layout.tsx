@@ -22,7 +22,7 @@ import {
   LogoutIcon,
   DialyCareLogo,
 } from './admin-icons';
-import { getPendingApprovals } from '@/lib/data-store';
+import { getPendingApprovals, syncCloudAccounts } from '@/lib/data-store';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -43,19 +43,28 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const isRtl = locale === 'ar';
 
   useEffect(() => {
-    const refreshApprovals = () => {
+    let mounted = true;
+    const refreshApprovals = async () => {
       try {
         const list = getPendingApprovals();
-        setPendingApprovalsCount(list.length);
+        if (mounted) setPendingApprovalsCount(list.length);
+        const synced = await syncCloudAccounts();
+        if (mounted) {
+          const pending = synced.map((a) => a.user).filter((u) => u.status === 'pending');
+          setPendingApprovalsCount(pending.length);
+        }
       } catch {
         // ignore
       }
     };
     refreshApprovals();
+    const interval = setInterval(refreshApprovals, 15000);
     window.addEventListener('storage', refreshApprovals);
     window.addEventListener('dialycare_approvals_updated', refreshApprovals);
     window.addEventListener('dialycare_users_updated', refreshApprovals);
     return () => {
+      mounted = false;
+      clearInterval(interval);
       window.removeEventListener('storage', refreshApprovals);
       window.removeEventListener('dialycare_approvals_updated', refreshApprovals);
       window.removeEventListener('dialycare_users_updated', refreshApprovals);
@@ -134,7 +143,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     );
   }
 
-  if (!user || !isStaff || user.status !== 'active') {
+  if (!user || !isStaff || (user.status && user.status !== 'active' && user.role !== 'admin')) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">

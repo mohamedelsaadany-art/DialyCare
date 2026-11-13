@@ -7,9 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/lib/__tests__/patient-features.test.ts && npx tsx src/lib/__tests__/patient-messaging.test.ts && npx tsx src/lib/__tests__/pwa-verification.test.ts && npx tsx src/lib/__tests__/challenger-adherence-survey.test.ts && npx tsx src/lib/__tests__/clinical-ux-audit.test.ts && npx tsx src/lib/__tests__/challenger-auth-approvals.test.ts"
+    "test": "npx tsx src/lib/__tests__/patient-features.test.ts && npx tsx src/lib/__tests__/patient-messaging.test.ts && npx tsx src/lib/__tests__/pwa-verification.test.ts && npx tsx src/lib/__tests__/challenger-adherence-survey.test.ts && npx tsx src/lib/__tests__/clinical-ux-audit.test.ts && npx tsx src/lib/__tests__/challenger-auth-approvals.test.ts && npx tsx src/lib/__tests__/regression-refresh-cloudsync.test.ts"
   },
   "dependencies": {
+    "@vercel/blob": "^2.9.0",
     "firebase": "^13.2.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",

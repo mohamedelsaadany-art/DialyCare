@@ -2,6 +2,18 @@ export type UserRole = 'admin' | 'doctor' | 'patient';
 
 export type AccountStatus = 'active' | 'pending' | 'rejected';
 
+export interface ViralMarkers {
+  hcv?: boolean;
+  hbv?: boolean;
+  hiv?: boolean;
+}
+
+export interface EmergencyContact {
+  name?: string;
+  phone?: string;
+  relationship?: string;
+}
+
 export interface PatientRegistrationProfile {
   dialysisSchedule: 'SMW' | 'STT';
   dryWeightKg: number;
@@ -9,6 +21,8 @@ export interface PatientRegistrationProfile {
   dialysisCenter: string;
   age?: number;
   gender?: Gender;
+  viralMarkers?: ViralMarkers;
+  emergencyContact?: EmergencyContact;
 }
 
 export interface GeneratedPatientCredentials {
@@ -41,6 +55,13 @@ export interface User {
   rejectionReason?: string;
 }
 
+export interface StoredAccount {
+  username: string;
+  phone?: string;
+  password: string;
+  user: User;
+}
+
 /**
  * Strict 2-Option Dialysis Days Schedule (R6):
  * - 'SMW': Option 1 — Saturday / Monday / Wednesday (السبت / الاثنين / الأربعاء) -> getDay() in [6, 1, 3]
@@ -67,6 +88,8 @@ export interface Patient {
   gender?: Gender;
   avatarId?: string;
   avatarStyle?: string;
+  viralMarkers?: ViralMarkers;
+  emergencyContact?: EmergencyContact;
   isActive: boolean;
   createdAt: Date | string;
 }

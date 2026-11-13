@@ -1476,11 +1476,37 @@ export function getAuthAccounts(): StoredAccount[] {
     return initialAccounts;
   }
 
-  // Ensure Admin password is up to date in memory
+  // Ensure Admin password and status are always up to date and active!
   const currentAdminPass = getAdminPassword();
-  const adminAcc = stored.find((a) => a.username.toLowerCase() === 'admin');
-  if (adminAcc && adminAcc.password !== currentAdminPass) {
-    adminAcc.password = currentAdminPass;
+  let mutated = false;
+  for (const acc of stored) {
+    if (acc.username.toLowerCase() === 'admin' || acc.user.role === 'admin') {
+      if (acc.password !== currentAdminPass) {
+        acc.password = currentAdminPass;
+        mutated = true;
+      }
+      if (acc.user.status !== 'active') {
+        acc.user.status = 'active';
+        mutated = true;
+      }
+      if (acc.user.role !== 'admin') {
+        acc.user.role = 'admin';
+        mutated = true;
+      }
+    } else if (acc.user.status === undefined) {
+      acc.user.status = 'active';
+      mutated = true;
+    }
+  }
+
+  // Ensure DEFAULT_ADMIN_USER is in the list if somehow missing
+  const hasAdmin = stored.some((a) => a.username.toLowerCase() === 'admin' || a.user.role === 'admin');
+  if (!hasAdmin) {
+    stored.unshift({ username: 'admin', password: currentAdminPass, user: DEFAULT_ADMIN_USER });
+    mutated = true;
+  }
+
+  if (mutated) {
     writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, stored);
   }
 
@@ -1493,6 +1519,73 @@ export function saveAuthAccounts(accounts: StoredAccount[]): void {
   dispatchStorageEvent('dialycare_users_updated');
   dispatchStorageEvent('dialycare_approvals_updated');
   dispatchStorageEvent('storage');
+}
+
+/**
+ * Synchronize accounts from the cloud API (Vercel Blob / Next.js backend)
+ * Merges cloud registrations into local cache so they are visible across devices.
+ */
+export async function syncCloudAccounts(): Promise<StoredAccount[]> {
+  if (typeof window === 'undefined') return getAuthAccounts();
+  try {
+    const res = await fetch(`/api/auth/accounts?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return getAuthAccounts();
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.accounts)) return getAuthAccounts();
+
+    const remoteAccounts: StoredAccount[] = data.accounts;
+    const localAccounts = getAuthAccounts();
+
+    const mergedMap = new Map<string, StoredAccount>();
+
+    for (const loc of localAccounts) {
+      mergedMap.set(loc.user.uid, loc);
+    }
+
+    for (const rem of remoteAccounts) {
+      const loc = mergedMap.get(rem.user.uid);
+      if (!loc) {
+        mergedMap.set(rem.user.uid, rem);
+        // If it's an active approved patient, also sync to patient store
+        if (rem.user.role === 'patient' && rem.user.status === 'active') {
+          const existingPatients = getPatients();
+          if (!existingPatients.some((p) => p.id === rem.user.uid)) {
+            const profile = rem.user.patientProfile;
+            addPatient({
+              id: rem.user.uid,
+              fullName: rem.user.displayName,
+              fullNameAr: rem.user.displayName,
+              phone: rem.user.phone || rem.username,
+              username: rem.username,
+              dialysisSchedule: profile?.dialysisSchedule || 'SMW',
+              dryWeightKg: profile?.dryWeightKg || 70,
+              accessType: profile?.accessType || 'AVF',
+              reminderSchedule: 'standard',
+              isActive: true,
+              gender: profile?.gender || 'male',
+              avatarId: profile?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
+              viralMarkers: profile?.viralMarkers,
+              emergencyContact: profile?.emergencyContact,
+              createdAt: rem.user.registeredAt || new Date().toISOString(),
+            });
+          }
+        }
+      } else {
+        const remTime = new Date(rem.user.reviewedAt || rem.user.registeredAt || 0).getTime();
+        const locTime = new Date(loc.user.reviewedAt || loc.user.registeredAt || 0).getTime();
+        if (remTime >= locTime) {
+          mergedMap.set(rem.user.uid, rem);
+        }
+      }
+    }
+
+    const merged = Array.from(mergedMap.values());
+    saveAuthAccounts(merged);
+    return merged;
+  } catch (err) {
+    console.warn('[DataStore] Failed to sync accounts from cloud:', err);
+    return getAuthAccounts();
+  }
 }
 
 export function getPendingApprovals(): User[] {
@@ -1535,6 +1628,8 @@ export function approveUserRegistration(uid: string, reviewerName: string = 'Sup
         isActive: true,
         gender: profile?.gender || 'male',
         avatarId: profile?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
+        viralMarkers: profile?.viralMarkers,
+        emergencyContact: profile?.emergencyContact,
         createdAt: targetAcc.user.registeredAt || new Date().toISOString(),
       };
       addPatient(newPatient);
@@ -1542,6 +1637,16 @@ export function approveUserRegistration(uid: string, reviewerName: string = 'Sup
   }
 
   saveAuthAccounts(accounts);
+
+  // Background push to cloud store
+  if (typeof window !== 'undefined') {
+    fetch('/api/auth/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, reviewerName }),
+    }).catch((err) => console.warn('[DataStore] Background cloud approve push failed:', err));
+  }
+
   return cloneValue(targetAcc.user);
 }
 
@@ -1556,6 +1661,16 @@ export function rejectUserRegistration(uid: string, reason: string, reviewerName
   targetAcc.user.reviewedBy = reviewerName;
 
   saveAuthAccounts(accounts);
+
+  // Background push to cloud store
+  if (typeof window !== 'undefined') {
+    fetch('/api/auth/reject', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, reason, reviewerName }),
+    }).catch((err) => console.warn('[DataStore] Background cloud reject push failed:', err));
+  }
+
   return cloneValue(targetAcc.user);
 }
 
@@ -1604,6 +1719,16 @@ export function registerDoctorAccount(data: {
   });
 
   saveAuthAccounts(filtered);
+
+  // Background push to cloud store so it immediately syncs across all devices!
+  if (typeof window !== 'undefined') {
+    fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'doctor', data }),
+    }).catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
+  }
+
   return cloneValue(newUser);
 }
 
@@ -1644,6 +1769,16 @@ export function registerPatientAccount(data: {
   });
 
   saveAuthAccounts(filtered);
+
+  // Background push to cloud store so it immediately syncs across all devices!
+  if (typeof window !== 'undefined') {
+    fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'patient', data }),
+    }).catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
+  }
+
   return cloneValue(newUser);
 }
 
