@@ -1523,12 +1523,18 @@ export function saveAuthAccounts(accounts: StoredAccount[]): void {
   dispatchStorageEvent('storage');
 }
 
+let isSyncingCloud = false;
+
 /**
  * Synchronize accounts from the cloud API (Vercel Blob / Next.js backend)
  * Merges cloud registrations into local cache so they are visible across devices.
+ * Uses a re-entrancy lock and silent write to prevent recursive event storms.
  */
 export async function syncCloudAccounts(): Promise<StoredAccount[]> {
   if (typeof window === 'undefined') return getAuthAccounts();
+  if (isSyncingCloud) return getAuthAccounts();
+  isSyncingCloud = true;
+
   try {
     const res = await fetch(`/api/auth/accounts?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return getAuthAccounts();
@@ -1539,15 +1545,17 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
     const localAccounts = getAuthAccounts();
 
     const mergedMap = new Map<string, StoredAccount>();
-
     for (const loc of localAccounts) {
       mergedMap.set(loc.user.uid, loc);
     }
+
+    let hasChanges = false;
 
     for (const rem of remoteAccounts) {
       const loc = mergedMap.get(rem.user.uid);
       if (!loc) {
         mergedMap.set(rem.user.uid, rem);
+        hasChanges = true;
         // If it's an active approved patient, also sync to patient store
         if (rem.user.role === 'patient' && rem.user.status === 'active') {
           const existingPatients = getPatients();
@@ -1575,18 +1583,24 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
       } else {
         const remTime = new Date(rem.user.reviewedAt || rem.user.registeredAt || 0).getTime();
         const locTime = new Date(loc.user.reviewedAt || loc.user.registeredAt || 0).getTime();
-        if (remTime >= locTime) {
+        if (remTime > locTime || rem.user.status !== loc.user.status) {
           mergedMap.set(rem.user.uid, rem);
+          hasChanges = true;
         }
       }
     }
 
     const merged = Array.from(mergedMap.values());
-    saveAuthAccounts(merged);
+    if (hasChanges) {
+      initDataStore();
+      writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, merged);
+    }
     return merged;
   } catch (err) {
     console.warn('[DataStore] Failed to sync accounts from cloud:', err);
     return getAuthAccounts();
+  } finally {
+    isSyncingCloud = false;
   }
 }
 

@@ -158,6 +158,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         setUser({ ...parsed, status: parsed.status || 'active' });
+      } else {
+        setUser(null);
       }
     } catch (error) {
       console.error('Failed to load user from session storage:', error);

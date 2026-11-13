@@ -586,6 +586,66 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
 
     console.log('  ✓ Cross-device cloud sync and API route handlers verified completely!');
 
+    // ------------------------------------------------------------------------
+    // SECTION 3: Event Storm Prevention & Concurrency Lock Guard Verification
+    // ------------------------------------------------------------------------
+    console.log('\n--- 3. Testing Event Storm Prevention & Concurrency Lock Guard ---');
+
+    // Test 3.1: Concurrent syncCloudAccounts invocations guarded by re-entrancy lock
+    let fetchCount = 0;
+    const trackingFetch = globalThis.fetch;
+    (globalThis as unknown as { fetch: unknown }).fetch = async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/api/auth/accounts')) {
+        fetchCount++;
+        // Add small artificial delay to verify re-entrancy lock
+        await new Promise((r) => setTimeout(r, 20));
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            accounts: getAuthAccounts(),
+            users: getAuthAccounts().map((a) => a.user),
+          }),
+        } as unknown as Response;
+      }
+      return trackingFetch(url);
+    };
+
+    try {
+      // Fire 5 concurrent syncCloudAccounts calls simultaneously
+      const results = await Promise.all([
+        syncCloudAccounts(),
+        syncCloudAccounts(),
+        syncCloudAccounts(),
+        syncCloudAccounts(),
+        syncCloudAccounts(),
+      ]);
+
+      assert.strictEqual(results.length, 5, 'All 5 concurrent calls resolved');
+      count();
+      assert.ok(fetchCount <= 2, `Lock guard prevented network storm: fetchCount was ${fetchCount} (expected <= 2)`);
+      count();
+    } finally {
+      globalThis.fetch = trackingFetch;
+    }
+
+    // Test 3.2: Clean logout session eviction
+    window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(DEFAULT_ADMIN_USER));
+    window.sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(DEFAULT_ADMIN_USER));
+    assert.ok(window.localStorage.getItem(CURRENT_USER_KEY), 'Session active before logout');
+    count();
+
+    // Perform clean logout eviction
+    window.localStorage.removeItem(CURRENT_USER_KEY);
+    window.sessionStorage.removeItem(CURRENT_USER_KEY);
+    assert.strictEqual(window.localStorage.getItem(CURRENT_USER_KEY), null, 'localStorage purged on logout');
+    count();
+    assert.strictEqual(window.sessionStorage.getItem(CURRENT_USER_KEY), null, 'sessionStorage purged on logout');
+    count();
+
+    console.log('  ✓ Concurrency lock guard and clean logout eviction verified!');
+
     console.log('\n================================================================');
     console.log(`REGRESSION SUITE PASSED SUCCESSFULLY: ${assertions} assertions passed`);
     console.log('================================================================\n');

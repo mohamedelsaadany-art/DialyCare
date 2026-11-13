@@ -63,27 +63,32 @@ export default function RegistrationApprovalsPage() {
       if (mounted) void loadData();
     }, 0);
 
-    // Auto-poll cloud every 8 seconds for new cross-device staff registrations
+    // Auto-poll cloud every 15 seconds for new cross-device staff registrations
     const pollInterval = setInterval(() => {
       void loadData(false);
-    }, 8000);
+    }, 15000);
 
     const handleFocus = () => void loadData(false);
-    const handleUpdate = () => void loadData(false);
+    // Local updates read directly from local store without triggering network sync storms
+    const handleLocalUpdate = () => {
+      if (!mounted) return;
+      const localAccs = getAuthAccounts();
+      setUsers(localAccs.map((a) => a.user));
+    };
 
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('storage', handleUpdate);
-    window.addEventListener('dialycare_approvals_updated', handleUpdate);
-    window.addEventListener('dialycare_users_updated', handleUpdate);
+    window.addEventListener('storage', handleLocalUpdate);
+    window.addEventListener('dialycare_approvals_updated', handleLocalUpdate);
+    window.addEventListener('dialycare_users_updated', handleLocalUpdate);
 
     return () => {
       mounted = false;
       clearTimeout(timer);
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleUpdate);
-      window.removeEventListener('dialycare_approvals_updated', handleUpdate);
-      window.removeEventListener('dialycare_users_updated', handleUpdate);
+      window.removeEventListener('storage', handleLocalUpdate);
+      window.removeEventListener('dialycare_approvals_updated', handleLocalUpdate);
+      window.removeEventListener('dialycare_users_updated', handleLocalUpdate);
     };
   }, [loadData]);
 
@@ -175,6 +180,11 @@ export default function RegistrationApprovalsPage() {
     );
   }
 
+  // If logging out or not logged in, layout handles redirect cleanly
+  if (!user) {
+    return null;
+  }
+
   // Access check: only Super Admin can review approvals
   if (!isAdmin) {
     return (
@@ -188,8 +198,8 @@ export default function RegistrationApprovalsPage() {
           </h2>
           <p className="text-sm text-slate-600 mb-4">
             {isAr
-              ? 'مراجعة واعتماد طلبات الأطباء والمرضى تتطلب صلاحية مدير النظام الرئيسي.'
-              : 'Reviewing and approving doctor and patient accounts requires Super Administrator privileges.'}
+              ? 'مراجعة واعتماد طلبات الكوادر الطبية تتطلب صلاحية مدير النظام الرئيسي.'
+              : 'Reviewing and approving clinical staff accounts requires Super Administrator privileges.'}
           </p>
         </Card>
       </div>

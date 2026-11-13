@@ -7,7 +7,6 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import LanguageToggle from '@/components/ui/LanguageToggle';
-import Button from '@/components/ui/Button';
 import {
   DashboardIcon,
   PatientsIcon,
@@ -44,30 +43,40 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   useEffect(() => {
     let mounted = true;
-    const refreshApprovals = async () => {
+
+    // Fast local count updater for reactive UI events (zero network call, zero recursion)
+    const updateLocalCount = () => {
+      if (mounted) {
+        setPendingApprovalsCount(getPendingApprovals().length);
+      }
+    };
+
+    // Background cloud sync function (runs on interval only)
+    const pollCloudApprovals = async () => {
       try {
-        const list = getPendingApprovals();
-        if (mounted) setPendingApprovalsCount(list.length);
         const synced = await syncCloudAccounts();
         if (mounted) {
-          const pending = synced.map((a) => a.user).filter((u) => u.status === 'pending');
+          const pending = synced.map((a) => a.user).filter((u) => u.status === 'pending' && u.role !== 'patient');
           setPendingApprovalsCount(pending.length);
         }
       } catch {
         // ignore
       }
     };
-    refreshApprovals();
-    const interval = setInterval(refreshApprovals, 15000);
-    window.addEventListener('storage', refreshApprovals);
-    window.addEventListener('dialycare_approvals_updated', refreshApprovals);
-    window.addEventListener('dialycare_users_updated', refreshApprovals);
+
+    updateLocalCount();
+    const interval = setInterval(pollCloudApprovals, 20000);
+
+    window.addEventListener('storage', updateLocalCount);
+    window.addEventListener('dialycare_approvals_updated', updateLocalCount);
+    window.addEventListener('dialycare_users_updated', updateLocalCount);
+
     return () => {
       mounted = false;
       clearInterval(interval);
-      window.removeEventListener('storage', refreshApprovals);
-      window.removeEventListener('dialycare_approvals_updated', refreshApprovals);
-      window.removeEventListener('dialycare_users_updated', refreshApprovals);
+      window.removeEventListener('storage', updateLocalCount);
+      window.removeEventListener('dialycare_approvals_updated', updateLocalCount);
+      window.removeEventListener('dialycare_users_updated', updateLocalCount);
     };
   }, []);
 
@@ -121,7 +130,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   // Auth gate: redirect to login if user is not logged in or not clinical staff
   useEffect(() => {
     if (!loading && (!user || !isStaff)) {
-      router.push(`/${locale}/login`);
+      if (typeof window !== 'undefined') {
+        window.location.href = `/${locale}/login`;
+      } else {
+        router.push(`/${locale}/login`);
+      }
     }
   }, [loading, user, isStaff, router, locale]);
 
@@ -144,29 +157,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   if (!user || !isStaff || (user.status && user.status !== 'active' && user.role !== 'admin')) {
+    if (typeof window !== 'undefined') {
+      window.location.href = `/${locale}/login`;
+    }
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">
-          {isRtl ? 'غير مصرح بالدخول' : 'Access Restricted'}
-        </h2>
-        <p className="text-slate-600 max-w-sm mb-6 text-sm">
-          {isRtl
-            ? 'هذه المنطقة مخصصة فقط للأطباء والمسؤولين. يرجى تسجيل الدخول بحساب مسؤول.'
-            : 'This portal requires clinician or administrator credentials. Please sign in.'}
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+        <LoadingSpinner size="xl" color="primary" />
+        <p className="text-slate-600 font-medium text-sm animate-pulse">
+          {isRtl ? 'جارِ التحويل إلى تسجيل الدخول...' : 'Redirecting to login...'}
         </p>
-        <Button variant="primary" onClick={() => router.push(`/${locale}/login`)}>
-          {tCommon('login') || 'Sign In to Portal'}
-        </Button>
       </div>
     );
   }
@@ -180,7 +179,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = () => {
     logout();
-    router.push(`/${locale}/login`);
+    if (typeof window !== 'undefined') {
+      window.location.href = `/${locale}/login`;
+    } else {
+      router.push(`/${locale}/login`);
+    }
   };
 
   return (
