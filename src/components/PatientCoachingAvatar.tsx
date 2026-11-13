@@ -427,8 +427,8 @@ export function PatientCoachingAvatar({
   const domainInfo = getDomainBadge(activeTip.domain);
   const currentAvatarPreset = getAvatarPreset(avatarId, patientRecord?.gender);
   const patientDisplayName = isAr
-    ? patientRecord?.fullNameAr || patientRecord?.fullName || 'مريض دايلي كير'
-    : patientRecord?.fullName || 'DialyCare Patient';
+    ? patientRecord?.fullNameAr || patientRecord?.fullName || 'مريض وَصْلِتي'
+    : patientRecord?.fullName || 'Waslity Patient';
 
   // Lab commentary generator (R4)
   const labCommentary = useMemo(() => {

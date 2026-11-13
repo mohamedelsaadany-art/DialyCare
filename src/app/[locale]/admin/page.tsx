@@ -252,7 +252,7 @@ export default function AdminDashboardPage() {
     link.href = url;
     link.setAttribute(
       'download',
-      `DialyCare_Adherence_Report_${new Date().toISOString().slice(0, 10)}.csv`
+      `Waslity_Adherence_Report_${new Date().toISOString().slice(0, 10)}.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -267,7 +267,7 @@ export default function AdminDashboardPage() {
     // Title & Header
     doc.setFontSize(20);
     doc.setTextColor(30, 107, 184); // #1e6bb8
-    doc.text('DialyCare Adherence Report', 14, 22);
+    doc.text('Waslity Adherence Report', 14, 22);
 
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
@@ -338,7 +338,7 @@ export default function AdminDashboardPage() {
       styles: { fontSize: 8 },
     });
 
-    doc.save(`DialyCare_Adherence_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`Waslity_Adherence_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   if (loading) {

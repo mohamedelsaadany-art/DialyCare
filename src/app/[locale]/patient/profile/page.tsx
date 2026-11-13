@@ -170,7 +170,7 @@ export default function PatientProfilePage() {
 
     if (res === 'granted') {
       showLocalNotification(
-        isAr ? 'تنبيهات دايلي كير مفعلة 🔔' : 'DialyCare Notifications Enabled 🔔',
+        isAr ? 'تنبيهات وَصْلِتي مفعلة 🔔' : 'Waslity Notifications Enabled 🔔',
         isAr
           ? 'ستصلك تنبيهات دورية بمواعيد الأدوية والسوائل'
           : 'You will receive reminders for scheduled medications & fluid limits.'
@@ -195,9 +195,9 @@ export default function PatientProfilePage() {
 
   const fullNameDisplay = useMemo(() => {
     if (isAr) {
-      return patientRecord?.fullNameAr || patientRecord?.fullName || user?.displayName || 'مريض دايلي كير';
+      return patientRecord?.fullNameAr || patientRecord?.fullName || user?.displayName || 'مريض وَصْلِتي';
     }
-    return patientRecord?.fullName || user?.displayName || 'DialyCare Patient';
+    return patientRecord?.fullName || user?.displayName || 'Waslity Patient';
   }, [isAr, patientRecord, user]);
 
   return (
@@ -275,7 +275,7 @@ export default function PatientProfilePage() {
             </span>
             <span className="font-semibold text-slate-800">
               {patientRecord?.centerName?.trim() ||
-                (isAr ? 'مركز دايلي كير التخصصي' : 'DialyCare Specialized Center')}
+                (isAr ? 'مركز وَصْلِتي التخصصي' : 'Waslity Specialized Center')}
             </span>
           </div>
         </div>

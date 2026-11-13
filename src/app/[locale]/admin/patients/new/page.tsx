@@ -192,10 +192,10 @@ export default function NewPatientPage() {
         senderId: 'admin-1',
         type: 'individual',
         recipientIds: [newUser.uid],
-        titleEn: 'Welcome to DialyCare! 🌟',
-        titleAr: 'مرحباً بك في دايلي كير! 🌟',
-        messageEn: `Welcome ${fullName.trim()} to DialyCare! Your care team is here to support your daily adherence and treatment schedule.`,
-        messageAr: `أهلاً بك يا ${fullNameAr.trim() || fullName.trim()} في دايلي كير! فريقك الطبي هنا لدعم التزامك اليومي وجدول علاجك.`,
+        titleEn: 'Welcome to Waslity! 🌟',
+        titleAr: 'مرحباً بك في وَصْلِتي! 🌟',
+        messageEn: `Welcome ${fullName.trim()} to Waslity! Your care team is here to support your daily adherence and treatment schedule.`,
+        messageAr: `أهلاً بك يا ${fullNameAr.trim() || fullName.trim()} في وَصْلِتي! فريقك الطبي هنا لدعم التزامك اليومي وجدول علاجك.`,
         sentAt: new Date().toISOString(),
         status: 'sent',
       });
@@ -244,13 +244,13 @@ export default function NewPatientPage() {
       : (isRtl ? 'الأحد - الثلاثاء - الخميس' : 'Sun - Tue - Thu');
 
     const msg = isRtl
-      ? `أهلاً بك يا ${patient.fullNameAr || patient.fullName} في منصة دايلي كير (DialyCare) لمتابعة جلسات الغسيل الكلوي.
+      ? `أهلاً بك يا ${patient.fullNameAr || patient.fullName} في منصة وَصْلِتي (Waslity) لمتابعة جلسات الغسيل الكلوي.
 بيانات الدخول لحسابك:
 👤 اسم المستخدم: ${createdUser.username}
 🔑 كلمة المرور: ${rawPassword}
 🗓️ جدول الغسيل: ${schedText}
 🔗 رابط تسجيل الدخول: https://dialycare.vercel.app`
-      : `Welcome ${patient.fullName} to DialyCare!
+      : `Welcome ${patient.fullName} to Waslity!
 Your account credentials:
 👤 Username: ${createdUser.username}
 🔑 Password: ${rawPassword}
@@ -265,7 +265,7 @@ Your account credentials:
   const handleCopyCredentials = () => {
     if (!createdCredentialsModal) return;
     const { patient, user: createdUser, rawPassword } = createdCredentialsModal;
-    const text = `DialyCare Patient Account:
+    const text = `Waslity Patient Account:
 Name: ${patient.fullNameAr || patient.fullName}
 Username: ${createdUser.username}
 Password: ${rawPassword}
@@ -579,7 +579,7 @@ Portal: https://dialycare.vercel.app`;
         <Modal
           isOpen={Boolean(createdCredentialsModal)}
           onClose={() => router.push(`/${locale}/admin/patients`)}
-          title={isRtl ? 'بطاقة بيانات دخول المريض (DialyCare Access Card)' : 'Patient DialyCare Access Card'}
+          title={isRtl ? 'بطاقة بيانات دخول المريض (Waslity Access Card)' : 'Patient Waslity Access Card'}
         >
           <div className="space-y-4">
             <div className="p-4 bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl space-y-3">

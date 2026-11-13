@@ -367,7 +367,7 @@ export default function ReminderTemplatesPage() {
               <div className="flex items-center justify-between text-[11px] text-slate-400 pb-2 border-b border-slate-800/80 mb-2">
                 <div className="flex items-center gap-1.5">
                   <DialyCareLogo className="w-4 h-4" />
-                  <span className="font-semibold text-slate-300">DialyCare</span>
+                  <span className="font-semibold text-slate-300">{previewLanguage === 'ar' ? 'وَصْلِتي' : 'Waslity'}</span>
                   <span>•</span>
                   <span>{form.defaultTime || '08:00'}</span>
                 </div>

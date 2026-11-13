@@ -154,7 +154,7 @@ export function InstallPwaPrompt() {
           <div className="flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden shadow-md border border-blue-100 bg-gradient-to-br from-[#1e6bb8] to-[#0f3e6d] flex items-center justify-center">
             <Image
               src="/icons/icon-192.png"
-              alt="DialyCare Icon"
+              alt="Waslity Icon"
               width={48}
               height={48}
               className="w-full h-full object-cover"

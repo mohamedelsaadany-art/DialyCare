@@ -266,8 +266,8 @@ export default function LoginPage() {
         ? (isRtl ? 'إدارة الوحدة' : 'Unit Admin')
         : (isRtl ? 'د/' : 'Dr.');
     const text = isRtl
-      ? `السلام عليكم، أنا ${rolePrefix} ${doctorSuccessUser.displayName} (${doctorSuccessUser.specialty || 'كادر طبي'} - ${doctorSuccessUser.hospital || 'مركز الغسيل'}). قمت بإنشاء حساب جديد على منصة دايلي كير وأرجو اعتماد الحساب. رقم هاتفي: ${doctorSuccessUser.phone || ''}`
-      : `Hello, I am ${rolePrefix} ${doctorSuccessUser.displayName} (${doctorSuccessUser.specialty} at ${doctorSuccessUser.hospital}). I have registered on DialyCare and am awaiting account verification. Phone: ${doctorSuccessUser.phone}`;
+      ? `السلام عليكم، أنا ${rolePrefix} ${doctorSuccessUser.displayName} (${doctorSuccessUser.specialty || 'كادر طبي'} - ${doctorSuccessUser.hospital || 'مركز الغسيل'}). قمت بإنشاء حساب جديد على منصة وَصْلِتي وأرجو اعتماد الحساب. رقم هاتفي: ${doctorSuccessUser.phone || ''}`
+      : `Hello, I am ${rolePrefix} ${doctorSuccessUser.displayName} (${doctorSuccessUser.specialty} at ${doctorSuccessUser.hospital}). I have registered on Waslity and am awaiting account verification. Phone: ${doctorSuccessUser.phone}`;
     return `https://wa.me/${cleanAdminPhone}?text=${encodeURIComponent(text)}`;
   };
 
@@ -282,8 +282,8 @@ export default function LoginPage() {
         ? (isRtl ? 'د/ ' : 'Dr. ')
         : (isRtl ? 'المريض ' : 'Patient ');
     const text = isRtl
-      ? `السلام عليكم، أنا ${roleLabel}${acc.displayName}، قمت بالتسجيل في تطبيق دايلي كير ورقم هاتفي: ${acc.phone || acc.username}. حسابي قيد المراجعة وأرجو تفعيله.`
-      : `Hello, I am ${roleLabel}${acc.displayName}. I registered on DialyCare with phone: ${acc.phone || acc.username}. My account is pending review, please approve.`;
+      ? `السلام عليكم، أنا ${roleLabel}${acc.displayName}، قمت بالتسجيل في تطبيق وَصْلِتي ورقم هاتفي: ${acc.phone || acc.username}. حسابي قيد المراجعة وأرجو تفعيله.`
+      : `Hello, I am ${roleLabel}${acc.displayName}. I registered on Waslity with phone: ${acc.phone || acc.username}. My account is pending review, please approve.`;
     return `https://wa.me/${cleanAdminPhone}?text=${encodeURIComponent(text)}`;
   };
 
@@ -458,7 +458,7 @@ export default function LoginPage() {
                     )}
 
                     <a
-                      href={`https://wa.me/${cleanAdminPhone}?text=${encodeURIComponent(isRtl ? `السلام عليكم، تم رفض حسابي على دايلي كير (${rejectedAccount.user.displayName}). أرجو التوضيح.` : `Hello, my registration was rejected (${rejectedAccount.user.displayName}). Please advise.`)}`}
+                      href={`https://wa.me/${cleanAdminPhone}?text=${encodeURIComponent(isRtl ? `السلام عليكم، تم رفض حسابي على وَصْلِتي (${rejectedAccount.user.displayName}). أرجو التوضيح.` : `Hello, my registration was rejected (${rejectedAccount.user.displayName}). Please advise.`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold rounded-xl shadow-sm text-sm transition-colors"
