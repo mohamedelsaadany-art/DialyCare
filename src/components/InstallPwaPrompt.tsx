@@ -164,10 +164,10 @@ export function InstallPwaPrompt() {
 
           <div className="flex-1 min-w-0">
             <h3 className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
-              DialyCare
+              وَصْلِتي | Waslity
             </h3>
             <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
-              📲 Install DialyCare on your phone for easy daily access and reminders / ثبت تطبيق DialyCare على هاتفك لسهولة المتابعة اليومية والتنبيهات
+              📲 Install Waslity on your phone for easy daily access and reminders / ثبت تطبيق وَصْلِتي على هاتفك لسهولة المتابعة اليومية والتنبيهات
             </p>
           </div>
         </div>

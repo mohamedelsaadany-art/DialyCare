@@ -229,7 +229,7 @@ const installPromptPath = path.join(ROOT_DIR, 'src', 'components', 'InstallPwaPr
 assert(fs.existsSync(installPromptPath), 'InstallPwaPrompt.tsx must exist');
 const installPromptCode = fs.readFileSync(installPromptPath, 'utf8');
 
-assert(installPromptCode.includes('📲 Install DialyCare on your phone for easy daily access and reminders / ثبت تطبيق DialyCare على هاتفك لسهولة المتابعة اليومية والتنبيهات'), 'Must contain exact banner text');
+assert(installPromptCode.includes('📲 Install Waslity on your phone for easy daily access and reminders / ثبت تطبيق وَصْلِتي على هاتفك لسهولة المتابعة اليومية والتنبيهات'), 'Must contain exact banner text');
 assert(installPromptCode.includes('Install / تثبيت'), 'Must contain Install / تثبيت button');
 assert(installPromptCode.includes('localStorage.setItem'), 'Must save dismissal in localStorage');
 assert(installPromptCode.includes('dialycare:install-prompt'), 'Must listen for install prompt');

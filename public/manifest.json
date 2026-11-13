@@ -1,10 +1,10 @@
 {
-  "name": "DialyCare - Hemodialysis Patient Adherence",
-  "short_name": "DialyCare",
-  "description": "Comprehensive Hemodialysis Patient Adherence and Coaching Platform",
-  "start_url": "/en/patient",
+  "name": "وَصْلِتي - Waslity",
+  "short_name": "وَصْلِتي",
+  "description": "وَصْلِتي (Waslity) - لأن صحتك تستحق رعاية .… إحنا وصلتك",
+  "start_url": "/ar/patient",
   "scope": "/",
-  "id": "/en/patient",
+  "id": "/ar/patient",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1e6bb8",
@@ -46,21 +46,21 @@
       "name": "Log Fluid",
       "short_name": "Fluid",
       "description": "Log daily fluid intake",
-      "url": "/en/patient/log?tab=fluid",
+      "url": "/ar/patient/log?tab=fluid",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Log Medication",
       "short_name": "Meds",
       "description": "Log medication adherence",
-      "url": "/en/patient/log?tab=medication",
+      "url": "/ar/patient/log?tab=medication",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Reminders",
       "short_name": "Reminders",
       "description": "View medication and dialysis reminders",
-      "url": "/en/patient/reminders",
+      "url": "/ar/patient/reminders",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]

@@ -79,6 +79,7 @@ export interface Patient {
   phone?: string;
   username?: string;
   centerName?: string;
+  dialysisCenter?: string;
   fluidLimit?: number;
   dialysisSchedule: DialysisScheduleType;
   reminderSchedule?: string | Record<string, unknown>;

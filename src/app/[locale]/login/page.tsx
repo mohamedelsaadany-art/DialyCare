@@ -47,7 +47,7 @@ export default function LoginPage() {
   const [docIdCardName, setDocIdCardName] = useState<string>('');
   const [doctorSuccessUser, setDoctorSuccessUser] = useState<User | null>(null);
 
-  // Patient Registration Form State (3 Steps)
+  // Patient Registration Form State (3 Steps - Simplified)
   const [patientStep, setPatientStep] = useState<1 | 2 | 3>(1);
   const [patFullName, setPatFullName] = useState('');
   const [patPhone, setPatPhone] = useState('');
@@ -57,12 +57,6 @@ export default function LoginPage() {
   const [patDryWeight, setPatDryWeight] = useState('');
   const [patAccessType, setPatAccessType] = useState<DialysisAccessType>('AVF');
   const [patDialysisCenter, setPatDialysisCenter] = useState('');
-  const [patViralHcv, setPatViralHcv] = useState(false);
-  const [patViralHbv, setPatViralHbv] = useState(false);
-  const [patViralHiv, setPatViralHiv] = useState(false);
-  const [patEmergencyName, setPatEmergencyName] = useState('');
-  const [patEmergencyPhone, setPatEmergencyPhone] = useState('');
-  const [patEmergencyRel, setPatEmergencyRel] = useState('');
   const [patPassword, setPatPassword] = useState('');
   const [patConfirmPassword, setPatConfirmPassword] = useState('');
   const [patientSuccessUser, setPatientSuccessUser] = useState<User | null>(null);
@@ -251,18 +245,6 @@ export default function LoginPage() {
           dialysisCenter: patDialysisCenter.trim() || (isRtl ? 'وحدة الغسيل الكلوي' : 'Hemodialysis Unit'),
           age: patAge ? Number(patAge) : undefined,
           gender: patGender,
-          viralMarkers: {
-            hcv: patViralHcv,
-            hbv: patViralHbv,
-            hiv: patViralHiv,
-          },
-          emergencyContact: patEmergencyPhone.trim()
-            ? {
-                name: patEmergencyName.trim() || (isRtl ? 'مرافق الطوارئ' : 'Emergency Contact'),
-                phone: patEmergencyPhone.trim(),
-                relationship: patEmergencyRel.trim() || undefined,
-              }
-            : undefined,
         },
       });
       setPatientSuccessUser(newUser);
@@ -1097,95 +1079,6 @@ export default function LoginPage() {
                                 value={patDialysisCenter}
                                 onChange={(e) => setPatDialysisCenter(e.target.value)}
                               />
-
-                              {/* Viral Markers Section */}
-                              <div className="pt-2 border-t border-slate-200">
-                                <label className="block text-xs font-bold text-slate-800 mb-1">
-                                  {isRtl ? 'المؤشرات الفيروسية (تحديد ما ينطبق):' : 'Viral Hepatitis & HIV Screening:'}
-                                </label>
-                                <p className="text-[11px] text-slate-500 mb-2 leading-relaxed">
-                                  {isRtl
-                                    ? 'مطلوب لبروتوكول عزل ماكينات الغسيل الكلوي وسلامة المرضى'
-                                    : 'Required for machine isolation protocol & clinical patient safety'}
-                                </p>
-                                <div className="grid grid-cols-3 gap-2">
-                                  <label
-                                    className={`min-h-[48px] p-2 rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer text-center select-none transition-all ${
-                                      patViralHcv
-                                        ? 'border-amber-400 bg-amber-50 text-amber-900 font-bold ring-2 ring-amber-300/40'
-                                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={patViralHcv}
-                                      onChange={(e) => setPatViralHcv(e.target.checked)}
-                                      className="rounded text-[#1e6bb8] focus:ring-[#1e6bb8] h-4 w-4 shrink-0"
-                                    />
-                                    <span className="text-xs">HCV (فيروس C)</span>
-                                  </label>
-
-                                  <label
-                                    className={`min-h-[48px] p-2 rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer text-center select-none transition-all ${
-                                      patViralHbv
-                                        ? 'border-amber-400 bg-amber-50 text-amber-900 font-bold ring-2 ring-amber-300/40'
-                                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={patViralHbv}
-                                      onChange={(e) => setPatViralHbv(e.target.checked)}
-                                      className="rounded text-[#1e6bb8] focus:ring-[#1e6bb8] h-4 w-4 shrink-0"
-                                    />
-                                    <span className="text-xs">HBV (فيروس B)</span>
-                                  </label>
-
-                                  <label
-                                    className={`min-h-[48px] p-2 rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer text-center select-none transition-all ${
-                                      patViralHiv
-                                        ? 'border-amber-400 bg-amber-50 text-amber-900 font-bold ring-2 ring-amber-300/40'
-                                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={patViralHiv}
-                                      onChange={(e) => setPatViralHiv(e.target.checked)}
-                                      className="rounded text-[#1e6bb8] focus:ring-[#1e6bb8] h-4 w-4 shrink-0"
-                                    />
-                                    <span className="text-xs">HIV (نقص المناعة)</span>
-                                  </label>
-                                </div>
-                              </div>
-
-                              {/* Emergency Contact Section */}
-                              <div className="pt-2 border-t border-slate-200 space-y-2">
-                                <label className="block text-xs font-bold text-slate-800">
-                                  🚨 {isRtl ? 'جهة الاتصال في حالات الطوارئ:' : 'Emergency Contact Person:'}
-                                </label>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                  <Input
-                                    label={isRtl ? 'اسم جهة الاتصال' : 'Contact Name'}
-                                    placeholder={isRtl ? 'مثال: محمد (الابن)' : 'e.g. Son, Spouse'}
-                                    value={patEmergencyName}
-                                    onChange={(e) => setPatEmergencyName(e.target.value)}
-                                  />
-                                  <Input
-                                    label={isRtl ? 'هاتف الطوارئ' : 'Emergency Phone'}
-                                    placeholder="01012345678"
-                                    value={patEmergencyPhone}
-                                    onChange={(e) => setPatEmergencyPhone(e.target.value)}
-                                    type="tel"
-                                  />
-                                  <Input
-                                    label={isRtl ? 'صلة القرابة' : 'Relationship'}
-                                    placeholder={isRtl ? 'مثال: ابن / زوجة' : 'e.g. Son / Wife'}
-                                    value={patEmergencyRel}
-                                    onChange={(e) => setPatEmergencyRel(e.target.value)}
-                                  />
-                                </div>
-                              </div>
                             </div>
                           )}
 

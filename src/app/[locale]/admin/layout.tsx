@@ -195,7 +195,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <DialyCareLogo className="w-9 h-9 shrink-0 transition-transform group-hover:scale-105" />
               <div className="flex flex-col">
                 <span className="font-bold text-slate-900 text-lg leading-tight tracking-tight">
-                  Dialy<span className="text-[#1e6bb8]">Care</span>
+                  {isRtl ? 'وَصْلِـ' : 'Wasli'}<span className="text-[#1e6bb8]">{isRtl ? 'تي' : 'ty'}</span>
                 </span>
                 <span className="text-[11px] font-semibold text-emerald-700 tracking-wider uppercase">
                   {isRtl ? 'بوابة الفريق الطبي' : 'Clinical Admin'}
@@ -348,7 +348,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
                 <div className="flex items-center gap-2.5">
                   <DialyCareLogo className="w-8 h-8" />
-                  <span className="font-bold text-slate-900 text-base">DialyCare</span>
+                  <span className="font-bold text-slate-900 text-base">{isRtl ? 'وَصْلِتي' : 'Waslity'}</span>
                 </div>
                 <button
                   type="button"

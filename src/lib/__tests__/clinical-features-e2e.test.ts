@@ -1548,8 +1548,8 @@ runTestCase('Tier 4 - Scenario 5: Complete Dual-Language Patient Adherence Journ
   // 1. Verify en.json and ar.json common properties load correctly
   expectOk(enMessages.common.appName);
   expectOk(arMessages.common.appName);
-  expectStrictEqual(enMessages.common.appName, 'DialyCare');
-  expectStrictEqual(arMessages.common.appName, 'دايلي كير');
+  expectStrictEqual(enMessages.common.appName, 'Waslity');
+  expectStrictEqual(arMessages.common.appName, 'وَصْلِتي');
 
   // 2. Verify all 12 lab tests have identical English and Egyptian Arabic terminological keys
   for (const lab of CLINICAL_LAB_TESTS) {

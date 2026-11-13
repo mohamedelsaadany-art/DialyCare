@@ -5,9 +5,9 @@ import { InstallPwaPrompt } from '@/components/InstallPwaPrompt';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'DialyCare - Hemodialysis Patient Adherence Tracker',
+  title: 'وَصْلِتي | Waslity - لأن صحتك تستحق رعاية .… إحنا وصلتك',
   description:
-    'Comprehensive Hemodialysis Patient Adherence, Fluid & Diet Tracking, and Renal Coaching Platform',
+    'منصة وَصْلِتي (Waslity) - لأن صحتك تستحق رعاية .… إحنا وصلتك. متابعة جلسات الغسيل الكلوي، السوائل، والأدوية.',
   manifest: '/manifest.json',
   icons: {
     icon: [
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'DialyCare',
+    title: 'وَصْلِتي',
   },
   other: {
     'mobile-web-app-capable': 'yes',
@@ -44,7 +44,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased flex flex-col font-sans">
         <AuthProvider>
           <ServiceWorkerRegister />

@@ -181,7 +181,7 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
         <LoadingSpinner size="xl" color="primary" />
         <p className="text-slate-600 font-medium text-base">
-          {tCommon('loading') || 'Loading DialyCare...'}
+          {tCommon('loading') || (isAr ? 'جاري التحميل...' : 'Loading Waslity...')}
         </p>
       </div>
     );
@@ -203,15 +203,15 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
             href={`/${locale}/patient`}
             className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1e6bb8] rounded-xl min-h-[48px]"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1e6bb8] to-[#2196f3] flex items-center justify-center text-white font-extrabold text-lg shadow-sm">
-              D
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1e6bb8] to-[#2196f3] flex items-center justify-center text-white font-black text-xl shadow-sm">
+              {isAr ? 'و' : 'W'}
             </div>
             <div className="flex flex-col">
               <span className="font-black text-base tracking-tight text-slate-900 leading-tight">
-                {tCommon('appName') || 'DialyCare'}
+                {tCommon('appName') || (isAr ? 'وَصْلِتي' : 'Waslity')}
               </span>
               <span className="text-[11px] font-medium text-slate-500 leading-none">
-                {isAr ? 'رعاية الغسيل الكلوي' : 'Hemodialysis Adherence'}
+                {isAr ? 'إحنا وصلتك' : 'We are your connection'}
               </span>
             </div>
           </Link>

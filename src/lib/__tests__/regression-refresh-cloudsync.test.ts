@@ -320,7 +320,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     count();
     const cloudDocUid = docRegData.user.uid;
 
-    // Test 2.2: API Route /api/auth/register (Patient Registration with Full Nephrology Profile)
+    // Test 2.2: API Route /api/auth/register (Patient Simplified Intake Registration)
     const patientProfileData = {
       dialysisSchedule: 'STT' as const,
       dryWeightKg: 64.5,
@@ -328,16 +328,6 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
       dialysisCenter: 'مركز الكلى بالدمرداش',
       age: 54,
       gender: 'female' as const,
-      viralMarkers: {
-        hcv: true,
-        hbv: false,
-        hiv: false,
-      },
-      emergencyContact: {
-        name: 'عمرو عبد الفتاح',
-        phone: '01234567890',
-        relationship: 'الابن (Son)',
-      },
     };
 
     const patRegReq = new Request('http://localhost:3000/api/auth/register', {
@@ -394,17 +384,11 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     const cloudNurseUid = nurseRegData.user.uid;
 
     // Verify clinical profile received in registration response
-    assert.deepStrictEqual(patRegData.user.patientProfile.viralMarkers, {
-      hcv: true,
-      hbv: false,
-      hiv: false,
-    }, 'Viral markers preserved in registration payload');
+    assert.strictEqual(patRegData.user.patientProfile.dialysisSchedule, 'STT');
     count();
-    assert.deepStrictEqual(patRegData.user.patientProfile.emergencyContact, {
-      name: 'عمرو عبد الفتاح',
-      phone: '01234567890',
-      relationship: 'الابن (Son)',
-    }, 'Emergency contact preserved in registration payload');
+    assert.strictEqual(patRegData.user.patientProfile.dryWeightKg, 64.5);
+    count();
+    assert.strictEqual(patRegData.user.patientProfile.accessType, 'Permcath');
     count();
 
     // Test 2.3: API Route /api/auth/accounts (GET Accounts list for Super Admin)
@@ -475,17 +459,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     count();
     assert.strictEqual(newPat.avatarId, 'female_mature_1', 'Gender-correct avatar assigned');
     count();
-    assert.deepStrictEqual(newPat.viralMarkers, {
-      hcv: true,
-      hbv: false,
-      hiv: false,
-    }, 'Viral markers preserved in approved Patient entity');
-    count();
-    assert.deepStrictEqual(newPat.emergencyContact, {
-      name: 'عمرو عبد الفتاح',
-      phone: '01234567890',
-      relationship: 'الابن (Son)',
-    }, 'Emergency contact preserved in approved Patient entity');
+    assert.strictEqual(newPat.dialysisCenter, 'مركز الكلى بالدمرداش', 'Dialysis center preserved');
     count();
 
     // Test 2.5: API Route /api/auth/reject (Rejecting Doctor with Clinical Justification)
@@ -559,17 +533,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
       count();
       assert.strictEqual(enrolledBPat?.accessType, 'Permcath');
       count();
-      assert.deepStrictEqual(enrolledBPat?.viralMarkers, {
-        hcv: true,
-        hbv: false,
-        hiv: false,
-      }, 'Viral markers preserved on Device B patient enrollment');
-      count();
-      assert.deepStrictEqual(enrolledBPat?.emergencyContact, {
-        name: 'عمرو عبد الفتاح',
-        phone: '01234567890',
-        relationship: 'الابن (Son)',
-      }, 'Emergency contact preserved on Device B patient enrollment');
+      assert.strictEqual(enrolledBPat?.dialysisCenter, 'مركز الكلى بالدمرداش', 'Dialysis center preserved on Device B');
       count();
 
       // Verify the rejected doctor is also synced with status: 'rejected'
