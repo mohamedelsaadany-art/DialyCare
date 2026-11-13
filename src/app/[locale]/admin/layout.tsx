@@ -134,7 +134,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     );
   }
 
-  if (!user || !isAdmin) {
+  if (!user || !isStaff || user.status !== 'active') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">

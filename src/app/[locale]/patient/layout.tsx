@@ -140,7 +140,7 @@ function PatientBottomNav() {
 }
 
 export default function PatientLayout({ children }: PatientLayoutProps) {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isStaff } = useAuth();
   const locale = useLocale();
   const router = useRouter();
   const isAr = locale === 'ar';
@@ -151,13 +151,13 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
 
   useEffect(() => {
     if (!loading) {
-      if (!user) {
+      if (!user || user.status !== 'active') {
         router.push(`/${locale}/login`);
-      } else if (isAdmin) {
+      } else if (isStaff) {
         router.push(`/${locale}/admin`);
       }
     }
-  }, [user, loading, isAdmin, locale, router]);
+  }, [user, loading, isStaff, locale, router]);
 
   useEffect(() => {
     const updateAvatar = () => {
@@ -187,7 +187,7 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
     );
   }
 
-  if (!user || isAdmin) {
+  if (!user || isStaff || user.status !== 'active') {
     return null;
   }
 

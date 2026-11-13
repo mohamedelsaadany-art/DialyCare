@@ -184,9 +184,15 @@ export default function RegistrationApprovalsPage() {
         </div>
 
         {/* Contact Badge */}
-        <div className="bg-white/10 backdrop-blur-xs border border-white/20 px-4 py-2.5 rounded-xl text-xs flex flex-col gap-1 shrink-0">
-          <span className="text-blue-200 font-semibold">{isAr ? 'هاتف المدير المسؤول:' : 'Primary Admin Contact:'}</span>
-          <span className="font-mono font-bold text-white text-sm" dir="ltr">{ADMIN_CONFIG.primaryPhone}</span>
+        <div className="bg-white/10 backdrop-blur-xs border border-white/20 px-4 py-2.5 rounded-xl text-xs flex flex-col gap-1.5 shrink-0">
+          <div>
+            <span className="text-blue-200 font-semibold">{isAr ? 'هاتف المدير المسؤول:' : 'Primary Admin:'} </span>
+            <span className="font-mono font-bold text-white text-sm" dir="ltr">{ADMIN_CONFIG.primaryPhone}</span>
+          </div>
+          <div className="pt-1 border-t border-white/10">
+            <span className="text-blue-200 font-semibold">{isAr ? 'نائب أول وحدة الكلى:' : 'Senior Resident:'} </span>
+            <span className="font-mono font-bold text-white text-sm" dir="ltr">{ADMIN_CONFIG.seniorResidentPhone}</span>
+          </div>
         </div>
       </div>
 

@@ -9,6 +9,8 @@ import {
   getAdminPassword,
   registerDoctorAccount,
   registerPatientAccount,
+  normalizePhone,
+  isPhoneMatch,
   DEFAULT_ADMIN_USER,
   DEFAULT_PATIENT_USER,
   DEFAULT_PATIENT2_USER,
@@ -49,7 +51,7 @@ export function addPatientAccount(
 ): { user: User; credentials?: { username: string; password: string } } {
   const patientId = patientData.id || uuidv4();
   const trimmedUsername = username.trim();
-  const phone = patientData.phone?.replace(/[\s\-\(\)\+]/g, '').trim() || trimmedUsername;
+  const phone = normalizePhone(patientData.phone) || patientData.phone?.replace(/[\s\-\(\)\+]/g, '').trim() || trimmedUsername;
 
   const newUser: User = {
     uid: patientId,
@@ -115,13 +117,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const accounts = getAuthAccounts();
         const found = accounts.find((a) => a.user.uid === parsed.uid);
         if (found) {
-          if (found.user.status === 'rejected') {
+          if (found.user.status !== 'active') {
             window.localStorage.removeItem(CURRENT_USER_KEY);
             window.sessionStorage.removeItem(CURRENT_USER_KEY);
             setUser(null);
             return;
           }
           setUser(found.user);
+          return;
+        }
+        if (parsed.status !== 'active') {
+          window.localStorage.removeItem(CURRENT_USER_KEY);
+          window.sessionStorage.removeItem(CURRENT_USER_KEY);
+          setUser(null);
           return;
         }
         setUser(parsed);
@@ -195,9 +203,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const u = acc.user;
         const matchesUsername = acc.username.toLowerCase() === cleanId.toLowerCase();
         const matchesPhone = Boolean(
-          cleanPhone &&
-          ((acc.phone && acc.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone) ||
-            (u.phone && u.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone))
+          (acc.phone && isPhoneMatch(acc.phone, cleanId)) ||
+          (u.phone && isPhoneMatch(u.phone, cleanId)) ||
+          (acc.username && isPhoneMatch(acc.username, cleanId)) ||
+          (cleanPhone &&
+            ((acc.phone && acc.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone) ||
+              (u.phone && u.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone)))
         );
         const matchesEmail = Boolean(u.email && u.email.toLowerCase() === cleanId.toLowerCase());
         const passwordMatches = acc.password === cleanPass;

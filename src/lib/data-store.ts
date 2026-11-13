@@ -32,6 +32,35 @@ export const ADMIN_CONFIG = {
   seniorResidentPhone: '+201080641670', // Senior Resident contact for handover
 };
 
+/**
+ * Resilient phone normalizer for Egyptian (+20) and canonical phone numbers.
+ * Strips whitespace, hyphens, parentheses, and converts international prefix to national '01...'.
+ */
+export function normalizePhone(phone?: string): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('0020') && digits.length === 14) {
+    return '0' + digits.slice(4);
+  }
+  if (digits.startsWith('20') && digits.length === 12) {
+    return '0' + digits.slice(2);
+  }
+  return digits;
+}
+
+/**
+ * Checks whether two phone numbers match, handling country code variations and punctuation.
+ */
+export function isPhoneMatch(p1?: string, p2?: string): boolean {
+  if (!p1 || !p2) return false;
+  const n1 = normalizePhone(p1);
+  const n2 = normalizePhone(p2);
+  if (n1 && n2 && n1 === n2) return true;
+  const d1 = p1.replace(/\D/g, '');
+  const d2 = p2.replace(/\D/g, '');
+  return Boolean(d1 && d2 && d1 === d2);
+}
+
 // LocalStorage Keys prefixed with DIALYCARE_
 export const STORAGE_KEYS = {
   PATIENTS: 'DIALYCARE_PATIENTS',
