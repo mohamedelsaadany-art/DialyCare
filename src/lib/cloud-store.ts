@@ -36,15 +36,9 @@ export async function getCloudAccounts(): Promise<StoredAccount[]> {
     return memoryAccounts.map(sanitizeAccount);
   }
   try {
-    let targetUrl = cachedBlobAccountsUrl;
-    if (!targetUrl) {
-      const { blobs } = await list({ prefix: ACCOUNTS_BLOB_PATH });
-      const found = blobs.find((b) => b.pathname === ACCOUNTS_BLOB_PATH);
-      if (found) {
-        cachedBlobAccountsUrl = found.url;
-        targetUrl = found.url;
-      }
-    }
+    const { blobs } = await list({ prefix: ACCOUNTS_BLOB_PATH });
+    const found = blobs.find((b) => b.pathname === ACCOUNTS_BLOB_PATH);
+    const targetUrl = found ? found.url : null;
 
     if (targetUrl) {
       // Append cache buster to always fetch the freshest copy
