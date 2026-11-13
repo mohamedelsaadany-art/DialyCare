@@ -1,4 +1,22 @@
-export type UserRole = 'admin' | 'patient';
+export type UserRole = 'admin' | 'doctor' | 'patient';
+
+export type AccountStatus = 'active' | 'pending' | 'rejected';
+
+export interface PatientRegistrationProfile {
+  dialysisSchedule: 'SMW' | 'STT';
+  dryWeightKg: number;
+  accessType: 'AVF' | 'AVG' | 'Permcath' | 'Mahurkar';
+  dialysisCenter: string;
+  age?: number;
+  gender?: Gender;
+}
+
+export interface GeneratedPatientCredentials {
+  username: string;
+  password: string;
+  phone: string;
+  randomSuffix: string;
+}
 
 export type Language = 'ar' | 'en';
 
@@ -10,6 +28,17 @@ export interface User {
   language: Language;
   fcmToken?: string;
   createdAt: Date | string;
+  status?: AccountStatus;
+  phone?: string;
+  email?: string;
+  specialty?: string;
+  hospital?: string;
+  idCardDataUrl?: string;
+  patientProfile?: PatientRegistrationProfile;
+  registeredAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
 }
 
 /**
@@ -33,6 +62,8 @@ export interface Patient {
   dialysisSchedule: DialysisScheduleType;
   reminderSchedule?: string | Record<string, unknown>;
   dryWeightKg?: number;
+  accessType?: DialysisAccessType;
+  age?: number;
   gender?: Gender;
   avatarId?: string;
   avatarStyle?: string;

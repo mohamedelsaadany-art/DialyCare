@@ -89,6 +89,11 @@ const TEST_SUITES: TestSuiteDefinition[] = [
     name: '9. Clinical UX & Quality Review Audit Suite',
     importPath: './clinical-ux-audit.test',
   },
+  {
+    id: 'challenger-auth-approvals',
+    name: '10. Real Sign Up, Sign In & Super Admin Approvals (v2.5.0) Suite',
+    importPath: './challenger-auth-approvals.test',
+  },
 ];
 
 async function runMasterTestSuite(): Promise<void> {
@@ -113,6 +118,9 @@ async function runMasterTestSuite(): Promise<void> {
       }
       if (typeof mod.runAllTier5AdversarialTests === 'function') {
         await mod.runAllTier5AdversarialTests();
+      }
+      if (typeof mod.runAuthApprovalsTests === 'function') {
+        await mod.runAuthApprovalsTests();
       }
       const assertionsRun = globalAssertionCount - priorCount;
       suiteResults.push({

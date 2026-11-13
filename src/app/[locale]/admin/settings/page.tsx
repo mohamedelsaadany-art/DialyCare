@@ -18,6 +18,8 @@ import {
   exportAllDataAsJson,
   type AdminSettings,
 } from '../admin-store';
+import { getAdminPassword, setAdminPassword } from '@/lib/data-store';
+import { useAuth } from '@/lib/auth-context';
 import {
   SettingsIcon,
   DownloadIcon,
@@ -30,8 +32,14 @@ export default function AdminSettingsPage() {
   const isRtl = locale === 'ar';
   const tSettings = useTranslations('settings');
   const tCommon = useTranslations('common');
+  const { isAdmin } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  const [currentAdminPass, setCurrentAdminPass] = useState('');
+  const [newAdminPass, setNewAdminPass] = useState('');
+  const [confirmAdminPass, setConfirmAdminPass] = useState('');
+  const [adminPassError, setAdminPassError] = useState('');
+  const [adminPassSuccess, setAdminPassSuccess] = useState(false);
   const [settings, setSettings] = useState<AdminSettings>({
     adherenceThreshold: 70,
     defaultTimes: {
@@ -120,6 +128,33 @@ export default function AdminSettingsPage() {
     setTimeout(() => {
       setResetSuccess(false);
     }, 3000);
+  };
+
+  const handleUpdateAdminPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminPassError('');
+    setAdminPassSuccess(false);
+
+    const actualCurrent = getAdminPassword();
+    if (currentAdminPass !== actualCurrent) {
+      setAdminPassError(tSettings('incorrectCurrentPassword') || (isRtl ? 'كلمة المرور الحالية غير صحيحة' : 'Current password is incorrect'));
+      return;
+    }
+    if (newAdminPass.length < 6) {
+      setAdminPassError(tSettings('passwordMinLength') || (isRtl ? 'يجب ألا تقل كلمة المرور عن 6 أحرف' : 'Password must be at least 6 characters'));
+      return;
+    }
+    if (newAdminPass !== confirmAdminPass) {
+      setAdminPassError(tSettings('passwordMismatch') || (isRtl ? 'كلمتا المرور غير متطابقتين' : 'Passwords do not match'));
+      return;
+    }
+
+    setAdminPassword(newAdminPass);
+    setCurrentAdminPass('');
+    setNewAdminPass('');
+    setConfirmAdminPass('');
+    setAdminPassSuccess(true);
+    setTimeout(() => setAdminPassSuccess(false), 3500);
   };
 
   if (loading) {
@@ -407,7 +442,80 @@ export default function AdminSettingsPage() {
           </div>
         </Card>
 
-        {/* Section 4: Data Management & Backup */}
+        {/* Section 4: Security & Master Admin Password Rotation */}
+        {isAdmin && (
+          <Card
+            title={
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[#1e6bb8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span>{tSettings('securityTitle') || (isRtl ? 'أمان النظام وتغيير كلمة مرور المشرف (Admin)' : 'Security & Super Admin Password')}</span>
+              </div>
+            }
+            subtitle={
+              tSettings('securityDesc') || (isRtl ? 'تغيير كلمة المرور الافتراضية (admin123) لحساب الإدارة الرئيسية' : 'Update default credentials for the master admin account')
+            }
+          >
+            <div className="space-y-4">
+              {adminPassSuccess && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs sm:text-sm font-semibold flex items-center gap-2 animate-in fade-in">
+                  <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{tSettings('passwordUpdatedSuccess') || (isRtl ? 'تم تحديث كلمة مرور المشرف بنجاح!' : 'Admin password updated successfully!')}</span>
+                </div>
+              )}
+
+              {adminPassError && (
+                <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-semibold flex items-center gap-2 animate-in fade-in">
+                  <svg className="w-4 h-4 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <span>{adminPassError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Input
+                  type="password"
+                  label={tSettings('currentPassword') || (isRtl ? 'كلمة المرور الحالية' : 'Current Password')}
+                  value={currentAdminPass}
+                  onChange={(e) => setCurrentAdminPass(e.target.value)}
+                  placeholder="••••••••"
+                />
+
+                <Input
+                  type="password"
+                  label={tSettings('newPassword') || (isRtl ? 'كلمة المرور الجديدة' : 'New Password')}
+                  value={newAdminPass}
+                  onChange={(e) => setNewAdminPass(e.target.value)}
+                  placeholder="••••••••"
+                />
+
+                <Input
+                  type="password"
+                  label={tSettings('confirmNewPassword') || (isRtl ? 'تأكيد كلمة المرور' : 'Confirm New Password')}
+                  value={confirmAdminPass}
+                  onChange={(e) => setConfirmAdminPass(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleUpdateAdminPassword}
+                  className="font-bold text-xs"
+                >
+                  {tSettings('updatePasswordBtn') || (isRtl ? 'تحديث كلمة مرور الإدارة' : 'Update Admin Password')}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Section 5: Data Management & Backup */}
         <Card
           title={isRtl ? 'إدارة البيانات والنسخ الاحتياطي' : 'Data Management & Demo Tools'}
           subtitle={isRtl ? 'تصدير نسخة احتياطية كاملة أو استعادة البيانات الأولية' : 'Download complete JSON export or reset seed records for demonstration'}

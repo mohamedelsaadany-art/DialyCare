@@ -15,29 +15,52 @@ import {
   NotificationsIcon,
   TipsIcon,
   SettingsIcon,
+  ApprovalsIcon,
   SearchIcon,
   MenuIcon,
   CloseIcon,
   LogoutIcon,
   DialyCareLogo,
 } from './admin-icons';
+import { getPendingApprovals } from '@/lib/data-store';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
-  const { user, loading, logout, isAdmin } = useAuth();
+  const { user, loading, logout, isAdmin, isStaff } = useAuth();
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
 
   const tCommon = useTranslations('common');
   const tNav = useTranslations('nav');
 
   const isRtl = locale === 'ar';
+
+  useEffect(() => {
+    const refreshApprovals = () => {
+      try {
+        const list = getPendingApprovals();
+        setPendingApprovalsCount(list.length);
+      } catch {
+        // ignore
+      }
+    };
+    refreshApprovals();
+    window.addEventListener('storage', refreshApprovals);
+    window.addEventListener('dialycare_approvals_updated', refreshApprovals);
+    window.addEventListener('dialycare_users_updated', refreshApprovals);
+    return () => {
+      window.removeEventListener('storage', refreshApprovals);
+      window.removeEventListener('dialycare_approvals_updated', refreshApprovals);
+      window.removeEventListener('dialycare_users_updated', refreshApprovals);
+    };
+  }, []);
 
   // Navigation Items
   const navItems = [
@@ -53,6 +76,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       label: tNav('patients') || (isRtl ? 'المرضى' : 'Patients'),
       icon: PatientsIcon,
     },
+    ...(isAdmin ? [{
+      href: `/${locale}/admin/approvals`,
+      exact: false,
+      label: isRtl ? 'طلبات الاعتماد' : 'Registration Approvals',
+      badge: pendingApprovalsCount,
+      icon: ApprovalsIcon,
+    }] : []),
     {
       href: `/${locale}/admin/reminders`,
       exact: false,
@@ -79,12 +109,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     },
   ];
 
-  // Auth gate: redirect to login if user is not logged in or not admin
+  // Auth gate: redirect to login if user is not logged in or not clinical staff
   useEffect(() => {
-    if (!loading && (!user || !isAdmin)) {
+    if (!loading && (!user || !isStaff)) {
       router.push(`/${locale}/login`);
     }
-  }, [loading, user, isAdmin, router, locale]);
+  }, [loading, user, isStaff, router, locale]);
 
   // Close mobile sidebar on route change during render
   const [prevPath, setPrevPath] = useState(pathname);
@@ -250,7 +280,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   `}
                 >
                   <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
+                  <span className="flex-1 text-start">{item.label}</span>
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className={`inline-flex items-center justify-center min-w-5 h-5 px-1.5 text-[11px] font-extrabold rounded-full ${
+                      isActive ? 'bg-white text-[#1e6bb8]' : 'bg-amber-500 text-white shadow-xs'
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -358,7 +395,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       `}
                     >
                       <Icon className="w-5 h-5 shrink-0" />
-                      <span>{item.label}</span>
+                      <span className="flex-1 text-start">{item.label}</span>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span className={`inline-flex items-center justify-center min-w-5 h-5 px-1.5 text-[11px] font-extrabold rounded-full ${
+                          isActive ? 'bg-white text-[#1e6bb8]' : 'bg-amber-500 text-white shadow-xs'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

@@ -8,8 +8,10 @@ import { useLocale, useTranslations } from 'next-intl';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
+import Modal from '@/components/ui/Modal';
 import { addPatientAccount } from '@/lib/auth-context';
-import type { Patient } from '@/lib/types';
+import { generatePatientCredentials } from '@/lib/data-store';
+import type { Patient, DialysisAccessType, User } from '@/lib/types';
 import {
   getReminderTemplates,
   addReminder,
@@ -46,8 +48,19 @@ export default function NewPatientPage() {
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [dialysisSchedule, setDialysisSchedule] = useState<'SMW' | 'STT'>('SMW');
+  const [dryWeightKg, setDryWeightKg] = useState('');
+  const [accessType, setAccessType] = useState<DialysisAccessType>('AVF');
   const [centerName, setCenterName] = useState('');
   const [fluidLimit, setFluidLimit] = useState('');
+
+  // Generated Credentials State & Modal
+  const [generatedSuffix, setGeneratedSuffix] = useState<string | null>(null);
+  const [copiedNotification, setCopiedNotification] = useState(false);
+  const [createdCredentialsModal, setCreatedCredentialsModal] = useState<{
+    patient: Patient;
+    user: User;
+    rawPassword: string;
+  } | null>(null);
 
   // Reminder Schedule Option
   const [useDefaultReminders, setUseDefaultReminders] = useState(true);
@@ -66,7 +79,19 @@ export default function NewPatientPage() {
   // Validation & Submission States
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+
+  // Helper to auto-generate username and password from patient phone
+  const handleAutoGenerate = () => {
+    const rawDigits = phone.replace(/[\s\-\(\)\+]/g, '');
+    const basePhone = rawDigits.length >= 7 ? rawDigits : `010${Math.floor(10000000 + Math.random() * 90000000)}`;
+    if (!phone) {
+      setPhone(basePhone);
+    }
+    const creds = generatePatientCredentials(basePhone);
+    setUsername(creds.username);
+    setPassword(creds.password);
+    setGeneratedSuffix(creds.randomSuffix);
+  };
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
@@ -97,6 +122,10 @@ export default function NewPatientPage() {
       errs.fluidLimit = isRtl ? 'يرجى إدخال كمية صحيحة بالمليلتر' : 'Please enter a valid fluid volume in mL';
     }
 
+    if (dryWeightKg && (isNaN(Number(dryWeightKg)) || Number(dryWeightKg) <= 0)) {
+      errs.dryWeightKg = isRtl ? 'يرجى إدخال وزن جاف صحيح' : 'Please enter valid dry weight';
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -109,18 +138,20 @@ export default function NewPatientPage() {
 
     try {
       // 1. Create Patient + Auth Account via addPatientAccount
-      const patientData = {
+      const patientData: Partial<Patient> & { language?: 'ar' | 'en' } = {
         fullName: fullName.trim(),
         fullNameAr: fullNameAr.trim(),
         phone: phone.trim(),
         dialysisSchedule,
+        dryWeightKg: dryWeightKg.trim() ? Number(dryWeightKg) : undefined,
+        accessType,
         reminderSchedule: useDefaultReminders ? 'standard' : 'custom',
         isActive: true,
       };
 
-      const newUser = addPatientAccount(username.trim(), password, patientData);
+      const { user: newUser } = addPatientAccount(username.trim(), password, patientData);
 
-      // Store username, fluid limit and center name directly on patient record
+      // Store username, fluid limit, center name, dry weight, and access type directly on patient record
       updatePatient(newUser.uid, {
         ...patientData,
         username: username.trim(),
@@ -169,13 +200,24 @@ export default function NewPatientPage() {
         status: 'sent',
       });
 
-      setSuccess(true);
-      setTimeout(() => {
-        router.push(`/${locale}/admin/patients`);
-      }, 1500);
+      // Show the generated credentials card modal
+      setCreatedCredentialsModal({
+        patient: {
+          ...patientData,
+          id: newUser.uid,
+          fullName: fullName.trim(),
+          fullNameAr: fullNameAr.trim(),
+          dialysisSchedule,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        } as Patient,
+        user: newUser,
+        rawPassword: password,
+      });
     } catch (error) {
       console.error('Failed to create patient account:', error);
       setErrors({ form: isRtl ? 'حدث خطأ أثناء إنشاء الحساب' : 'An error occurred while creating the account' });
+    } finally {
       setSubmitting(false);
     }
   };
@@ -190,6 +232,49 @@ export default function NewPatientPage() {
     setCustomReminders(
       customReminders.map((r) => (r.id === id ? { ...r, isActive: !r.isActive } : r))
     );
+  };
+
+  // WhatsApp share message
+  const handleWhatsAppShare = () => {
+    if (!createdCredentialsModal) return;
+    const { patient, user: createdUser, rawPassword } = createdCredentialsModal;
+    const cleanPhone = (patient.phone || '').replace(/[\s\-\(\)\+]/g, '');
+    const schedText = patient.dialysisSchedule === 'SMW'
+      ? (isRtl ? 'السبت - الإثنين - الأربعاء' : 'Sat - Mon - Wed')
+      : (isRtl ? 'الأحد - الثلاثاء - الخميس' : 'Sun - Tue - Thu');
+
+    const msg = isRtl
+      ? `أهلاً بك يا ${patient.fullNameAr || patient.fullName} في منصة دايلي كير (DialyCare) لمتابعة جلسات الغسيل الكلوي.
+بيانات الدخول لحسابك:
+👤 اسم المستخدم: ${createdUser.username}
+🔑 كلمة المرور: ${rawPassword}
+🗓️ جدول الغسيل: ${schedText}
+🔗 رابط تسجيل الدخول: https://dialycare.vercel.app`
+      : `Welcome ${patient.fullName} to DialyCare!
+Your account credentials:
+👤 Username: ${createdUser.username}
+🔑 Password: ${rawPassword}
+🗓️ Schedule: ${schedText}
+🔗 Link: https://dialycare.vercel.app`;
+
+    const url = `https://wa.me/${cleanPhone ? (cleanPhone.startsWith('0') ? `2${cleanPhone}` : cleanPhone) : ''}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+  };
+
+  // Copy credentials to clipboard
+  const handleCopyCredentials = () => {
+    if (!createdCredentialsModal) return;
+    const { patient, user: createdUser, rawPassword } = createdCredentialsModal;
+    const text = `DialyCare Patient Account:
+Name: ${patient.fullNameAr || patient.fullName}
+Username: ${createdUser.username}
+Password: ${rawPassword}
+Schedule: ${patient.dialysisSchedule}
+Portal: https://dialycare.vercel.app`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedNotification(true);
+    setTimeout(() => setCopiedNotification(false), 2500);
   };
 
   return (
@@ -212,26 +297,10 @@ export default function NewPatientPage() {
         </h1>
         <p className="text-sm text-slate-500 mt-1">
           {isRtl
-            ? 'إنشاء ملف سريري جديد وحساب دخول لمنصة المتابعة وتعيين جدول التذكيرات'
-            : 'Create patient clinical record, credentials, and personalized reminder schedule'}
+            ? 'إنشاء ملف سريري جديد، وتوليد بيانات الدخول تلقائياً، وتعيين جدول التذكيرات'
+            : 'Create patient clinical record, auto-generate credentials, and configure reminders'}
         </p>
       </div>
-
-      {success && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 animate-in fade-in">
-          <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-            <CheckCircleIcon className="w-6 h-6" />
-          </div>
-          <div>
-            <h4 className="font-bold text-emerald-900 text-sm">
-              {tAdmin('patientAccountCreated') || (isRtl ? 'تم تسجيل المريض بنجاح!' : 'Patient account registered successfully!')}
-            </h4>
-            <p className="text-xs text-emerald-700 mt-0.5">
-              {isRtl ? 'جاري تحويلك إلى سجل المرضى...' : 'Redirecting to patient directory...'}
-            </p>
-          </div>
-        </div>
-      )}
 
       {errors.form && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-medium">
@@ -266,30 +335,30 @@ export default function NewPatientPage() {
             />
 
             <Input
-              label={isRtl ? 'رقم الهاتف المحمول' : 'Phone Number (Optional)'}
+              label={isRtl ? 'رقم الهاتف المحمول (واتساب)' : 'Phone Number (WhatsApp)'}
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+201012345678"
+              placeholder="01012345678"
             />
 
             <Input
               label={isRtl ? 'اسم مركز / وحدة الغسيل' : 'Dialysis Center / Hospital'}
               value={centerName}
               onChange={(e) => setCenterName(e.target.value)}
-              placeholder="e.g. Cairo Kidney Center"
+              placeholder="e.g. Kasr Al-Ainy Dialysis Unit"
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-5 pt-4 border-t border-slate-100">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5 pt-4 border-t border-slate-100">
             {/* Dialysis Schedule */}
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 block">
+              <label className="text-xs font-bold text-slate-700 block">
                 {isRtl ? 'جدول جلسات الغسيل الأسبوعي' : 'Weekly Dialysis Schedule'}
                 <span className="text-red-500 font-bold ms-1">*</span>
               </label>
 
-              <div className="flex flex-col sm:flex-row gap-4 pt-1">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
+              <div className="flex flex-col gap-2 pt-0.5">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-800 cursor-pointer">
                   <input
                     type="radio"
                     name="schedule"
@@ -299,13 +368,11 @@ export default function NewPatientPage() {
                     className="w-4 h-4 text-[#1e6bb8] focus:ring-[#1e6bb8]"
                   />
                   <span>
-                    {isRtl
-                      ? 'السبت / الاثنين / الأربعاء (Sat / Mon / Wed)'
-                      : 'Sat / Mon / Wed (السبت / الاثنين / الأربعاء)'}
+                    {isRtl ? 'السبت / الإثنين / الأربعاء (SMW)' : 'Sat / Mon / Wed (SMW)'}
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-800 cursor-pointer">
                   <input
                     type="radio"
                     name="schedule"
@@ -315,53 +382,105 @@ export default function NewPatientPage() {
                     className="w-4 h-4 text-[#1e6bb8] focus:ring-[#1e6bb8]"
                   />
                   <span>
-                    {isRtl
-                      ? 'الأحد / الثلاثاء / الخميس (Sun / Tue / Thu)'
-                      : 'Sun / Tue / Thu (الأحد / الثلاثاء / الخميس)'}
+                    {isRtl ? 'الأحد / الثلاثاء / الخميس (STT)' : 'Sun / Tue / Thu (STT)'}
                   </span>
                 </label>
               </div>
             </div>
 
-            {/* Daily Fluid Limit */}
+            {/* Dry Weight */}
             <div>
               <Input
-                label={isRtl ? 'الحد الأقصى اليومي للسوائل (مليلتر)' : 'Daily Fluid Allowance (mL)'}
+                label={isRtl ? 'الوزن الجاف المستهدف (كجم)' : 'Target Dry Weight (kg)'}
+                type="number"
+                step="0.1"
+                value={dryWeightKg}
+                onChange={(e) => setDryWeightKg(e.target.value)}
+                placeholder="70.5"
+                error={errors.dryWeightKg}
+              />
+            </div>
+
+            {/* Vascular Access */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                {isRtl ? 'نوع الوصلة الوعائية' : 'Vascular Access Type'}
+              </label>
+              <select
+                value={accessType}
+                onChange={(e) => setAccessType(e.target.value as DialysisAccessType)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e6bb8]"
+              >
+                <option value="AVF">{isRtl ? 'وصلة وريدية شريانية (AVF)' : 'AV Fistula (AVF)'}</option>
+                <option value="AVG">{isRtl ? 'وصلة صناعية (AVG)' : 'AV Graft (AVG)'}</option>
+                <option value="Permcath">{isRtl ? 'قسطرة مستديمة (Permcath)' : 'Permcath'}</option>
+                <option value="Mahurkar">{isRtl ? 'قسطرة مؤقتة (Mahurkar)' : 'Mahurkar'}</option>
+              </select>
+            </div>
+
+            {/* Daily Fluid Limit */}
+            <div className="md:col-span-3">
+              <Input
+                label={isRtl ? 'الحد الأقصى اليومي للسوائل (مليلتر - اختياري)' : 'Daily Fluid Allowance (mL - Optional)'}
                 type="number"
                 value={fluidLimit}
                 onChange={(e) => setFluidLimit(e.target.value)}
                 placeholder="1000"
                 error={errors.fluidLimit}
-                helperText={isRtl ? 'الكمية الافتراضية الموصى بها هي 1000 مل يومياً' : 'Standard target is typically 1000 mL/day'}
               />
             </div>
           </div>
         </Card>
 
-        {/* Section 2: Patient App Credentials */}
+        {/* Section 2: Patient App Credentials with Auto-Generation */}
         <Card
-          title={isRtl ? 'بيانات تسجيل الدخول لتطبيق المريض' : 'Patient App Account Credentials'}
-          subtitle={isRtl ? 'يستخدمها المريض لتسجيل الدخول في تطبيق DialyCare' : 'Login credentials for patient smartphone interface'}
+          title={
+            <div className="flex items-center justify-between">
+              <span>{isRtl ? 'بيانات حساب دخول المريض' : 'Patient Login Account'}</span>
+              <button
+                type="button"
+                onClick={handleAutoGenerate}
+                className="text-xs px-3 py-1.5 bg-blue-50 text-[#1e6bb8] hover:bg-blue-100 rounded-lg font-bold border border-blue-200 transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>{isRtl ? 'توليد تلقائي لبيانات الدخول' : 'Auto-Generate Credentials'}</span>
+              </button>
+            </div>
+          }
+          subtitle={
+            isRtl
+              ? 'اسم المستخدم = رقم الهاتف، وكلمة المرور = رقم الهاتف + 3 أحرف عشوائية غير مكررة'
+              : 'Username = Phone number, Password = Phone + 3 random distinct letters'
+          }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label={isRtl ? 'اسم المستخدم' : 'Username'}
+              label={isRtl ? 'اسم المستخدم (رقم الهاتف)' : 'Username (Phone)'}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. ahmed2026"
+              placeholder="01012345678"
               error={errors.username}
               required
             />
 
-            <Input
-              label={isRtl ? 'كلمة المرور' : 'Password (min 6 characters)'}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              error={errors.password}
-              required
-            />
+            <div>
+              <Input
+                label={isRtl ? 'كلمة المرور' : 'Password (min 6 characters)'}
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="01012345678aBc"
+                error={errors.password}
+                required
+              />
+              {generatedSuffix && (
+                <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                  ✓ {isRtl ? `تم إلحاق الرمز العشوائي: [${generatedSuffix}]` : `Random suffix appended: [${generatedSuffix}]`}
+                </p>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -448,11 +567,105 @@ export default function NewPatientPage() {
             type="submit"
             isLoading={submitting}
             leftIcon={<CheckCircleIcon className="w-4 h-4" />}
+            className="font-bold shadow-md"
           >
-            {tAdmin('createAccount') || (isRtl ? 'إنشاء حساب المريض' : 'Create Patient Profile')}
+            {tAdmin('createAccount') || (isRtl ? 'إنشاء وتفعيل حساب المريض' : 'Create & Activate Account')}
           </Button>
         </div>
       </form>
+
+      {/* Generated Credentials Clinical Access Card Modal */}
+      {createdCredentialsModal && (
+        <Modal
+          isOpen={Boolean(createdCredentialsModal)}
+          onClose={() => router.push(`/${locale}/admin/patients`)}
+          title={isRtl ? 'بطاقة بيانات دخول المريض (DialyCare Access Card)' : 'Patient DialyCare Access Card'}
+        >
+          <div className="space-y-4">
+            <div className="p-4 bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between border-b border-blue-200/80 pb-2">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {createdCredentialsModal.patient.fullNameAr || createdCredentialsModal.patient.fullName}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {createdCredentialsModal.patient.dialysisSchedule === 'SMW'
+                      ? (isRtl ? 'جدول: السبت - الإثنين - الأربعاء' : 'Schedule: Sat - Mon - Wed')
+                      : (isRtl ? 'جدول: الأحد - الثلاثاء - الخميس' : 'Schedule: Sun - Tue - Thu')}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-[#1e6bb8] text-white flex items-center justify-center font-bold text-sm">
+                  DC
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-blue-100">
+                  <span className="text-slate-500 block mb-0.5">{isRtl ? 'اسم المستخدم:' : 'Username:'}</span>
+                  <span className="font-mono font-bold text-slate-800 text-sm" dir="ltr">
+                    {createdCredentialsModal.user.username}
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-blue-100">
+                  <span className="text-slate-500 block mb-0.5">{isRtl ? 'كلمة المرور:' : 'Password:'}</span>
+                  <span className="font-mono font-bold text-[#1e6bb8] text-sm" dir="ltr">
+                    {createdCredentialsModal.rawPassword}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
+                <span>{isRtl ? 'الرابط:' : 'Link:'} dialycare.vercel.app</span>
+                <span className="text-emerald-700 font-semibold">{isRtl ? '● الحساب مفعّل' : '● Account Active'}</span>
+              </div>
+            </div>
+
+            {copiedNotification && (
+              <div className="p-2 bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-800 text-xs text-center font-semibold animate-in fade-in">
+                {isRtl ? '✓ تم نسخ بيانات الدخول إلى الحافظة' : '✓ Credentials copied to clipboard'}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyCredentials}
+                className="font-semibold text-xs"
+              >
+                📋 {isRtl ? 'نسخ بيانات الدخول' : 'Copy Credentials'}
+              </Button>
+
+              <button
+                type="button"
+                onClick={handleWhatsAppShare}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+              >
+                💬 {isRtl ? 'إرسال عبر واتساب للمريض' : 'Share via WhatsApp'}
+              </button>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => window.print()}
+                className="font-semibold text-xs"
+              >
+                🖨️ {isRtl ? 'طباعة البطاقة' : 'Print Access Card'}
+              </Button>
+
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => router.push(`/${locale}/admin/patients`)}
+                className="font-bold text-xs"
+              >
+                ✓ {isRtl ? 'تم / الذهاب للمرضى' : 'Done / Go to Directory'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

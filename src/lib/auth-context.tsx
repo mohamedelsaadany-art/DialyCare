@@ -1,143 +1,78 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
-import type { User, Patient } from './types';
-import { addPatient } from './data-store';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import type { User, Patient, AccountStatus } from './types';
+import {
+  addPatient,
+  getAuthAccounts,
+  saveAuthAccounts,
+  getAdminPassword,
+  registerDoctorAccount,
+  registerPatientAccount,
+  DEFAULT_ADMIN_USER,
+  DEFAULT_PATIENT_USER,
+  DEFAULT_PATIENT2_USER,
+} from './data-store';
 import { v4 as uuidv4 } from 'uuid';
 
-interface StoredAccount {
-  username: string;
-  password: string;
-  user: User;
+export interface LoginResult {
+  success: boolean;
+  status?: AccountStatus;
+  error?: string;
+  user?: User;
+  rejectionReason?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string, rememberMe?: boolean) => Promise<boolean>;
+  login: (identifier: string, password: string, rememberMe?: boolean) => Promise<LoginResult>;
   logout: () => void;
   isAdmin: boolean;
+  isDoctor: boolean;
+  isStaff: boolean;
+  registerDoctor: (data: Parameters<typeof registerDoctorAccount>[0]) => Promise<User>;
+  registerPatient: (data: Parameters<typeof registerPatientAccount>[0]) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const CURRENT_USER_KEY = 'DIALYCARE_CURRENT_USER';
-const AUTH_ACCOUNTS_KEY = 'DIALYCARE_AUTH_ACCOUNTS';
-
-const DEFAULT_ADMIN_USER: User = {
-  uid: 'admin-1',
-  role: 'admin',
-  username: 'admin',
-  displayName: 'Dr. System Administrator',
-  language: 'en',
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
-
-const DEFAULT_PATIENT_USER: User = {
-  uid: 'patient-1',
-  role: 'patient',
-  username: 'patient1',
-  displayName: 'Ahmed Mahmoud (أحمد محمود)',
-  language: 'ar',
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
-
-const DEFAULT_PATIENT2_USER: User = {
-  uid: 'patient-2',
-  role: 'patient',
-  username: 'patient2',
-  displayName: 'Fatima El-Sayed (فاطمة السيد)',
-  language: 'ar',
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
-
-const DEFAULT_DEMO_ACCOUNTS: StoredAccount[] = [
-  { username: 'admin', password: 'admin123', user: DEFAULT_ADMIN_USER },
-  { username: 'patient1', password: 'patient123', user: DEFAULT_PATIENT_USER },
-  { username: 'patient2', password: 'patient123', user: DEFAULT_PATIENT2_USER },
-];
-
-function getStoredAccounts(): StoredAccount[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(AUTH_ACCOUNTS_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is StoredAccount =>
-        Boolean(item) &&
-        typeof item === 'object' &&
-        typeof (item as StoredAccount).username === 'string' &&
-        typeof (item as StoredAccount).password === 'string' &&
-        Boolean((item as StoredAccount).user) &&
-        typeof (item as StoredAccount).user.uid === 'string'
-    );
-  } catch {
-    return [];
-  }
-}
-
-function saveStoredAccounts(accounts: StoredAccount[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
-  } catch (error) {
-    console.error('Failed to save auth accounts to localStorage:', error);
-  }
-}
-
-function ensureDefaultDemoAccounts(): StoredAccount[] {
-  const existing = getStoredAccounts();
-  if (typeof window === 'undefined') return existing;
-
-  const existingUsernames = new Set(
-    existing.map((acc) => acc.username.toLowerCase())
-  );
-  let modified = false;
-  const merged = [...existing];
-
-  for (const demoAcc of DEFAULT_DEMO_ACCOUNTS) {
-    if (!existingUsernames.has(demoAcc.username.toLowerCase())) {
-      merged.push(demoAcc);
-      existingUsernames.add(demoAcc.username.toLowerCase());
-      modified = true;
-    }
-  }
-
-  if (modified || window.localStorage.getItem(AUTH_ACCOUNTS_KEY) === null) {
-    saveStoredAccounts(merged);
-  }
-
-  return merged;
-}
 
 /**
- * Admin helper to register new patient user accounts
+ * Admin helper to register new patient user accounts in clinic
  */
 export function addPatientAccount(
   username: string,
   password: string,
   patientData: Partial<Patient> & { language?: 'ar' | 'en' }
-): User {
+): { user: User; credentials?: { username: string; password: string } } {
   const patientId = patientData.id || uuidv4();
   const trimmedUsername = username.trim();
+  const phone = patientData.phone?.replace(/[\s\-\(\)\+]/g, '').trim() || trimmedUsername;
+
   const newUser: User = {
     uid: patientId,
     role: 'patient',
+    status: 'active', // Clinical in-clinic registration is pre-approved
     username: trimmedUsername,
+    phone,
     displayName: patientData.fullName || trimmedUsername,
     language: patientData.language || 'ar',
     createdAt: new Date().toISOString(),
+    registeredAt: new Date().toISOString(),
   };
 
   const newPatient: Patient = {
     id: patientId,
     fullName: patientData.fullName || trimmedUsername,
     fullNameAr: patientData.fullNameAr || patientData.fullName || trimmedUsername,
-    phone: patientData.phone || '',
+    phone,
+    username: trimmedUsername,
     dialysisSchedule: (patientData.dialysisSchedule === 'TTS' || patientData.dialysisSchedule === 'STT') ? 'STT' : 'SMW',
     reminderSchedule: patientData.reminderSchedule || 'standard',
+    dryWeightKg: patientData.dryWeightKg,
+    accessType: patientData.accessType,
     isActive: patientData.isActive ?? true,
     createdAt: patientData.createdAt || new Date().toISOString(),
   };
@@ -146,51 +81,93 @@ export function addPatientAccount(
   addPatient(newPatient);
 
   // Store credentials
-  const accounts = getStoredAccounts();
+  const accounts = getAuthAccounts();
   const filtered = accounts.filter(
-    (acc) => acc.username.toLowerCase() !== trimmedUsername.toLowerCase()
+    (acc) =>
+      acc.username.toLowerCase() !== trimmedUsername.toLowerCase() &&
+      (!acc.phone || acc.phone !== phone)
   );
   filtered.push({
     username: trimmedUsername,
+    phone,
     password,
     user: newUser,
   });
-  saveStoredAccounts(filtered);
+  saveAuthAccounts(filtered);
 
-  return newUser;
+  return { user: newUser, credentials: { username: trimmedUsername, password } };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Load existing session and ensure default demo accounts on client mount
-  useEffect(() => {
+  // Load existing session on client mount
+  const syncSession = useCallback(() => {
+    if (typeof window === 'undefined') return;
     try {
-      ensureDefaultDemoAccounts();
       const storedUser =
         window.localStorage.getItem(CURRENT_USER_KEY) ||
         window.sessionStorage.getItem(CURRENT_USER_KEY);
       if (storedUser) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setUser(JSON.parse(storedUser) as User);
+        const parsed = JSON.parse(storedUser) as User;
+        // Verify active status from accounts
+        const accounts = getAuthAccounts();
+        const found = accounts.find((a) => a.user.uid === parsed.uid);
+        if (found) {
+          if (found.user.status === 'rejected') {
+            window.localStorage.removeItem(CURRENT_USER_KEY);
+            window.sessionStorage.removeItem(CURRENT_USER_KEY);
+            setUser(null);
+            return;
+          }
+          setUser(found.user);
+          return;
+        }
+        setUser(parsed);
       }
     } catch (error) {
-      console.error('Failed to load user from localStorage/sessionStorage:', error);
-    } finally {
-      setLoading(false);
+      console.error('Failed to load user from session storage:', error);
     }
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      syncSession();
+      setLoading(false);
+    }, 0);
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === null || e.key === CURRENT_USER_KEY || e.key === 'DIALYCARE_AUTH_ACCOUNTS') {
+        syncSession();
+      }
+    };
+    const handleCustomUpdate = () => {
+      syncSession();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('dialycare_users_updated', handleCustomUpdate);
+    window.addEventListener('dialycare_approvals_updated', handleCustomUpdate);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('dialycare_users_updated', handleCustomUpdate);
+      window.removeEventListener('dialycare_approvals_updated', handleCustomUpdate);
+    };
+  }, [syncSession]);
+
   const login = async (
-    username: string,
+    identifier: string,
     password: string,
     rememberMe = true
-  ): Promise<boolean> => {
+  ): Promise<LoginResult> => {
     setLoading(true);
     try {
-      const cleanUsername = username.trim();
-      const cleanPassword = password;
+      const cleanId = identifier.trim();
+      const cleanPhone = cleanId.replace(/[\s\-\(\)\+]/g, '');
+      const cleanPass = password;
 
       const persistSession = (targetUser: User) => {
         setUser(targetUser);
@@ -205,38 +182,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
-      const accounts = ensureDefaultDemoAccounts();
-
-      // Check Hardcoded Admin Account (case-insensitive username)
-      if (cleanUsername.toLowerCase() === 'admin' && cleanPassword === 'admin123') {
+      // 1. Check Super Admin Credentials (Dynamic password support)
+      const currentAdminPassword = getAdminPassword();
+      if (cleanId.toLowerCase() === 'admin' && cleanPass === currentAdminPassword) {
         persistSession(DEFAULT_ADMIN_USER);
-        return true;
+        return { success: true, status: 'active', user: DEFAULT_ADMIN_USER };
       }
 
-      // Check Hardcoded Demo Patient Accounts (case-insensitive username)
-      if (cleanUsername.toLowerCase() === 'patient1' && cleanPassword === 'patient123') {
-        persistSession(DEFAULT_PATIENT_USER);
-        return true;
-      }
+      // 2. Check Stored Accounts (by username, phone, or email)
+      const accounts = getAuthAccounts();
+      const match = accounts.find((acc) => {
+        const u = acc.user;
+        const matchesUsername = acc.username.toLowerCase() === cleanId.toLowerCase();
+        const matchesPhone = Boolean(
+          cleanPhone &&
+          ((acc.phone && acc.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone) ||
+            (u.phone && u.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone))
+        );
+        const matchesEmail = Boolean(u.email && u.email.toLowerCase() === cleanId.toLowerCase());
+        const passwordMatches = acc.password === cleanPass;
 
-      if (cleanUsername.toLowerCase() === 'patient2' && cleanPassword === 'patient123') {
-        persistSession(DEFAULT_PATIENT2_USER);
-        return true;
-      }
-
-      // Check dynamically stored accounts
-      const match = accounts.find(
-        (acc) =>
-          acc.username.toLowerCase() === cleanUsername.toLowerCase() &&
-          acc.password === cleanPassword
-      );
+        return (matchesUsername || matchesPhone || matchesEmail) && passwordMatches;
+      });
 
       if (match) {
+        const userStatus = match.user.status || 'active';
+        if (userStatus === 'pending') {
+          return { success: false, status: 'pending', user: match.user };
+        }
+        if (userStatus === 'rejected') {
+          return {
+            success: false,
+            status: 'rejected',
+            rejectionReason: match.user.rejectionReason,
+            user: match.user,
+          };
+        }
         persistSession(match.user);
-        return true;
+        return { success: true, status: 'active', user: match.user };
       }
 
-      return false;
+      // Check default fallback demo patients
+      if (cleanId.toLowerCase() === 'patient1' && cleanPass === 'patient123') {
+        persistSession(DEFAULT_PATIENT_USER);
+        return { success: true, status: 'active', user: DEFAULT_PATIENT_USER };
+      }
+      if (cleanId.toLowerCase() === 'patient2' && cleanPass === 'patient123') {
+        persistSession(DEFAULT_PATIENT2_USER);
+        return { success: true, status: 'active', user: DEFAULT_PATIENT2_USER };
+      }
+
+      return { success: false, error: 'invalidCredentials' };
     } finally {
       setLoading(false);
     }
@@ -250,7 +246,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const registerDoctor = async (data: Parameters<typeof registerDoctorAccount>[0]): Promise<User> => {
+    setLoading(true);
+    try {
+      return registerDoctorAccount(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const registerPatient = async (data: Parameters<typeof registerPatientAccount>[0]): Promise<User> => {
+    setLoading(true);
+    try {
+      return registerPatientAccount(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isAdmin = useMemo(() => user?.role === 'admin', [user]);
+  const isDoctor = useMemo(() => user?.role === 'doctor', [user]);
+  const isStaff = useMemo(() => user?.role === 'admin' || user?.role === 'doctor', [user]);
 
   const value = useMemo(
     () => ({
@@ -259,8 +275,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       isAdmin,
+      isDoctor,
+      isStaff,
+      registerDoctor,
+      registerPatient,
     }),
-    [user, loading, isAdmin]
+    [user, loading, isAdmin, isDoctor, isStaff]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

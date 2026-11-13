@@ -15,12 +15,22 @@ import type {
   PatientLabRecord,
   AdherenceSurveySubmission,
   PatientSurveyStatus,
+  User,
+  GeneratedPatientCredentials,
+  PatientRegistrationProfile,
+  Language,
 } from './types';
 import { getCycleInfo } from './questionnaire-data';
 
 import defaultCoachingTips from '@/data/coaching-tips.json';
 import defaultReminderTemplates from '@/data/reminder-templates.json';
 import defaultDietChecklist from '@/data/diet-checklist.json';
+
+// Administrator contacts
+export const ADMIN_CONFIG = {
+  primaryPhone: '+201552885823', // User's primary admin contact during test
+  seniorResidentPhone: '+201080641670', // Senior Resident contact for handover
+};
 
 // LocalStorage Keys prefixed with DIALYCARE_
 export const STORAGE_KEYS = {
@@ -37,6 +47,8 @@ export const STORAGE_KEYS = {
   DIALYSIS_SESSIONS: 'DIALYCARE_DIALYSIS_SESSIONS',
   LAB_RESULTS: 'DIALYCARE_LAB_RESULTS',
   ADHERENCE_SURVEYS: 'DIALYCARE_ADHERENCE_SURVEYS',
+  AUTH_ACCOUNTS: 'DIALYCARE_AUTH_ACCOUNTS',
+  ADMIN_CREDENTIALS: 'DIALYCARE_ADMIN_CREDENTIALS',
 } as const;
 
 // Safe LocalStorage helpers with deep copy to prevent in-memory mutation
@@ -523,6 +535,11 @@ export function initDataStore(): void {
   // Treatment Adherence Surveys
   if (!window.localStorage.getItem(STORAGE_KEYS.ADHERENCE_SURVEYS)) {
     writeStorage(STORAGE_KEYS.ADHERENCE_SURVEYS, []);
+  }
+
+  // Dynamic Admin credentials
+  if (!window.localStorage.getItem(STORAGE_KEYS.ADMIN_CREDENTIALS)) {
+    writeStorage(STORAGE_KEYS.ADMIN_CREDENTIALS, 'admin123');
   }
 }
 
@@ -1328,4 +1345,277 @@ export function sendSurveyReminderNotification(
 
   return addNotification(notif);
 }
+
+// ==========================================
+// R8: AUTHENTICATION, APPROVALS & CREDENTIAL GENERATOR
+// ==========================================
+
+export interface StoredAccount {
+  username: string;
+  phone?: string;
+  password: string;
+  user: User;
+}
+
+export const DEFAULT_ADMIN_USER: User = {
+  uid: 'admin-1',
+  role: 'admin',
+  username: 'admin',
+  displayName: 'Dr. System Administrator',
+  language: 'en',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_PATIENT_USER: User = {
+  uid: 'patient-1',
+  role: 'patient',
+  username: 'patient1',
+  displayName: 'Ahmed Mahmoud (أحمد محمود)',
+  phone: '01012345678',
+  language: 'ar',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_PATIENT2_USER: User = {
+  uid: 'patient-2',
+  role: 'patient',
+  username: 'patient2',
+  displayName: 'Fatima El-Sayed (فاطمة السيد)',
+  phone: '01098765432',
+  language: 'ar',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+/**
+ * Auto-generates patient credentials:
+ * - Username: Patient phone number
+ * - Password: Phone number + 3 distinct random letters without overlap (safe alphabet)
+ */
+export function generatePatientCredentials(phone: string): GeneratedPatientCredentials {
+  const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, '').trim() || '01000000000';
+  
+  // Safe character set excluding visually confusing glyphs (0, O, 1, l, I)
+  const safeLetters = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ';
+  const pickedLetters: string[] = [];
+  
+  while (pickedLetters.length < 3) {
+    const randomIndex = Math.floor(Math.random() * safeLetters.length);
+    const char = safeLetters[randomIndex];
+    if (!pickedLetters.includes(char)) {
+      pickedLetters.push(char);
+    }
+  }
+  
+  const suffix = pickedLetters.join('');
+  const password = `${cleanPhone}${suffix}`;
+  
+  return {
+    username: cleanPhone,
+    password,
+    phone: cleanPhone,
+    randomSuffix: suffix,
+  };
+}
+
+export function getAdminPassword(): string {
+  initDataStore();
+  return readStorage<string>(STORAGE_KEYS.ADMIN_CREDENTIALS, 'admin123');
+}
+
+export function setAdminPassword(newPassword: string): boolean {
+  initDataStore();
+  const trimmed = newPassword.trim();
+  if (trimmed.length < 6) return false;
+  writeStorage(STORAGE_KEYS.ADMIN_CREDENTIALS, trimmed);
+  dispatchStorageEvent('storage');
+  return true;
+}
+
+export function getAuthAccounts(): StoredAccount[] {
+  initDataStore();
+  const stored = readStorage<StoredAccount[]>(STORAGE_KEYS.AUTH_ACCOUNTS, []);
+  if (!stored || stored.length === 0) {
+    const initialAccounts: StoredAccount[] = [
+      { username: 'admin', password: getAdminPassword(), user: DEFAULT_ADMIN_USER },
+      { username: 'patient1', phone: '01012345678', password: 'patient123', user: DEFAULT_PATIENT_USER },
+      { username: 'patient2', phone: '01098765432', password: 'patient123', user: DEFAULT_PATIENT2_USER },
+    ];
+    writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, initialAccounts);
+    return initialAccounts;
+  }
+
+  // Ensure Admin password is up to date in memory
+  const currentAdminPass = getAdminPassword();
+  const adminAcc = stored.find((a) => a.username.toLowerCase() === 'admin');
+  if (adminAcc && adminAcc.password !== currentAdminPass) {
+    adminAcc.password = currentAdminPass;
+    writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, stored);
+  }
+
+  return stored;
+}
+
+export function saveAuthAccounts(accounts: StoredAccount[]): void {
+  initDataStore();
+  writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, accounts);
+  dispatchStorageEvent('dialycare_users_updated');
+  dispatchStorageEvent('dialycare_approvals_updated');
+  dispatchStorageEvent('storage');
+}
+
+export function getPendingApprovals(): User[] {
+  const accounts = getAuthAccounts();
+  const pendingUsers = accounts
+    .map((acc) => acc.user)
+    .filter((u) => u.status === 'pending');
+
+  return [...pendingUsers].sort((a, b) => {
+    const timeA = new Date(a.registeredAt || a.createdAt).getTime();
+    const timeB = new Date(b.registeredAt || b.createdAt).getTime();
+    return timeB - timeA;
+  });
+}
+
+export function approveUserRegistration(uid: string, reviewerName: string = 'Super Admin'): User | null {
+  const accounts = getAuthAccounts();
+  const targetAcc = accounts.find((a) => a.user.uid === uid);
+  if (!targetAcc) return null;
+
+  targetAcc.user.status = 'active';
+  targetAcc.user.reviewedAt = new Date().toISOString();
+  targetAcc.user.reviewedBy = reviewerName;
+
+  // If patient, auto-enroll into official Patient registry
+  if (targetAcc.user.role === 'patient') {
+    const profile = targetAcc.user.patientProfile;
+    const existingPatient = getPatients().find((p) => p.id === uid);
+    if (!existingPatient) {
+      const newPatient: Patient = {
+        id: uid,
+        fullName: targetAcc.user.displayName,
+        fullNameAr: targetAcc.user.displayName,
+        phone: targetAcc.user.phone || targetAcc.username,
+        username: targetAcc.username,
+        dialysisSchedule: profile?.dialysisSchedule || 'SMW',
+        dryWeightKg: profile?.dryWeightKg || 70,
+        accessType: profile?.accessType || 'AVF',
+        reminderSchedule: 'standard',
+        isActive: true,
+        gender: profile?.gender || 'male',
+        avatarId: profile?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
+        createdAt: targetAcc.user.registeredAt || new Date().toISOString(),
+      };
+      addPatient(newPatient);
+    }
+  }
+
+  saveAuthAccounts(accounts);
+  return cloneValue(targetAcc.user);
+}
+
+export function rejectUserRegistration(uid: string, reason: string, reviewerName: string = 'Super Admin'): User | null {
+  const accounts = getAuthAccounts();
+  const targetAcc = accounts.find((a) => a.user.uid === uid);
+  if (!targetAcc) return null;
+
+  targetAcc.user.status = 'rejected';
+  targetAcc.user.rejectionReason = reason;
+  targetAcc.user.reviewedAt = new Date().toISOString();
+  targetAcc.user.reviewedBy = reviewerName;
+
+  saveAuthAccounts(accounts);
+  return cloneValue(targetAcc.user);
+}
+
+export function registerDoctorAccount(data: {
+  fullName: string;
+  phone: string;
+  email?: string;
+  username: string;
+  password: string;
+  specialty?: string;
+  hospital?: string;
+  idCardDataUrl?: string;
+  language?: Language;
+}): User {
+  const accounts = getAuthAccounts();
+  const cleanUsername = data.username.trim();
+  const cleanPhone = data.phone.trim();
+  const uid = uuidv4();
+  const now = new Date().toISOString();
+
+  const newUser: User = {
+    uid,
+    role: 'doctor',
+    status: 'pending',
+    username: cleanUsername,
+    phone: cleanPhone,
+    email: data.email?.trim(),
+    displayName: data.fullName.trim(),
+    specialty: data.specialty?.trim() || 'طبيب أمراض كلى وغسيل كلوي',
+    hospital: data.hospital?.trim() || 'وحدة الغسيل الكلوي',
+    idCardDataUrl: data.idCardDataUrl,
+    language: data.language || 'ar',
+    registeredAt: now,
+    createdAt: now,
+  };
+
+  const filtered = accounts.filter(
+    (a) => a.username.toLowerCase() !== cleanUsername.toLowerCase() && a.phone !== cleanPhone
+  );
+
+  filtered.push({
+    username: cleanUsername,
+    phone: cleanPhone,
+    password: data.password,
+    user: newUser,
+  });
+
+  saveAuthAccounts(filtered);
+  return cloneValue(newUser);
+}
+
+export function registerPatientAccount(data: {
+  fullName: string;
+  phone: string;
+  password: string;
+  profile: PatientRegistrationProfile;
+  language?: Language;
+}): User {
+  const accounts = getAuthAccounts();
+  const cleanPhone = data.phone.replace(/[\s\-\(\)\+]/g, '').trim();
+  const uid = uuidv4();
+  const now = new Date().toISOString();
+
+  const newUser: User = {
+    uid,
+    role: 'patient',
+    status: 'pending',
+    username: cleanPhone,
+    phone: cleanPhone,
+    displayName: data.fullName.trim(),
+    language: data.language || 'ar',
+    patientProfile: data.profile,
+    registeredAt: now,
+    createdAt: now,
+  };
+
+  const filtered = accounts.filter(
+    (a) => a.username.toLowerCase() !== cleanPhone.toLowerCase() && a.phone !== cleanPhone
+  );
+
+  filtered.push({
+    username: cleanPhone,
+    phone: cleanPhone,
+    password: data.password,
+    user: newUser,
+  });
+
+  saveAuthAccounts(filtered);
+  return cloneValue(newUser);
+}
+
 
