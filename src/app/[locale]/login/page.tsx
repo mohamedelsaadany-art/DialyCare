@@ -17,7 +17,7 @@ export default function LoginPage() {
   const locale = useLocale();
   const router = useRouter();
   const isRtl = locale === 'ar';
-  const { user, login, registerDoctor, registerStaff, registerPatient, loading: authLoading } = useAuth();
+  const { user, login, registerStaff, registerPatient, loading: authLoading } = useAuth();
 
   // Active Tab: 'signin' | 'signup'
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');

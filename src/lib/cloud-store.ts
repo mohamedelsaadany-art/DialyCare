@@ -1,9 +1,8 @@
 import { put, list } from '@vercel/blob';
-import type { StoredAccount, Patient, AccountStatus, User } from './types';
+import type { StoredAccount, Patient } from './types';
 import { DEFAULT_ADMIN_USER, DEFAULT_PATIENT_USER, DEFAULT_PATIENT2_USER, getAdminPassword } from './data-store';
 
 const ACCOUNTS_BLOB_PATH = 'dialycare_cloud_accounts.json';
-const PATIENTS_BLOB_PATH = 'dialycare_cloud_patients.json';
 
 // In-memory fallback for local dev / offline environments
 let memoryAccounts: StoredAccount[] = [
@@ -11,9 +10,6 @@ let memoryAccounts: StoredAccount[] = [
   { username: 'patient1', phone: '01012345678', password: 'patient123', user: DEFAULT_PATIENT_USER },
   { username: 'patient2', phone: '01098765432', password: 'patient123', user: DEFAULT_PATIENT2_USER },
 ];
-
-let cachedBlobAccountsUrl: string | null = null;
-let cachedBlobPatientsUrl: string | null = null;
 
 function sanitizeAccount(acc: StoredAccount): StoredAccount {
   const isSuperAdmin = acc.username.toLowerCase() === 'admin' || acc.user.role === 'admin';
@@ -79,12 +75,11 @@ export async function saveCloudAccounts(accounts: StoredAccount[]): Promise<void
   }
 
   try {
-    const res = await put(ACCOUNTS_BLOB_PATH, JSON.stringify(sanitized, null, 2), {
+    await put(ACCOUNTS_BLOB_PATH, JSON.stringify(sanitized, null, 2), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,
     });
-    cachedBlobAccountsUrl = res.url;
   } catch (error) {
     console.warn('[CloudStore] Failed to write accounts to Vercel Blob:', error);
   }

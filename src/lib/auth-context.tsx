@@ -223,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 2. Check Stored Accounts (by username, phone, or email)
-      let accounts = getAuthAccounts();
+      const accounts = getAuthAccounts();
       const findMatchingAccount = (accList: typeof accounts) =>
         accList.find((acc) => {
           const u = acc.user;

@@ -6,7 +6,9 @@ import { getCloudAccounts } from '@/lib/cloud-store';
 export async function GET(request?: Request) {
   try {
     // Access searchParams if request is provided to ensure dynamic evaluation
-    const _t = request?.url ? new URL(request.url).searchParams.get('t') : null;
+    if (request?.url) {
+      new URL(request.url).searchParams.get('t');
+    }
     const accounts = await getCloudAccounts();
     return NextResponse.json({
       success: true,

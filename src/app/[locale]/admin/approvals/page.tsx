@@ -58,16 +58,18 @@ export default function RegistrationApprovalsPage() {
   }, []);
 
   useEffect(() => {
-    // Initial fetch
-    loadData();
+    let mounted = true;
+    const timer = setTimeout(() => {
+      if (mounted) void loadData();
+    }, 0);
 
     // Auto-poll cloud every 8 seconds for new cross-device staff registrations
     const pollInterval = setInterval(() => {
-      loadData(false);
+      void loadData(false);
     }, 8000);
 
-    const handleFocus = () => loadData(false);
-    const handleUpdate = () => loadData(false);
+    const handleFocus = () => void loadData(false);
+    const handleUpdate = () => void loadData(false);
 
     window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleUpdate);
@@ -75,6 +77,8 @@ export default function RegistrationApprovalsPage() {
     window.addEventListener('dialycare_users_updated', handleUpdate);
 
     return () => {
+      mounted = false;
+      clearTimeout(timer);
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleUpdate);

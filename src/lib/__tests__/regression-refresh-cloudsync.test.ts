@@ -55,21 +55,14 @@ import {
   getAuthAccounts,
   saveAuthAccounts,
   getAdminPassword,
-  approveUserRegistration,
-  rejectUserRegistration,
-  registerDoctorAccount,
-  registerPatientAccount,
   getPatients,
-  addPatient,
   syncCloudAccounts,
   DEFAULT_ADMIN_USER,
 } from '../data-store';
 import {
   getCloudAccounts,
   saveCloudAccounts,
-  upsertCloudAccount,
   approveCloudAccount,
-  rejectCloudAccount,
 } from '../cloud-store';
 import { POST as registerRoute } from '../../app/api/auth/register/route';
 import { GET as accountsRoute } from '../../app/api/auth/accounts/route';
