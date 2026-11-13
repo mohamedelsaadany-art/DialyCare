@@ -369,9 +369,36 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     count();
     assert.strictEqual(patRegData.user.role, 'patient');
     count();
-    assert.strictEqual(patRegData.user.status, 'pending');
+    assert.strictEqual(patRegData.user.status, 'active', 'Patient registration status is active immediately');
     count();
     const cloudPatUid = patRegData.user.uid;
+
+    // Register a Nurse via /api/auth/register (Staff approval required)
+    const nurseRegReq = new Request('http://localhost:3000/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'nurse',
+        data: {
+          fullName: 'ممرضة منى شاكر',
+          username: 'nurse_mona_cloud',
+          phone: '+201099881122',
+          role: 'nurse',
+          password: 'CloudNursePass2026',
+        },
+      }),
+    });
+    const nurseRegRes = await registerRoute(nurseRegReq);
+    assert.strictEqual(nurseRegRes.status, 200, 'Nurse registration API returns 200');
+    count();
+    const nurseRegData = await nurseRegRes.json();
+    assert.strictEqual(nurseRegData.success, true);
+    count();
+    assert.strictEqual(nurseRegData.user.role, 'nurse');
+    count();
+    assert.strictEqual(nurseRegData.user.status, 'pending', 'Nurse registration status is pending');
+    count();
+    const cloudNurseUid = nurseRegData.user.uid;
 
     // Verify clinical profile received in registration response
     assert.deepStrictEqual(patRegData.user.patientProfile.viralMarkers, {
@@ -398,24 +425,29 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     assert.ok(Array.isArray(accountsData.accounts), 'accountsData.accounts is array');
     count();
 
-    // Verify both newly registered accounts are in the cloud accounts list
+    // Verify registrations are in the cloud accounts list
     const foundCloudDoc = accountsData.users.find((u: User) => u.uid === cloudDocUid);
+    const foundCloudNurse = accountsData.users.find((u: User) => u.uid === cloudNurseUid);
     const foundCloudPat = accountsData.users.find((u: User) => u.uid === cloudPatUid);
     assert.ok(foundCloudDoc, 'Doctor registration present in /api/auth/accounts');
     count();
+    assert.ok(foundCloudNurse, 'Nurse registration present in /api/auth/accounts');
+    count();
     assert.ok(foundCloudPat, 'Patient registration present in /api/auth/accounts');
     count();
-    assert.strictEqual(foundCloudDoc.status, 'pending');
+    assert.strictEqual(foundCloudDoc.status, 'pending', 'Doctor status is pending in accounts queue');
     count();
-    assert.strictEqual(foundCloudPat.status, 'pending');
+    assert.strictEqual(foundCloudNurse.status, 'pending', 'Nurse status is pending in accounts queue');
+    count();
+    assert.strictEqual(foundCloudPat.status, 'active', 'Patient status is active in accounts store');
     count();
 
-    // Test 2.4: API Route /api/auth/approve (Approving Patient with Nephrology Profile Preservation)
+    // Test 2.4: API Route /api/auth/approve (Approving Nurse / Staff member)
     const approveReq = new Request('http://localhost:3000/api/auth/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        uid: cloudPatUid,
+        uid: cloudNurseUid,
         reviewerName: 'Super Admin Dr. Saadany',
       }),
     });
@@ -425,13 +457,19 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     const approveData = await approveRes.json();
     assert.strictEqual(approveData.success, true, 'Approve returns success: true');
     count();
-    assert.strictEqual(approveData.user.status, 'active', 'User transitioned to active');
+    assert.strictEqual(approveData.user.status, 'active', 'Nurse transitioned to active');
     count();
     assert.strictEqual(approveData.user.reviewedBy, 'Super Admin Dr. Saadany', 'Reviewer stamped');
     count();
 
-    // Verify generated newPatient retained ALL clinical nephrology fields intact!
-    const newPat = approveData.newPatient as Patient;
+    // Verify cloud patient approval generates complete Patient entity
+    const cloudPatApproval = await approveCloudAccount(cloudPatUid, 'Super Admin Dr. Saadany');
+    assert.ok(cloudPatApproval.account, 'Patient account found in cloud store');
+    count();
+    assert.strictEqual(cloudPatApproval.account.user.status, 'active');
+    count();
+
+    const newPat = cloudPatApproval.newPatient as Patient;
     assert.ok(newPat, 'newPatient generated on approval');
     count();
     assert.strictEqual(newPat.id, cloudPatUid);

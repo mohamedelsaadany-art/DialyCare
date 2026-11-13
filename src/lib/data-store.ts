@@ -16,6 +16,7 @@ import type {
   AdherenceSurveySubmission,
   PatientSurveyStatus,
   User,
+  UserRole,
   GeneratedPatientCredentials,
   PatientRegistrationProfile,
   Language,
@@ -1593,7 +1594,7 @@ export function getPendingApprovals(): User[] {
   const accounts = getAuthAccounts();
   const pendingUsers = accounts
     .map((acc) => acc.user)
-    .filter((u) => u.status === 'pending');
+    .filter((u) => u.status === 'pending' && u.role !== 'patient');
 
   return [...pendingUsers].sort((a, b) => {
     const timeA = new Date(a.registeredAt || a.createdAt).getTime();
@@ -1675,12 +1676,13 @@ export function rejectUserRegistration(uid: string, reason: string, reviewerName
   return cloneValue(targetAcc.user);
 }
 
-export function registerDoctorAccount(data: {
+export function registerStaffAccount(data: {
   fullName: string;
   phone: string;
   email?: string;
   username: string;
   password: string;
+  role?: 'doctor' | 'nurse' | 'staff';
   specialty?: string;
   hospital?: string;
   idCardDataUrl?: string;
@@ -1691,16 +1693,24 @@ export function registerDoctorAccount(data: {
   const cleanPhone = data.phone.trim();
   const uid = uuidv4();
   const now = new Date().toISOString();
+  const role: UserRole = data.role || 'doctor';
+
+  const defaultSpecialty =
+    role === 'nurse'
+      ? (data.language === 'en' ? 'Hemodialysis Registered Nurse' : 'تمريض غسيل كلوي متخصص')
+      : role === 'staff'
+      ? (data.language === 'en' ? 'Hemodialysis Unit Administrator' : 'إدارة وحدة الغسيل الكلوي')
+      : (data.language === 'en' ? 'Nephrologist / Dialysis Physician' : 'طبيب أمراض كلى وغسيل كلوي');
 
   const newUser: User = {
     uid,
-    role: 'doctor',
+    role,
     status: 'pending',
     username: cleanUsername,
     phone: cleanPhone,
     email: data.email?.trim(),
     displayName: data.fullName.trim(),
-    specialty: data.specialty?.trim() || 'طبيب أمراض كلى وغسيل كلوي',
+    specialty: data.specialty?.trim() || defaultSpecialty,
     hospital: data.hospital?.trim() || 'وحدة الغسيل الكلوي',
     idCardDataUrl: data.idCardDataUrl,
     language: data.language || 'ar',
@@ -1726,11 +1736,15 @@ export function registerDoctorAccount(data: {
     fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'doctor', data }),
+      body: JSON.stringify({ type: role, role, data: { ...data, role } }),
     }).catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
   }
 
   return cloneValue(newUser);
+}
+
+export function registerDoctorAccount(data: Parameters<typeof registerStaffAccount>[0]): User {
+  return registerStaffAccount({ ...data, role: data.role || 'doctor' });
 }
 
 export function registerPatientAccount(data: {
@@ -1748,7 +1762,7 @@ export function registerPatientAccount(data: {
   const newUser: User = {
     uid,
     role: 'patient',
-    status: 'pending',
+    status: 'active', // Patients are immediately active and pre-approved!
     username: cleanPhone,
     phone: cleanPhone,
     displayName: data.fullName.trim(),
@@ -1757,6 +1771,29 @@ export function registerPatientAccount(data: {
     registeredAt: now,
     createdAt: now,
   };
+
+  // Auto-enroll directly into official Patient registry (DIALYCARE_PATIENTS)
+  const existingPatients = getPatients();
+  if (!existingPatients.some((p) => p.id === uid)) {
+    const newPatient: Patient = {
+      id: uid,
+      fullName: data.fullName.trim(),
+      fullNameAr: data.fullName.trim(),
+      phone: cleanPhone,
+      username: cleanPhone,
+      dialysisSchedule: data.profile.dialysisSchedule || 'SMW',
+      dryWeightKg: data.profile.dryWeightKg || 70,
+      accessType: data.profile.accessType || 'AVF',
+      reminderSchedule: 'standard',
+      isActive: true,
+      gender: data.profile.gender || 'male',
+      avatarId: data.profile.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
+      viralMarkers: data.profile.viralMarkers,
+      emergencyContact: data.profile.emergencyContact,
+      createdAt: now,
+    };
+    addPatient(newPatient);
+  }
 
   const filtered = accounts.filter(
     (a) => a.username.toLowerCase() !== cleanPhone.toLowerCase() && a.phone !== cleanPhone

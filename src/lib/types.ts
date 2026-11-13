@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'doctor' | 'patient';
+export type UserRole = 'admin' | 'doctor' | 'nurse' | 'staff' | 'patient';
 
 export type AccountStatus = 'active' | 'pending' | 'rejected';
 

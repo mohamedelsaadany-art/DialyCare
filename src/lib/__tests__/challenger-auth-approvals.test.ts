@@ -56,6 +56,7 @@ import {
   approveUserRegistration,
   rejectUserRegistration,
   registerDoctorAccount,
+  registerStaffAccount,
   registerPatientAccount,
   getPatients,
   ADMIN_CONFIG,
@@ -173,42 +174,54 @@ export async function runAuthApprovalsTests(): Promise<void> {
     const registeredPatient = registerPatientAccount(patData);
     assert.ok(registeredPatient.uid, 'Patient assigned a valid UID');
     assert.strictEqual(registeredPatient.role, 'patient', 'Role is patient');
-    assert.strictEqual(registeredPatient.status, 'pending', 'Self-registered patient initial status is pending');
+    assert.strictEqual(registeredPatient.status, 'active', 'Self-registered patient initial status is active immediately (no approval required)');
     assert.strictEqual(registeredPatient.username, '01223344556', 'Username defaults to clean phone');
     assert.strictEqual(registeredPatient.patientProfile?.dialysisSchedule, 'STT');
     assert.strictEqual(registeredPatient.patientProfile?.dryWeightKg, 68.5);
     assert.strictEqual(registeredPatient.patientProfile?.accessType, 'AVF');
 
-    // ------------------------------------------------------------------------
-    // TEST 5: Pending Review Queue
-    // ------------------------------------------------------------------------
-    console.log('  Testing pending review queue query...');
-    const pendingList = getPendingApprovals();
-    assert.ok(pendingList.length >= 2, 'Pending queue contains at least the newly registered doctor and patient');
-    assert.ok(pendingList.some((u) => u.uid === registeredDoctor.uid), 'Doctor is in pending queue');
-    assert.ok(pendingList.some((u) => u.uid === registeredPatient.uid), 'Patient is in pending queue');
+    // Verify patient was automatically enrolled into DIALYCARE_PATIENTS directory upon registration
+    const activePatients = getPatients();
+    const enrolledPatient = activePatients.find((p) => p.id === registeredPatient.uid);
+    assert.ok(enrolledPatient, 'Patient auto-enrolled into DIALYCARE_PATIENTS immediately');
+    assert.strictEqual(enrolledPatient?.dialysisSchedule, 'STT', 'Schedule persisted to clinical record');
+    assert.strictEqual(enrolledPatient?.dryWeightKg, 68.5, 'Dry weight persisted');
+    assert.strictEqual(enrolledPatient?.accessType, 'AVF', 'Access type persisted');
 
     // ------------------------------------------------------------------------
-    // TEST 6: Super Admin Approval Workflow
+    // TEST 5: Pending Review Queue (Staff & Nurses only)
     // ------------------------------------------------------------------------
-    console.log('  Testing Super Admin Approval for Doctor and Patient...');
+    console.log('  Testing pending review queue query (Staff only, patients excluded)...');
+    // Register a nurse to test staff queue diversity
+    const registeredNurse = registerStaffAccount({
+      fullName: 'فاطمة إبراهيم السيد (ممرضة)',
+      username: 'nurse_fatima_test',
+      phone: '01088776655',
+      role: 'nurse',
+      specialty: 'تمريض غسيل كلوي',
+      password: 'NursePassword2026',
+    });
+    assert.strictEqual(registeredNurse.role, 'nurse');
+    assert.strictEqual(registeredNurse.status, 'pending');
+
+    const pendingList = getPendingApprovals();
+    assert.ok(pendingList.some((u) => u.uid === registeredDoctor.uid), 'Doctor is in pending queue');
+    assert.ok(pendingList.some((u) => u.uid === registeredNurse.uid), 'Nurse is in pending queue');
+    assert.strictEqual(pendingList.some((u) => u.uid === registeredPatient.uid), false, 'Patients are excluded from approvals queue');
+
+    // ------------------------------------------------------------------------
+    // TEST 6: Super Admin Approval Workflow (Doctors & Nurses)
+    // ------------------------------------------------------------------------
+    console.log('  Testing Super Admin Approval for Doctor and Nurse...');
     const approvedDoc = approveUserRegistration(registeredDoctor.uid, 'Super Admin Mohamed');
     assert.ok(approvedDoc, 'approvedDoc must not be null');
     assert.strictEqual(approvedDoc.status, 'active', 'Doctor status transitioned to active');
     assert.strictEqual(approvedDoc.reviewedBy, 'Super Admin Mohamed', 'Reviewer stamped');
     assert.ok(approvedDoc.reviewedAt, 'Review timestamp present');
 
-    const approvedPat = approveUserRegistration(registeredPatient.uid, 'Super Admin Mohamed');
-    assert.ok(approvedPat, 'approvedPat must not be null');
-    assert.strictEqual(approvedPat.status, 'active', 'Patient status transitioned to active');
-
-    // Verify patient was automatically enrolled into DIALYCARE_PATIENTS directory
-    const activePatients = getPatients();
-    const enrolledPatient = activePatients.find((p) => p.id === registeredPatient.uid);
-    assert.ok(enrolledPatient, 'Approved patient auto-enrolled into DIALYCARE_PATIENTS');
-    assert.strictEqual(enrolledPatient?.dialysisSchedule, 'STT', 'Schedule persisted to clinical record');
-    assert.strictEqual(enrolledPatient?.dryWeightKg, 68.5, 'Dry weight persisted');
-    assert.strictEqual(enrolledPatient?.accessType, 'AVF', 'Access type persisted');
+    const approvedNurse = approveUserRegistration(registeredNurse.uid, 'Super Admin Mohamed');
+    assert.ok(approvedNurse, 'approvedNurse must not be null');
+    assert.strictEqual(approvedNurse.status, 'active', 'Nurse status transitioned to active');
 
     // ------------------------------------------------------------------------
     // TEST 7: Super Admin Rejection Workflow

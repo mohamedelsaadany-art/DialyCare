@@ -24,7 +24,7 @@ export default function RegistrationApprovalsPage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'doctors' | 'patients'>('doctors');
+  const [activeTab, setActiveTab] = useState<'all' | 'doctors' | 'nurses' | 'staff'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // ID Card preview modal
@@ -61,7 +61,7 @@ export default function RegistrationApprovalsPage() {
     // Initial fetch
     loadData();
 
-    // Auto-poll cloud every 8 seconds for new cross-device patient registrations
+    // Auto-poll cloud every 8 seconds for new cross-device staff registrations
     const pollInterval = setInterval(() => {
       loadData(false);
     }, 8000);
@@ -130,28 +130,38 @@ export default function RegistrationApprovalsPage() {
     }
   };
 
-  // Filter pending lists
-  const pendingDoctors = useMemo(() => {
+  // Filter pending staff lists (Patients are pre-approved and active automatically)
+  const pendingStaffAll = useMemo(() => {
     return users.filter(
       (u) =>
-        u.role === 'doctor' &&
         u.status === 'pending' &&
+        u.role !== 'patient' &&
         (u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (u.phone && u.phone.includes(searchQuery)) ||
-          u.username.toLowerCase().includes(searchQuery.toLowerCase()))
+          u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (u.specialty && u.specialty.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (u.hospital && u.hospital.toLowerCase().includes(searchQuery.toLowerCase())))
     );
   }, [users, searchQuery]);
 
-  const pendingPatients = useMemo(() => {
-    return users.filter(
-      (u) =>
-        u.role === 'patient' &&
-        u.status === 'pending' &&
-        (u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (u.phone && u.phone.includes(searchQuery)) ||
-          u.username.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }, [users, searchQuery]);
+  const pendingDoctors = useMemo(() => {
+    return pendingStaffAll.filter((u) => u.role === 'doctor');
+  }, [pendingStaffAll]);
+
+  const pendingNurses = useMemo(() => {
+    return pendingStaffAll.filter((u) => u.role === 'nurse');
+  }, [pendingStaffAll]);
+
+  const pendingUnitAdmins = useMemo(() => {
+    return pendingStaffAll.filter((u) => u.role === 'staff' || u.role === 'admin');
+  }, [pendingStaffAll]);
+
+  const displayedStaff = useMemo(() => {
+    if (activeTab === 'doctors') return pendingDoctors;
+    if (activeTab === 'nurses') return pendingNurses;
+    if (activeTab === 'staff') return pendingUnitAdmins;
+    return pendingStaffAll;
+  }, [activeTab, pendingDoctors, pendingNurses, pendingUnitAdmins, pendingStaffAll]);
 
   if (loading) {
     return (
@@ -195,8 +205,8 @@ export default function RegistrationApprovalsPage() {
           </div>
           <p className="text-sm text-blue-100/90 max-w-2xl">
             {isAr
-              ? 'مراجعة وتدقيق بيانات الأطباء وهوياتهم النقابية، واعتماد ملفات مرضى الغسيل الكلوي وإدراجهم رسمياً في النظام.'
-              : 'Review medical syndicate IDs, verify doctor credentials, and audit/enroll hemodialysis patients into active care.'}
+              ? 'مراجعة وتدقيق بيانات الأطباء وهيئة التمريض والإداريين وهوياتهم المهنية، واعتماد صلاحياتهم للوصول إلى النظام.'
+              : 'Review professional IDs, verify clinical staff credentials (doctors, nurses, admins), and authorize secure unit access.'}
           </p>
         </div>
 
@@ -233,18 +243,40 @@ export default function RegistrationApprovalsPage() {
       {/* Filter and Tab Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
         {/* Tabs */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            data-testid="tab-pending-all"
+            className={`min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'all'
+                ? 'bg-[#1e6bb8] text-white shadow-xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>🛡️ {isAr ? 'كافة الكوادر' : 'All Staff'}</span>
+            <span
+              className={`px-2 py-0.5 text-xs font-black rounded-full ${
+                activeTab === 'all'
+                  ? 'bg-white text-[#1e6bb8]'
+                  : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {pendingStaffAll.length}
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('doctors')}
             data-testid="tab-pending-doctors"
-            className={`min-h-[48px] px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'doctors'
                 ? 'bg-[#1e6bb8] text-white shadow-xs'
                 : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
-            <span>👨‍⚕️ {isAr ? 'أطباء قيد المراجعة' : 'Pending Doctors'}</span>
+            <span>👨‍⚕️ {isAr ? 'أطباء' : 'Doctors'}</span>
             <span
               className={`px-2 py-0.5 text-xs font-black rounded-full ${
                 activeTab === 'doctors'
@@ -258,23 +290,45 @@ export default function RegistrationApprovalsPage() {
 
           <button
             type="button"
-            onClick={() => setActiveTab('patients')}
-            data-testid="tab-pending-patients"
-            className={`min-h-[48px] px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2.5 transition-all cursor-pointer ${
-              activeTab === 'patients'
+            onClick={() => setActiveTab('nurses')}
+            data-testid="tab-pending-nurses"
+            className={`min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'nurses'
                 ? 'bg-[#1e6bb8] text-white shadow-xs'
                 : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
-            <span>🩺 {isAr ? 'مرضى قيد المراجعة' : 'Pending Patients'}</span>
+            <span>👩‍⚕️ {isAr ? 'تمريض' : 'Nurses'}</span>
             <span
               className={`px-2 py-0.5 text-xs font-black rounded-full ${
-                activeTab === 'patients'
+                activeTab === 'nurses'
                   ? 'bg-white text-[#1e6bb8]'
                   : 'bg-amber-100 text-amber-800'
               }`}
             >
-              {pendingPatients.length}
+              {pendingNurses.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('staff')}
+            data-testid="tab-pending-staff"
+            className={`min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'staff'
+                ? 'bg-[#1e6bb8] text-white shadow-xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>📋 {isAr ? 'إداريون' : 'Unit Admins'}</span>
+            <span
+              className={`px-2 py-0.5 text-xs font-black rounded-full ${
+                activeTab === 'staff'
+                  ? 'bg-white text-[#1e6bb8]'
+                  : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {pendingUnitAdmins.length}
             </span>
           </button>
         </div>
@@ -308,258 +362,135 @@ export default function RegistrationApprovalsPage() {
         </div>
       </div>
 
-      {/* Tab 1: Pending Doctors Content */}
-      {activeTab === 'doctors' && (
-        <div className="space-y-4" data-testid="pending-doctors-list">
-          {pendingDoctors.length === 0 ? (
-            <Card className="p-12 text-center border-dashed border-slate-200">
-              <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3 text-3xl">
-                ✓
-              </div>
-              <h3 className="text-lg font-bold text-slate-800">
-                {isAr ? 'لا توجد طلبات أطباء معلقة حالياً' : 'No Pending Doctor Registrations'}
-              </h3>
-              <p className="text-sm text-slate-500 mt-1">
-                {isAr
-                  ? 'تمت مراجعة واعتماد جميع طلبات الأطباء المسجلين.'
-                  : 'All doctor registration requests have been reviewed.'}
-              </p>
-            </Card>
-          ) : (
-            pendingDoctors.map((doc) => (
-              <Card
-                key={doc.uid}
-                data-testid={`pending-doctor-card-${doc.uid}`}
-                className="p-5 border-amber-200 bg-amber-50/20 hover:border-amber-300 transition-all"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                  {/* Left: Doctor Info */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h3 className="text-lg font-extrabold text-slate-900">
-                        👨‍⚕️ {doc.displayName}
-                      </h3>
-                      <Badge variant="warning">
-                        {isAr ? 'قيد المراجعة والاعتماد' : 'Pending Review'}
-                      </Badge>
-                      {doc.specialty && (
-                        <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-[#1e6bb8] border border-blue-200">
-                          {doc.specialty}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-1.5 gap-x-4 text-xs text-slate-600">
-                      <div>
-                        <span className="font-semibold text-slate-700">{isAr ? 'المستشفى / المركز:' : 'Hospital / Center:'} </span>
-                        <span>{doc.hospital || '—'}</span>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-slate-700">{isAr ? 'رقم الهاتف:' : 'Phone:'} </span>
-                        <span dir="ltr" className="font-mono font-bold text-slate-900">{doc.phone || doc.username}</span>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-slate-700">{isAr ? 'اسم المستخدم:' : 'Username:'} </span>
-                        <span className="font-mono">{doc.username}</span>
-                      </div>
-                      {doc.email && (
-                        <div>
-                          <span className="font-semibold text-slate-700">{isAr ? 'البريد الإلكتروني:' : 'Email:'} </span>
-                          <span>{doc.email}</span>
-                        </div>
-                      )}
-                      <div>
-                        <span className="font-semibold text-slate-700">{isAr ? 'تاريخ الطلب:' : 'Registered:'} </span>
-                        <span>{new Date(doc.registeredAt || doc.createdAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US', { dateStyle: 'medium' })}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: ID Preview & Decision Action Buttons */}
-                  <div className="flex items-center gap-3 shrink-0 flex-wrap">
-                    {/* Medical ID Card Preview */}
-                    {doc.idCardDataUrl ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPreviewIdUrl(doc.idCardDataUrl || null);
-                          setPreviewDoctorName(doc.displayName);
-                        }}
-                        data-testid={`view-id-card-btn-${doc.uid}`}
-                        className="min-h-[48px] px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer shadow-xs"
-                      >
-                        <span className="text-base">🪪</span>
-                        <span>{isAr ? 'معاينة كارنيه النقابة / الهوية' : 'View ID Card'}</span>
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic px-2">
-                        {isAr ? 'لم تُرفق صورة الهوية' : 'No ID uploaded'}
+      {/* Staff Approvals Content */}
+      <div className="space-y-4" data-testid="pending-staff-list">
+        {displayedStaff.length === 0 ? (
+          <Card className="p-12 text-center border-dashed border-slate-200">
+            <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3 text-3xl">
+              ✓
+            </div>
+            <h3 className="text-lg font-bold text-slate-800">
+              {isAr ? 'لا توجد طلبات كادر طبي معلقة حالياً' : 'No Pending Staff Registrations'}
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">
+              {isAr
+                ? 'تمت مراجعة واعتماد جميع طلبات الكوادر الطبية والتمريضية والإدارية.'
+                : 'All staff registration requests have been reviewed and approved.'}
+            </p>
+          </Card>
+        ) : (
+          displayedStaff.map((st) => (
+            <Card
+              key={st.uid}
+              data-testid={`pending-staff-card-${st.uid}`}
+              className="p-5 border-amber-200 bg-amber-50/20 hover:border-amber-300 transition-all"
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                {/* Left: Staff Member Info */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className="text-lg font-extrabold text-slate-900">
+                      {st.role === 'nurse' ? '👩‍⚕️' : st.role === 'doctor' ? '👨‍⚕️' : '📋'} {st.displayName}
+                    </h3>
+                    <Badge variant={st.role === 'doctor' ? 'info' : st.role === 'nurse' ? 'success' : 'neutral'}>
+                      {st.role === 'doctor'
+                        ? (isAr ? 'طبيب كلى' : 'Nephrologist')
+                        : st.role === 'nurse'
+                        ? (isAr ? 'تمريض كلى وغسيل كلوي' : 'Dialysis Nurse')
+                        : (isAr ? 'إدارة وحدة الغسيل' : 'Unit Administrator')}
+                    </Badge>
+                    <Badge variant="warning">
+                      {isAr ? 'قيد المراجعة والاعتماد' : 'Pending Review'}
+                    </Badge>
+                    {st.specialty && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-[#1e6bb8] border border-blue-200">
+                        {st.specialty}
                       </span>
                     )}
+                  </div>
 
-                    {/* Approve Button */}
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="md"
-                      onClick={() => handleApprove(doc)}
-                      disabled={isSubmitting}
-                      data-testid={`approve-doctor-btn-${doc.uid}`}
-                      className="min-h-[48px] bg-emerald-600 hover:bg-emerald-700 font-bold px-4"
-                    >
-                      ✓ {isAr ? 'اعتماد وتفعيل الطبيب' : 'Approve & Activate'}
-                    </Button>
-
-                    {/* Reject Button */}
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="md"
-                      onClick={() => {
-                        setRejectingUser(doc);
-                        setRejectionReason('');
-                      }}
-                      disabled={isSubmitting}
-                      data-testid={`reject-doctor-btn-${doc.uid}`}
-                      className="min-h-[48px] font-bold px-4"
-                    >
-                      ✕ {isAr ? 'رفض الطلب' : 'Reject'}
-                    </Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-1.5 gap-x-4 text-xs text-slate-600">
+                    <div>
+                      <span className="font-semibold text-slate-700">{isAr ? 'المستشفى / المركز:' : 'Hospital / Center:'} </span>
+                      <span>{st.hospital || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-700">{isAr ? 'رقم الهاتف:' : 'Phone:'} </span>
+                      <span dir="ltr" className="font-mono font-bold text-slate-900">{st.phone || st.username}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-700">{isAr ? 'اسم المستخدم:' : 'Username:'} </span>
+                      <span className="font-mono">{st.username}</span>
+                    </div>
+                    {st.email && (
+                      <div>
+                        <span className="font-semibold text-slate-700">{isAr ? 'البريد الإلكتروني:' : 'Email:'} </span>
+                        <span>{st.email}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="font-semibold text-slate-700">{isAr ? 'تاريخ الطلب:' : 'Registered:'} </span>
+                      <span>{new Date(st.registeredAt || st.createdAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US', { dateStyle: 'medium' })}</span>
+                    </div>
                   </div>
                 </div>
-              </Card>
-            ))
-          )}
-        </div>
-      )}
 
-      {/* Tab 2: Pending Patients Content */}
-      {activeTab === 'patients' && (
-        <div className="space-y-4" data-testid="pending-patients-list">
-          {pendingPatients.length === 0 ? (
-            <Card className="p-12 text-center border-dashed border-slate-200">
-              <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3 text-3xl">
-                ✓
+                {/* Right: ID Preview & Decision Action Buttons */}
+                <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                  {/* Medical / Professional ID Card Preview */}
+                  {st.idCardDataUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewIdUrl(st.idCardDataUrl || null);
+                        setPreviewDoctorName(st.displayName);
+                      }}
+                      data-testid={`view-id-card-btn-${st.uid}`}
+                      className="min-h-[48px] px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer shadow-xs"
+                    >
+                      <span className="text-base">🪪</span>
+                      <span>{isAr ? 'معاينة كارنيه النقابة / الهوية' : 'View ID Card'}</span>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic px-2">
+                      {isAr ? 'لم تُرفق صورة الهوية' : 'No ID uploaded'}
+                    </span>
+                  )}
+
+                  {/* Approve Button */}
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="md"
+                    onClick={() => handleApprove(st)}
+                    disabled={isSubmitting}
+                    data-testid={`approve-doctor-btn-${st.uid}`}
+                    className="min-h-[48px] bg-emerald-600 hover:bg-emerald-700 font-bold px-4"
+                  >
+                    ✓ {isAr ? 'اعتماد وتفعيل الكادر' : 'Approve & Activate'}
+                  </Button>
+
+                  {/* Reject Button */}
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="md"
+                    onClick={() => {
+                      setRejectingUser(st);
+                      setRejectionReason('');
+                    }}
+                    disabled={isSubmitting}
+                    data-testid={`reject-doctor-btn-${st.uid}`}
+                    className="min-h-[48px] font-bold px-4"
+                  >
+                    ✕ {isAr ? 'رفض الطلب' : 'Reject'}
+                  </Button>
+                </div>
               </div>
-              <h3 className="text-lg font-bold text-slate-800">
-                {isAr ? 'لا توجد طلبات مرضى معلقة حالياً' : 'No Pending Patient Registrations'}
-              </h3>
-              <p className="text-sm text-slate-500 mt-1">
-                {isAr
-                  ? 'تمت مراجعة واعتماد جميع طلبات تسجيل المرضى.'
-                  : 'All patient registrations have been verified and enrolled.'}
-              </p>
             </Card>
-          ) : (
-            pendingPatients.map((p) => {
-              const prof = p.patientProfile;
-              return (
-                <Card
-                  key={p.uid}
-                  data-testid={`pending-patient-card-${p.uid}`}
-                  className="p-5 border-blue-200 bg-blue-50/20 hover:border-blue-300 transition-all"
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                    {/* Left: Patient Clinical Breakdown */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="text-lg font-extrabold text-slate-900">
-                          🩺 {p.displayName}
-                        </h3>
-                        <Badge variant="warning">
-                          {isAr ? 'بانتظار الاعتماد السريري' : 'Pending Clinical Approval'}
-                        </Badge>
-                        {prof?.dialysisSchedule && (
-                          <Badge variant="info">
-                            {prof.dialysisSchedule === 'SMW'
-                              ? (isAr ? 'السبت / الإثنين / الأربعاء' : 'Sat / Mon / Wed')
-                              : (isAr ? 'الأحد / الثلاثاء / الخميس' : 'Sun / Tue / Thu')}
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* Clinical Badges Grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-slate-400 block text-[11px] font-bold">{isAr ? 'الوزن الجاف:' : 'Dry Weight:'}</span>
-                          <span className="font-extrabold text-slate-900 text-sm">{prof?.dryWeightKg || '—'} kg</span>
-                        </div>
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-slate-400 block text-[11px] font-bold">{isAr ? 'وصلة الغسيل:' : 'Vascular Access:'}</span>
-                          <span className="font-extrabold text-slate-900 text-sm">{prof?.accessType || '—'}</span>
-                        </div>
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-slate-400 block text-[11px] font-bold">{isAr ? 'رقم الهاتف (الدخول):' : 'Phone / Login:'}</span>
-                          <span dir="ltr" className="font-mono font-extrabold text-slate-900 text-sm">{p.phone || p.username}</span>
-                        </div>
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="text-slate-400 block text-[11px] font-bold">{isAr ? 'مركز الغسيل:' : 'Dialysis Center:'}</span>
-                          <span className="font-bold text-slate-900 text-sm truncate block">{prof?.dialysisCenter || '—'}</span>
-                        </div>
-                      </div>
-
-                      {/* Viral Isolation & Emergency Contact */}
-                      {(prof?.viralMarkers || prof?.emergencyContact) && (
-                        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                          {prof?.viralMarkers && (
-                            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700">
-                              <span className="font-bold text-slate-500">{isAr ? 'الفيروسات:' : 'Viral:'}</span>
-                              <span className={prof.viralMarkers.hcv ? 'text-amber-700 font-bold' : 'text-slate-600'}>HCV: {prof.viralMarkers.hcv ? '+' : '-'}</span>
-                              <span>•</span>
-                              <span className={prof.viralMarkers.hbv ? 'text-red-700 font-bold' : 'text-slate-600'}>HBV: {prof.viralMarkers.hbv ? '+' : '-'}</span>
-                              <span>•</span>
-                              <span className={prof.viralMarkers.hiv ? 'text-red-700 font-bold' : 'text-slate-600'}>HIV: {prof.viralMarkers.hiv ? '+' : '-'}</span>
-                            </div>
-                          )}
-                          {prof?.emergencyContact?.name && (
-                            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700">
-                              <span className="font-bold text-slate-500">{isAr ? 'طوارئ:' : 'Emergency:'}</span>
-                              <span className="font-semibold">{prof.emergencyContact.name} ({prof.emergencyContact.relationship || (isAr ? 'قريب' : 'Relative')})</span>
-                              {prof.emergencyContact.phone && (
-                                <span dir="ltr" className="font-mono text-slate-600">{prof.emergencyContact.phone}</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right: Decision Actions */}
-                    <div className="flex items-center gap-3 shrink-0">
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="md"
-                        onClick={() => handleApprove(p)}
-                        disabled={isSubmitting}
-                        data-testid={`approve-patient-btn-${p.uid}`}
-                        className="min-h-[48px] bg-emerald-600 hover:bg-emerald-700 font-bold px-4"
-                      >
-                        ✓ {isAr ? 'اعتماد وتسجيل المريض' : 'Approve & Enroll Patient'}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="danger"
-                        size="md"
-                        onClick={() => {
-                          setRejectingUser(p);
-                          setRejectionReason('');
-                        }}
-                        disabled={isSubmitting}
-                        data-testid={`reject-patient-btn-${p.uid}`}
-                        className="min-h-[48px] font-bold px-4"
-                      >
-                        ✕ {isAr ? 'رفض الطلب' : 'Reject'}
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })
-          )}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
       {/* Modal 1: Doctor ID Card Zoom */}
       {previewIdUrl && (

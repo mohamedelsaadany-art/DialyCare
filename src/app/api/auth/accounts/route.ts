@@ -14,6 +14,9 @@ export async function GET(request?: Request) {
       users: accounts.map((a) => a.user),
     });
   } catch (error: unknown) {
+    if ((error as { digest?: string })?.digest === 'NEXT_PRERENDER_INTERRUPTED') {
+      throw error;
+    }
     const msg = error instanceof Error ? error.message : 'Failed to fetch accounts';
     console.error('[API /api/auth/accounts] Error:', error);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

@@ -9,7 +9,7 @@ async function runLiveVerification() {
   try {
     // 1. Visit Login Page
     console.log('1. Checking live /ar/login ...');
-    await page.goto('https://dialycare.vercel.app/ar/login', { waitUntil: 'networkidle' });
+    await page.goto('https://dialycare.vercel.app/ar/login', { waitUntil: 'domcontentloaded' });
 
     // Verify Demo buttons are completely absent
     const demoBtnAdmin = await page.$('text=تعبئة حساب الطبيب المشرف');
@@ -56,7 +56,7 @@ async function runLiveVerification() {
 
     // 5. Test Live Approvals Center
     console.log('5. Testing live Approvals Center at /ar/admin/approvals ...');
-    await page.goto('https://dialycare.vercel.app/ar/admin/approvals', { waitUntil: 'networkidle' });
+    await page.goto('https://dialycare.vercel.app/ar/admin/approvals', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('text=مركز مراجعة واعتماد الحسابات');
     await page.waitForSelector('text=هاتف المدير المسؤول');
     await page.waitForSelector('text=+201080641670');
@@ -64,13 +64,13 @@ async function runLiveVerification() {
 
     // 6. Test Doctor In-Clinic Patient Credentials Generator
     console.log('6. Testing live /ar/admin/patients/new auto-credentials...');
-    await page.goto('https://dialycare.vercel.app/ar/admin/patients/new', { waitUntil: 'networkidle' });
+    await page.goto('https://dialycare.vercel.app/ar/admin/patients/new', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('button:has-text("توليد تلقائي لبيانات الدخول")');
     console.log('   ✓ Verified: Auto-generate credentials button is live.');
 
     // 7. Test Admin Settings Password Rotation Section
     console.log('7. Testing live /ar/admin/settings security section...');
-    await page.goto('https://dialycare.vercel.app/ar/admin/settings', { waitUntil: 'networkidle' });
+    await page.goto('https://dialycare.vercel.app/ar/admin/settings', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('text=الأمان وكلمة مرور الإدارة الرئيسية');
     await page.waitForSelector('button:has-text("تحديث كلمة المرور")');
     console.log('   ✓ Verified: Live Super Admin password rotation section is active.');

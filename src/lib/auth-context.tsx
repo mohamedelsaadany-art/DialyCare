@@ -8,6 +8,7 @@ import {
   saveAuthAccounts,
   syncCloudAccounts,
   getAdminPassword,
+  registerStaffAccount,
   registerDoctorAccount,
   registerPatientAccount,
   normalizePhone,
@@ -33,8 +34,10 @@ interface AuthContextType {
   logout: () => void;
   isAdmin: boolean;
   isDoctor: boolean;
+  isNurse: boolean;
   isStaff: boolean;
   registerDoctor: (data: Parameters<typeof registerDoctorAccount>[0]) => Promise<User>;
+  registerStaff: (data: Parameters<typeof registerStaffAccount>[0]) => Promise<User>;
   registerPatient: (data: Parameters<typeof registerPatientAccount>[0]) => Promise<User>;
 }
 
@@ -301,6 +304,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const registerStaff = async (data: Parameters<typeof registerStaffAccount>[0]): Promise<User> => {
+    setLoading(true);
+    try {
+      return registerStaffAccount(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const registerPatient = async (data: Parameters<typeof registerPatientAccount>[0]): Promise<User> => {
     setLoading(true);
     try {
@@ -312,7 +324,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = useMemo(() => user?.role === 'admin', [user]);
   const isDoctor = useMemo(() => user?.role === 'doctor', [user]);
-  const isStaff = useMemo(() => user?.role === 'admin' || user?.role === 'doctor', [user]);
+  const isNurse = useMemo(() => user?.role === 'nurse', [user]);
+  const isStaff = useMemo(
+    () => user?.role === 'admin' || user?.role === 'doctor' || user?.role === 'nurse' || user?.role === 'staff',
+    [user]
+  );
 
   const value = useMemo(
     () => ({
@@ -322,11 +338,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       isAdmin,
       isDoctor,
+      isNurse,
       isStaff,
       registerDoctor,
+      registerStaff,
       registerPatient,
     }),
-    [user, loading, isAdmin, isDoctor, isStaff]
+    [user, loading, isAdmin, isDoctor, isNurse, isStaff]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

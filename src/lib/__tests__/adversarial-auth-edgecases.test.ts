@@ -55,6 +55,7 @@ import {
   approveUserRegistration,
   rejectUserRegistration,
   registerDoctorAccount,
+  registerStaffAccount,
   registerPatientAccount,
   getPatients,
 } from '../data-store';
@@ -201,7 +202,7 @@ export async function runAdversarialAuthSuite(): Promise<{ totalAssertions: numb
     assert.strictEqual(doc.status, 'pending');
     count();
 
-    // Register a pending patient
+    // Register a self-registering patient (immediately active, auto-enrolled)
     const pat = registerPatientAccount({
       fullName: 'سعيد عبد الله الورداني',
       phone: '01188887777',
@@ -217,23 +218,42 @@ export async function runAdversarialAuthSuite(): Promise<{ totalAssertions: numb
     });
     assert.strictEqual(pat.role, 'patient');
     count();
-    assert.strictEqual(pat.status, 'pending');
+    assert.strictEqual(pat.status, 'active', 'Patient is immediately active upon self-registration');
     count();
 
-    // Pending review queue inspection
+    // Register a pending nurse for staff approvals verification
+    const nurse = registerStaffAccount({
+      fullName: 'ممرضة مروة فؤاد',
+      username: 'nurse_marwa_adv',
+      phone: '01066667777',
+      role: 'nurse',
+      specialty: 'تمريض غسيل دموي',
+      password: 'MarwaPassword2026',
+    });
+    assert.strictEqual(nurse.role, 'nurse');
+    count();
+    assert.strictEqual(nurse.status, 'pending', 'Nurse registers as pending');
+    count();
+
+    // Pending review queue inspection: contains doctor & nurse, excludes patient
     const pendingList = getPendingApprovals();
     const pendingDoc = pendingList.find((u) => u.uid === doc.uid);
+    const pendingNurse = pendingList.find((u) => u.uid === nurse.uid);
     const pendingPat = pendingList.find((u) => u.uid === pat.uid);
-    assert.ok(pendingDoc, 'Pending doctor is present in pending queue');
+    assert.ok(pendingDoc, 'Pending doctor is present in staff pending queue');
     count();
-    assert.ok(pendingPat, 'Pending patient is present in pending queue');
+    assert.ok(pendingNurse, 'Pending nurse is present in staff pending queue');
+    count();
+    assert.strictEqual(pendingPat, undefined, 'Active patient must NOT be in pending approvals queue');
     count();
 
-    // Verify neither pending user is present in official DIALYCARE_PATIENTS registry
-    const patientsPreApproval = getPatients();
-    assert.strictEqual(patientsPreApproval.some((p) => p.id === doc.uid), false, 'Pending doctor must not be in patients registry');
+    // Verify patient IS immediately present in official DIALYCARE_PATIENTS registry
+    const patientsPostReg = getPatients();
+    assert.strictEqual(patientsPostReg.some((p) => p.id === doc.uid), false, 'Pending doctor must not be in patients registry');
     count();
-    assert.strictEqual(patientsPreApproval.some((p) => p.id === pat.uid), false, 'Pending patient must not be in patients registry until approved');
+    assert.strictEqual(patientsPostReg.some((p) => p.id === nurse.uid), false, 'Pending nurse must not be in patients registry');
+    count();
+    assert.strictEqual(patientsPostReg.some((p) => p.id === pat.uid), true, 'Patient auto-enrolled immediately in patients registry');
     count();
 
     // ------------------------------------------------------------------------
@@ -257,22 +277,23 @@ export async function runAdversarialAuthSuite(): Promise<{ totalAssertions: numb
     assert.ok(approvedDoc?.reviewedAt, 'Review timestamp populated');
     count();
 
-    // Verify doctor is NOT added to DIALYCARE_PATIENTS registry
-    const patientsAfterDocApproval = getPatients();
-    assert.strictEqual(patientsAfterDocApproval.some((p) => p.id === doc.uid), false, 'Doctor must NEVER be enrolled as patient');
+    // Approve nurse
+    const approvedNurse = approveUserRegistration(nurse.uid, 'Chief Nephrologist Dr. Ahmed');
+    assert.ok(approvedNurse, 'Nurse approval returns updated User');
+    count();
+    assert.strictEqual(approvedNurse?.status, 'active', 'Nurse status transitioned to active');
     count();
 
-    // Approve patient
-    const approvedPat = approveUserRegistration(pat.uid, 'Chief Nephrologist Dr. Ahmed');
-    assert.ok(approvedPat, 'Patient approval returns updated User');
+    // Verify doctor and nurse are NOT added to DIALYCARE_PATIENTS registry
+    const patientsAfterStaffApproval = getPatients();
+    assert.strictEqual(patientsAfterStaffApproval.some((p) => p.id === doc.uid), false, 'Doctor must NEVER be enrolled as patient');
     count();
-    assert.strictEqual(approvedPat?.status, 'active', 'Patient status transitioned to active');
+    assert.strictEqual(patientsAfterStaffApproval.some((p) => p.id === nurse.uid), false, 'Nurse must NEVER be enrolled as patient');
     count();
 
-    // Verify patient IS auto-enrolled into DIALYCARE_PATIENTS registry with exact profile values
-    const patientsAfterPatApproval = getPatients();
-    const enrolledRecord = patientsAfterPatApproval.find((p) => p.id === pat.uid);
-    assert.ok(enrolledRecord, 'Approved patient successfully auto-enrolled in DIALYCARE_PATIENTS');
+    // Verify patient profile fields in DIALYCARE_PATIENTS registry
+    const enrolledRecord = patientsAfterStaffApproval.find((p) => p.id === pat.uid);
+    assert.ok(enrolledRecord, 'Patient successfully found in DIALYCARE_PATIENTS');
     count();
     assert.strictEqual(enrolledRecord?.fullName, pat.displayName);
     count();
@@ -291,7 +312,7 @@ export async function runAdversarialAuthSuite(): Promise<{ totalAssertions: numb
     assert.strictEqual(enrolledRecord?.isActive, true);
     count();
 
-    // Idempotency: re-approving the same patient should not create duplicates
+    // Idempotency: re-approving a user should not create duplicate patient records
     const initialPatientCount = getPatients().length;
     approveUserRegistration(pat.uid, 'Chief Nephrologist Dr. Ahmed');
     const patientCountAfterDuplicateApproval = getPatients().length;
