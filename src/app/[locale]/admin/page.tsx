@@ -27,7 +27,7 @@ import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { AdminClinicalQuickPanel } from '@/components/admin/AdminClinicalQuickPanel';
-import { STORAGE_KEYS } from '@/lib/data-store';
+import { STORAGE_KEYS, syncCloudAccounts } from '@/lib/data-store';
 import type { Patient } from '@/lib/types';
 import {
   getPatients,
@@ -130,7 +130,17 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       loadDashboardData();
+      void syncCloudAccounts().then(() => {
+        loadDashboardData();
+      });
     }, 0);
+
+    // Regular cloud sync polling so newly registered patients appear in real-time
+    const pollInterval = setInterval(() => {
+      void syncCloudAccounts().then(() => {
+        loadDashboardData();
+      });
+    }, 15000);
 
     const handleSync = () => {
       loadDashboardData();
@@ -139,6 +149,7 @@ export default function AdminDashboardPage() {
       if (
         e.key === null ||
         e.key === STORAGE_KEYS.PATIENTS ||
+        e.key === STORAGE_KEYS.AUTH_ACCOUNTS ||
         e.key === STORAGE_KEYS.DIALYSIS_SESSIONS ||
         e.key === STORAGE_KEYS.LAB_RESULTS ||
         e.key === STORAGE_KEYS.PATIENT_MEDICATIONS ||
@@ -151,6 +162,8 @@ export default function AdminDashboardPage() {
       }
     };
 
+    window.addEventListener('dialycare_patient_updated', handleSync);
+    window.addEventListener('dialycare_users_updated', handleSync);
     window.addEventListener('dialycare_sessions_updated', handleSync);
     window.addEventListener('dialycare_labs_updated', handleSync);
     window.addEventListener('dialycare_medications_updated', handleSync);
@@ -159,6 +172,9 @@ export default function AdminDashboardPage() {
 
     return () => {
       clearTimeout(timer);
+      clearInterval(pollInterval);
+      window.removeEventListener('dialycare_patient_updated', handleSync);
+      window.removeEventListener('dialycare_users_updated', handleSync);
       window.removeEventListener('dialycare_sessions_updated', handleSync);
       window.removeEventListener('dialycare_labs_updated', handleSync);
       window.removeEventListener('dialycare_medications_updated', handleSync);

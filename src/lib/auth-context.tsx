@@ -101,6 +101,31 @@ export function addPatientAccount(
   });
   saveAuthAccounts(filtered);
 
+  // Background cloud push so in-clinic registrations sync immediately to cloud and other doctors
+  if (typeof window !== 'undefined') {
+    fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'patient',
+        data: {
+          uid: patientId,
+          fullName: newPatient.fullName,
+          phone,
+          password,
+          profile: {
+            dialysisSchedule: newPatient.dialysisSchedule,
+            dryWeightKg: newPatient.dryWeightKg,
+            accessType: newPatient.accessType,
+            dialysisCenter: newPatient.dialysisCenter || newPatient.centerName,
+            age: newPatient.age,
+            gender: newPatient.gender,
+          },
+        },
+      }),
+    }).catch((err) => console.warn('[AuthContext] In-clinic cloud registration push failed:', err));
+  }
+
   return { user: newUser, credentials: { username: trimmedUsername, password } };
 }
 

@@ -18,7 +18,7 @@ import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
 import type { Patient, Notification, PatientLabRecord } from '@/lib/types';
 import { getDialysisScheduleLabel } from '@/app/[locale]/patient/patient-utils';
-import { STORAGE_KEYS } from '@/lib/data-store';
+import { STORAGE_KEYS, syncCloudAccounts } from '@/lib/data-store';
 import {
   getPatients,
   updatePatient,
@@ -57,6 +57,8 @@ export default function PatientsListPage() {
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   // Clinical recorder focus & row-level modal state
   const [activeClinicalPatientId, setActiveClinicalPatientId] = useState<string>('');
@@ -115,9 +117,34 @@ export default function PatientsListPage() {
     }
   }, []);
 
+  // Cloud synchronization function: bidirectional merge and live refresh
+  const handleCloudSync = React.useCallback(async (showToastNotice = false) => {
+    setIsSyncing(true);
+    try {
+      await syncCloudAccounts();
+      loadData();
+      setLastSyncedAt(new Date());
+      if (showToastNotice) {
+        setClinicalToast(
+          isRtl
+            ? 'تمت مزامنة جميع حسابات وسجلات المرضى مع السحابة بنجاح ✓'
+            : 'All patient records successfully synchronized with cloud ✓'
+        );
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => setClinicalToast(null), 3500);
+      }
+    } catch (err) {
+      console.warn('Failed cloud sync in patients list:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [loadData, isRtl]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       loadData();
+      void handleCloudSync(false);
+
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const querySearch = params.get('search');
@@ -132,6 +159,11 @@ export default function PatientsListPage() {
       }
     }, 0);
 
+    // Regular cloud sync polling (every 12 seconds) so newly registered patients appear in real-time
+    const pollInterval = setInterval(() => {
+      void handleCloudSync(false);
+    }, 12000);
+
     const handleSync = () => {
       loadData();
     };
@@ -139,6 +171,7 @@ export default function PatientsListPage() {
       if (
         e.key === null ||
         e.key === STORAGE_KEYS.PATIENTS ||
+        e.key === STORAGE_KEYS.AUTH_ACCOUNTS ||
         e.key === STORAGE_KEYS.DIALYSIS_SESSIONS ||
         e.key === STORAGE_KEYS.LAB_RESULTS ||
         e.key === STORAGE_KEYS.PATIENT_MEDICATIONS ||
@@ -148,6 +181,8 @@ export default function PatientsListPage() {
       }
     };
 
+    window.addEventListener('dialycare_patient_updated', handleSync);
+    window.addEventListener('dialycare_users_updated', handleSync);
     window.addEventListener('dialycare_sessions_updated', handleSync);
     window.addEventListener('dialycare_labs_updated', handleSync);
     window.addEventListener('dialycare_medications_updated', handleSync);
@@ -155,18 +190,21 @@ export default function PatientsListPage() {
 
     return () => {
       clearTimeout(timer);
+      clearInterval(pollInterval);
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
       }
       if (notifTimerRef.current) {
         clearTimeout(notifTimerRef.current);
       }
+      window.removeEventListener('dialycare_patient_updated', handleSync);
+      window.removeEventListener('dialycare_users_updated', handleSync);
       window.removeEventListener('dialycare_sessions_updated', handleSync);
       window.removeEventListener('dialycare_labs_updated', handleSync);
       window.removeEventListener('dialycare_medications_updated', handleSync);
       window.removeEventListener('storage', handleStorage);
     };
-  }, [loadData]);
+  }, [loadData, handleCloudSync]);
 
   // Filter by search term
   const filteredPatients = useMemo(() => {
@@ -420,6 +458,13 @@ export default function PatientsListPage() {
             <Badge variant="neutral" size="sm">
               {patients.length} {isRtl ? 'مريض' : 'Patients'}
             </Badge>
+            {lastSyncedAt && (
+              <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                {isRtl
+                  ? `(محدّث سحابياً: ${lastSyncedAt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`
+                  : `(Synced: ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`}
+              </span>
+            )}
           </div>
           <p className="text-sm text-slate-500 mt-1">
             {isRtl
@@ -429,6 +474,18 @@ export default function PatientsListPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => handleCloudSync(true)}
+            isLoading={isSyncing}
+            className="min-h-[48px] border-blue-200 bg-blue-50/60 hover:bg-blue-100/70 text-[#1e6bb8] font-bold"
+            title={isRtl ? 'مزامنة وتحديث فوري مع الخادم السحابي' : 'Instant sync with cloud server'}
+          >
+            <span>🔄</span>
+            <span>{isRtl ? 'مزامنة السحابة' : 'Cloud Sync'}</span>
+          </Button>
+
           <Button
             variant="primary"
             size="md"

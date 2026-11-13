@@ -1536,13 +1536,28 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
   isSyncingCloud = true;
 
   try {
-    const res = await fetch(`/api/auth/accounts?t=${Date.now()}`, { cache: 'no-store' });
+    const localAccounts = getAuthAccounts();
+
+    // Bidirectional sync: Push local accounts to cloud store so in-clinic created patients
+    // on doctors' devices are automatically merged with the server database.
+    let res: Response;
+    try {
+      res = await fetch(`/api/auth/accounts?t=${Date.now()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accounts: localAccounts }),
+        cache: 'no-store',
+      });
+    } catch {
+      // Fallback to GET if POST is blocked or fails
+      res = await fetch(`/api/auth/accounts?t=${Date.now()}`, { cache: 'no-store' });
+    }
+
     if (!res.ok) return getAuthAccounts();
     const data = await res.json();
     if (!data.success || !Array.isArray(data.accounts)) return getAuthAccounts();
 
     const remoteAccounts: StoredAccount[] = data.accounts;
-    const localAccounts = getAuthAccounts();
 
     const isMatch = (a: StoredAccount, b: StoredAccount) => {
       if (a.user.uid && b.user.uid && a.user.uid === b.user.uid) return true;
@@ -1561,33 +1576,6 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
       if (idx === -1) {
         result.push(rem);
         hasChanges = true;
-        // If it's an active approved patient, also sync to patient store
-        if (rem.user.role === 'patient' && rem.user.status === 'active') {
-          const existingPatients = getPatients();
-          if (!existingPatients.some((p) => p.id === rem.user.uid)) {
-            const profile = rem.user.patientProfile;
-            addPatient({
-              id: rem.user.uid,
-              fullName: rem.user.displayName,
-              fullNameAr: rem.user.displayName,
-              phone: rem.user.phone || rem.username,
-              username: rem.username,
-              dialysisSchedule: profile?.dialysisSchedule || 'SMW',
-              dryWeightKg: profile?.dryWeightKg || 70,
-              accessType: profile?.accessType || 'AVF',
-              dialysisCenter: profile?.dialysisCenter,
-              centerName: profile?.dialysisCenter,
-              age: profile?.age,
-              reminderSchedule: 'standard',
-              isActive: true,
-              gender: profile?.gender || 'male',
-              avatarId: profile?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
-              viralMarkers: profile?.viralMarkers,
-              emergencyContact: profile?.emergencyContact,
-              createdAt: rem.user.registeredAt || new Date().toISOString(),
-            });
-          }
-        }
       } else {
         const loc = result[idx];
         const remTime = new Date(rem.user.reviewedAt || rem.user.registeredAt || 0).getTime();
@@ -1596,9 +1584,18 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
         if (
           rem.user.status !== loc.user.status ||
           remTime > locTime ||
-          (rem.user.status === 'active' && loc.user.status === 'pending')
+          (rem.user.status === 'active' && loc.user.status === 'pending') ||
+          (!loc.user.patientProfile && rem.user.patientProfile)
         ) {
-          result[idx] = rem;
+          result[idx] = {
+            ...loc,
+            ...rem,
+            user: {
+              ...loc.user,
+              ...rem.user,
+              patientProfile: rem.user.patientProfile || loc.user.patientProfile,
+            },
+          };
           hasChanges = true;
         }
       }
@@ -1626,6 +1623,57 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
         window.dispatchEvent(new CustomEvent('dialycare_users_updated'));
       }
     }
+
+    // Synchronize all active patient accounts into the official DIALYCARE_PATIENTS registry
+    const currentPatients = getPatients();
+    let patientsAdded = false;
+
+    for (const acc of deduplicated) {
+      if (acc.user.role === 'patient' && (acc.user.status === 'active' || !acc.user.status)) {
+        const cleanAccPhone = (acc.phone || acc.user.phone || '').replace(/[\s\-\(\)\+]/g, '');
+        const exists = currentPatients.some((p) => {
+          if (p.id === acc.user.uid) return true;
+          if (acc.username && p.username && p.username.toLowerCase() === acc.username.toLowerCase()) return true;
+          const cleanPPhone = (p.phone || '').replace(/[\s\-\(\)\+]/g, '');
+          if (cleanAccPhone && cleanPPhone && cleanAccPhone === cleanPPhone) return true;
+          return false;
+        });
+
+        if (!exists) {
+          const profile = acc.user.patientProfile;
+          const newPat: Patient = {
+            id: acc.user.uid,
+            fullName: acc.user.displayName,
+            fullNameAr: acc.user.displayName,
+            phone: acc.phone || acc.user.phone || acc.username,
+            username: acc.username,
+            dialysisSchedule: profile?.dialysisSchedule || 'SMW',
+            dryWeightKg: profile?.dryWeightKg || 70,
+            accessType: profile?.accessType || 'AVF',
+            dialysisCenter: profile?.dialysisCenter,
+            centerName: profile?.dialysisCenter,
+            age: profile?.age,
+            reminderSchedule: 'standard',
+            isActive: true,
+            gender: profile?.gender || 'male',
+            avatarId: profile?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
+            viralMarkers: profile?.viralMarkers,
+            emergencyContact: profile?.emergencyContact,
+            createdAt: acc.user.registeredAt || acc.user.createdAt || new Date().toISOString(),
+          };
+          currentPatients.push(newPat);
+          patientsAdded = true;
+        }
+      }
+    }
+
+    if (patientsAdded) {
+      writeStorage(STORAGE_KEYS.PATIENTS, currentPatients);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('dialycare_patient_updated'));
+      }
+    }
+
     return deduplicated;
   } catch (err) {
     console.warn('[DataStore] Failed to sync accounts from cloud:', err);

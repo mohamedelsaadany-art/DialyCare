@@ -108,6 +108,61 @@ export async function upsertCloudAccount(account: StoredAccount): Promise<Stored
 }
 
 /**
+ * Merge an array of incoming accounts (e.g. from a client's local store)
+ * into the cloud accounts store, reconciling by uid, phone, and username.
+ * Ensures local in-clinic created patients on doctors' devices are never lost.
+ */
+export async function mergeCloudAccounts(incomingAccounts: StoredAccount[]): Promise<StoredAccount[]> {
+  const currentAccounts = await getCloudAccounts();
+  const result = [...currentAccounts];
+  let hasChanges = false;
+
+  const isMatch = (a: StoredAccount, b: StoredAccount) => {
+    if (a.user.uid && b.user.uid && a.user.uid === b.user.uid) return true;
+    if (a.username && b.username && a.username.trim().toLowerCase() === b.username.trim().toLowerCase()) return true;
+    const cleanPhoneA = (a.phone || a.user.phone || '').replace(/[\s\-\(\)\+]/g, '');
+    const cleanPhoneB = (b.phone || b.user.phone || '').replace(/[\s\-\(\)\+]/g, '');
+    if (cleanPhoneA && cleanPhoneB && cleanPhoneA === cleanPhoneB) return true;
+    return false;
+  };
+
+  for (const inc of incomingAccounts) {
+    if (!inc || !inc.user) continue;
+    const idx = result.findIndex((curr) => isMatch(curr, inc));
+    if (idx === -1) {
+      result.push(sanitizeAccount(inc));
+      hasChanges = true;
+    } else {
+      const existing = result[idx];
+      const incTime = new Date(inc.user.reviewedAt || inc.user.registeredAt || inc.user.createdAt || 0).getTime();
+      const existTime = new Date(existing.user.reviewedAt || existing.user.registeredAt || existing.user.createdAt || 0).getTime();
+      // If incoming is active and existing is pending, or incoming has fresher timestamp or profile:
+      if (
+        (inc.user.status === 'active' && existing.user.status === 'pending') ||
+        incTime > existTime ||
+        (!existing.user.patientProfile && inc.user.patientProfile)
+      ) {
+        result[idx] = sanitizeAccount({
+          ...existing,
+          ...inc,
+          user: {
+            ...existing.user,
+            ...inc.user,
+            patientProfile: inc.user.patientProfile || existing.user.patientProfile,
+          },
+        });
+        hasChanges = true;
+      }
+    }
+  }
+
+  if (hasChanges) {
+    await saveCloudAccounts(result);
+  }
+  return result;
+}
+
+/**
  * Approve an account in the cloud store
  */
 export async function approveCloudAccount(

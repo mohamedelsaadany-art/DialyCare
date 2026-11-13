@@ -327,6 +327,34 @@ export default function LoginPage() {
           gender: patGender,
         },
       });
+
+      // Explicitly await cloud registration to guarantee immediate cross-device persistence
+      try {
+        await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'patient',
+            data: {
+              uid: newUser.uid,
+              fullName: newUser.displayName,
+              phone: newUser.phone,
+              password: patPassword,
+              profile: {
+                dialysisSchedule: patSchedule,
+                dryWeightKg: Number(patDryWeight),
+                accessType: patAccessType,
+                dialysisCenter: patDialysisCenter.trim() || (isRtl ? 'وحدة الغسيل الكلوي' : 'Hemodialysis Unit'),
+                age: patAge ? Number(patAge) : undefined,
+                gender: patGender,
+              },
+            },
+          }),
+        });
+      } catch (cloudErr) {
+        console.warn('[Login] Direct cloud registration push warning:', cloudErr);
+      }
+
       setPatientSuccessUser(newUser);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Patient registration failed';
