@@ -249,13 +249,13 @@ export default function NewPatientPage() {
 👤 اسم المستخدم: ${createdUser.username}
 🔑 كلمة المرور: ${rawPassword}
 🗓️ جدول الغسيل: ${schedText}
-🔗 رابط تسجيل الدخول: https://dialycare.vercel.app`
+🔗 رابط تسجيل الدخول: https://waslity.vercel.app`
       : `Welcome ${patient.fullName} to Waslity!
 Your account credentials:
 👤 Username: ${createdUser.username}
 🔑 Password: ${rawPassword}
 🗓️ Schedule: ${schedText}
-🔗 Link: https://dialycare.vercel.app`;
+🔗 Link: https://waslity.vercel.app`;
 
     const url = `https://wa.me/${cleanPhone ? (cleanPhone.startsWith('0') ? `2${cleanPhone}` : cleanPhone) : ''}?text=${encodeURIComponent(msg)}`;
     window.open(url, '_blank');
@@ -270,7 +270,7 @@ Name: ${patient.fullNameAr || patient.fullName}
 Username: ${createdUser.username}
 Password: ${rawPassword}
 Schedule: ${patient.dialysisSchedule}
-Portal: https://dialycare.vercel.app`;
+Portal: https://waslity.vercel.app`;
 
     navigator.clipboard.writeText(text);
     setCopiedNotification(true);
@@ -615,7 +615,7 @@ Portal: https://dialycare.vercel.app`;
               </div>
 
               <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
-                <span>{isRtl ? 'الرابط:' : 'Link:'} dialycare.vercel.app</span>
+                <span>{isRtl ? 'الرابط:' : 'Link:'} waslity.vercel.app</span>
                 <span className="text-emerald-700 font-semibold">{isRtl ? '● الحساب مفعّل' : '● Account Active'}</span>
               </div>
             </div>
