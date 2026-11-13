@@ -129,12 +129,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   // Auth gate: redirect to login if user is not logged in or not clinical staff
   useEffect(() => {
-    if (!loading && (!user || !isStaff)) {
-      if (typeof window !== 'undefined') {
-        window.location.href = `/${locale}/login`;
-      } else {
-        router.push(`/${locale}/login`);
-      }
+    if (!loading && (!user || !isStaff || (user.status && user.status !== 'active' && user.role !== 'admin'))) {
+      router.replace(`/${locale}/login`);
     }
   }, [loading, user, isStaff, router, locale]);
 
@@ -157,9 +153,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   if (!user || !isStaff || (user.status && user.status !== 'active' && user.role !== 'admin')) {
-    if (typeof window !== 'undefined') {
-      window.location.href = `/${locale}/login`;
-    }
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
         <LoadingSpinner size="xl" color="primary" />
@@ -179,11 +172,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = () => {
     logout();
-    if (typeof window !== 'undefined') {
-      window.location.href = `/${locale}/login`;
-    } else {
-      router.push(`/${locale}/login`);
-    }
+    router.replace(`/${locale}/login`);
   };
 
   return (
