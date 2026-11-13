@@ -5,13 +5,13 @@
 **Repository:** [https://github.com/mohamedelsaadany-art/DialyCare](https://github.com/mohamedelsaadany-art/DialyCare)  
 **Branch:** `main` | **Next.js Version:** `16.4.5` (Turbopack, App Router)  
 **Node.js Runtime:** `v24.x` / `v20.x` LTS  
-**Current Version:** `v2.5.0` (Real Auth, Approvals & Patient Auto-Provisioning)  
+**Current Version:** `v2.7.0` (Instant Patient Activation, Staff-Only Approvals Center & Nurse/Admin Integration)  
 
 ---
 
 ## 1. System Architecture Overview
 
-DialyCare is architected as a high-performance, offline-first Progressive Web Application (PWA) tailored specifically for chronic hemodialysis patients, nephrologists, and dialysis unit nursing teams. The system delivers real-time clinical monitoring, fluid overload warnings, dialysis session logging, laboratory auditing, validated monthly adherence tracking, and full real-time authentication with Super Admin approval queues.
+DialyCare is architected as a high-performance, offline-first Progressive Web Application (PWA) tailored specifically for chronic hemodialysis patients, nephrologists, and dialysis unit nursing teams. The system delivers real-time clinical monitoring, fluid overload warnings, dialysis session logging, laboratory auditing, validated monthly adherence tracking, and cross-device cloud synchronization with Super Admin approval queues.
 
 ```
                            +---------------------------------------+
@@ -22,9 +22,9 @@ DialyCare is architected as a high-performance, offline-first Progressive Web Ap
                      +-------------------------+-------------------------+
                      |                         |                         |
          +-----------v-----------+ +-----------v-----------+ +-----------v-----------+
-         |    Patient Portal     | |    Doctor Portal      | |   Super Admin Portal  |
+         |    Patient Portal     | |    Doctor & Staff     | |   Super Admin Portal  |
          |    (/[locale]/patient)| |  (/[locale]/admin)    | | (/[locale]/admin/     |
-         |                       | |  (Staff RBAC Gate)    | |       approvals)      |
+         |  (Instant Activation) | |  (Staff RBAC Gate)    | |       approvals)      |
          +-----------+-----------+ +-----------+-----------+ +-----------+-----------+
                      |                         |                         |
                      +-------------------------+-------------------------+
@@ -37,18 +37,29 @@ DialyCare is architected as a high-performance, offline-first Progressive Web Ap
                         +----------------------+----------------------+
                         |                                             |
              +----------v----------+                       +----------v----------+
-             |    LocalStorage     |                       |    Memory Storage   |
-             |   (Browser/Client)  |                       |  (SSR/Node Testing) |
-             | (DIALYCARE_AUTH_...) |                       |                     |
-             +---------------------+                       +---------------------+
+             |    Cloud Store      |                       |    LocalStorage     |
+             |   (Vercel Blob)     |                       |   (Browser/Client)  |
+             | /api/auth/register  |                       | (DIALYCARE_AUTH_...) |
+             | /api/auth/accounts  |                       |                     |
+             | /api/auth/approve   |                       +----------+----------+
+             | /api/auth/reject    |                                  |
+             +---------------------+                       +----------v----------+
+                                                           |    Memory Storage   |
+                                                           |  (SSR/Node Testing) |
+                                                           +---------------------+
 ```
 
 ### Key Architectural Tenets:
-1. **Zero External API Failure Mode (Local-First Clinical Resilience):** Dialysis patients and in-unit clinicians frequently encounter poor network coverage inside shielded hospital dialysis wards. DialyCare functions with 100% offline persistence using a synchronized Web Storage engine with in-memory fallbacks, while providing a clear bridge to Firebase Cloud Auth.
-2. **Deterministic Mathematical Engines:** Formulas for interdialytic fluid allowances, dry weight thresholds, and survey adherence percentages run client-side with zero external network latency and zero round-trip lag.
-3. **Bi-directional Reactive Event Bus:** Dispatches synchronized custom events (`dialycare_questionnaires_updated`, `dialycare_labs_updated`, `dialycare_sessions_updated`, `dialycare_medications_updated`, `dialycare_notifications_updated`, `dialycare_approvals_updated`, `storage`) to keep multiple open browser tabs and portal components in lockstep.
-4. **PWA & Offline Service Worker (`public/sw.js`):** Cache-first strategy for app shell assets, runtime offline fallback, web app manifest with standalone display mode, and Web Audio API integration for emergency fluid overload alarms.
-5. **Real Production Sign Up & Sign In:** Local-first identity management supporting phone number, email, and username credentials with clinical audit status gates (`active`, `pending`, `rejected`).
+1. **Instant Patient Self-Registration & Clinical Directory Enrollment:** Patients self-registering receive `status: 'active'` immediately. Their full nephrology profile (dialysis schedule, target dry weight, vascular access, viral hepatitis/HIV markers, and emergency contact) is automatically enrolled into `DIALYCARE_PATIENTS`. Patients can log in immediately with zero administrative friction.
+2. **Clinical Staff & Admin Approvals Subsystem:** Registration approval in `/admin/approvals` is strictly dedicated to clinical staff: Nephrologists (`doctor`), Dialysis Nurses (`nurse`), and Unit Administrators (`staff`). Staff register with `status: 'pending'`, upload professional credentials (medical syndicate / hospital ID), and must be approved by the Super Admin before clinical access is granted.
+3. **Cross-Device Cloud Synchronization (Vercel Blob):** Integrated persistent cloud storage (`dialycare_cloud_accounts.json` & `dialycare_cloud_patients.json`) connected to project `dialycare`. Cross-device registrations submitted on mobile devices automatically propagate to desktop clinic approval dashboards via Next.js API endpoints (`/api/auth/*`).
+4. **Permanent Session Retention & Zero-Eviction Gate:** Session preservation engine in `auth-context.tsx` and `AdminLayout`. Super Admin accounts (`admin` / `admin-1`) have permanent immunity against refresh logouts. Eviction strictly occurs only when an account is explicitly `'rejected'` or `'pending'`.
+5. **Administrative Contacts Configuration:**
+   - **Primary Administrator (Senior Resident in Nephrology):** `+201080641670`
+   - **Technical Administrator:** `+201552885823`
+3. **Local-First Clinical Resilience:** Functions with 100% offline persistence using synchronized Web Storage with in-memory fallbacks when network connectivity is lost in hospital dialysis units.
+4. **Deterministic Mathematical Engines:** Formulas for interdialytic fluid allowances, dry weight thresholds, and survey adherence percentages run client-side with zero latency.
+5. **Bi-directional Reactive Event Bus:** Dispatches custom DOM events (`dialycare_approvals_updated`, `dialycare_users_updated`, `storage`, etc.) keeping tabs and components in sync.
 
 ---
 
@@ -58,208 +69,80 @@ DialyCare is architected as a high-performance, offline-first Progressive Web Ap
 | :--- | :--- | :--- |
 | **Framework** | Next.js 16.4.5 | Turbopack compilation, App Router, React 19 Client/Server split |
 | **Language** | TypeScript 5.x | Strict mode (`strict: true`), 100% type annotations |
-| **Styling** | Tailwind CSS v4 | CSS Variables, native RTL layout mirroring, `@tailwindcss/postcss` |
-| **Internationalization** | `next-intl` | Arabic (`ar`, RTL native) & English (`en`, LTR), subpath routing `/[locale]` |
-| **Authentication** | `AuthContext` + Storage Bus | `login()`, `registerDoctor()`, `registerPatient()`, `status: AccountStatus` |
-| **State & Persistence** | Reactive LocalStorage Bus | `data-store.ts` + `admin-store.ts` with deep cloning (`structuredClone`) |
-| **Audio Engine** | Web Audio API | Synthesized dual-tone emergency acoustic alerts (880 Hz / 440 Hz) |
-| **PWA Engine** | Service Worker + Manifest | `public/sw.js`, `public/manifest.json`, `InstallPwaPrompt.tsx` |
-| **E2E Testing** | Playwright 1.65+ | Automated multi-role headless browser suites with mobile viewports |
-| **Unit Testing** | Node Test Harness + `tsx` | Pure TypeScript execution via `npx tsx`, 2,115 deterministic assertions |
-| **Hosting & CI/CD** | Vercel Edge Platform | Automatic preview and production deployments triggered by GitHub `main` |
+| **Styling** | Tailwind CSS v4 | Fully customized healthcare palette (`#1e6bb8`, slate, emerald, amber, red) |
+| **Cloud Storage** | Vercel Blob | Store `dialycare-data` (`store_LRYhru7zHAi3bC2n`) with global Edge CDN caching |
+| **State & Auth** | React Context + Web Storage | Local-first persistence, reactive custom event bus, and cloud synchronization |
+| **PWA & Offline** | Service Worker (`public/sw.js`) | Cache-first for assets, offline fallback page, push notification payload listeners |
+| **Audio Alerting** | Web Audio API | Client-side synthesizers generating 880Hz alternating warning tone for critical fluid overload |
+| **Testing** | Node test runner + TSX | 3,432 automated assertions across 10 master suites, adversarial auth suite, and regression tests |
 
 ---
 
-## 3. Core Directory & Module Layout
+## 3. Cloud Store & API Route Schema
 
-```
-dialycare/
-├── docs/                                  # Production documentation & specs
-├── public/
-│   ├── icons/                             # PWA icon set (192x192, 512x512, maskable)
-│   ├── manifest.json                      # Web App Manifest
-│   └── sw.js                              # Offline Service Worker implementation
-├── src/
-│   ├── app/
-│   │   ├── [locale]/
-│   │   │   ├── layout.tsx                 # Root layout with i18n & PWA hydration
-│   │   │   ├── login/page.tsx             # Real Sign Up & Sign In with Pending Guard
-│   │   │   ├── patient/
-│   │   │   │   ├── page.tsx               # Patient Dashboard & Coaching Avatar
-│   │   │   │   ├── log/page.tsx           # Dialysis, Fluid & Weight Logging
-│   │   │   │   ├── profile/page.tsx       # Profile & Monthly Adherence Survey
-│   │   │   │   └── reminders/page.tsx     # Medications & Session Reminders
-│   │   │   └── admin/
-│   │   │       ├── layout.tsx             # Staff Auth Gate (Doctor & Admin) + Badge
-│   │   │       ├── approvals/page.tsx     # Super Admin Registration Approvals Queue
-│   │   │       ├── patients/page.tsx      # Patient Registry
-│   │   │       ├── patients/new/page.tsx  # In-Clinic Patient Provisioning & Auto-Creds
-│   │   │       ├── patients/[id]/page.tsx # Patient Clinical Details & Controls
-│   │   │       ├── settings/page.tsx      # Clinical Settings & Master Password Rotation
-│   │   │       └── notifications/         # Notification & Alert Dispatcher
-│   ├── components/
-│   │   ├── DialysisSessionModal.tsx       # 14-Parameter Clinical Session Form
-│   │   ├── DialysisSessionHistory.tsx     # Session Audit & Trend List
-│   │   ├── PatientCoachingAvatar.tsx      # Animated Clinical Avatar & Tips Engine
-│   │   ├── admin/
-│   │   │   ├── DoctorPatientSurveyManager.tsx # Adherence Review & Manual Activation
-│   │   │   ├── PatientLabResultsModal.tsx     # 12-Parameter Lab Entry Modal
-│   │   │   └── PatientMedicationManager.tsx   # Drug Prescription & Schedule Form
-│   │   ├── patient/
-│   │   │   ├── AdherenceSurveyModal.tsx       # 20-Question Adherence Modal
-│   │   │   ├── PatientAdherenceSurveySection.tsx # Due Banner & Survey Status Card
-│   │   │   └── PatientLabResultsView.tsx      # Clinical Lab Ranges & Trends
-│   │   └── ui/                            # Accessible Base UI (Button, Modal, Card, Input)
-│   ├── data/                              # Seed datasets (tips, templates, checklist)
-│   └── lib/
-│       ├── types.ts                       # TypeScript clinical contracts & models
-│       ├── data-store.ts                  # Unified data access layer & reactive dispatcher
-│       ├── auth-context.tsx               # AuthProvider, LoginResult, Session Persistence
-│       ├── questionnaire-data.ts          # 20 adherence questions, Likert scale & scoring
-│       └── __tests__/                     # 10 Unit & white-box challenger test suites
-└── test-e2e-auth-approvals.mjs            # Automated Playwright 6-journey E2E verification
-```
+### 3.1 Next.js API Routes (`src/app/api/auth/`)
+- `POST /api/auth/register`:
+  - Request: `{ type: 'doctor' | 'patient', data: RegistrationPayload }`
+  - Response: `{ success: true, user: User }`
+  - Action: Ingests into `dialycare_cloud_accounts.json`, assigns UID and `pending` status.
+- `GET /api/auth/accounts`:
+  - Request: Optional cache-busting timestamp parameter `?t=...`
+  - Response: `{ success: true, accounts: StoredAccount[], users: User[] }`
+  - Action: Reads latest accounts from Vercel Blob Edge CDN or in-memory fallback.
+- `POST /api/auth/approve`:
+  - Request: `{ uid: string, reviewerName?: string }`
+  - Response: `{ success: true, user: User, newPatient?: Patient }`
+  - Action: Updates status to `'active'`, creates and persists enrolled patient profile.
+- `POST /api/auth/reject`:
+  - Request: `{ uid: string, reason: string, reviewerName?: string }`
+  - Response: `{ success: true, user: User }`
+  - Action: Updates status to `'rejected'` with reviewer note.
 
----
-
-## 4. Database Schema & Data Models (`src/lib/types.ts`)
-
-### 4.1 Storage Keys Contract (`STORAGE_KEYS`)
-All persistent browser storage entities use standardized prefixed keys to guarantee zero collision:
-- `DIALYCARE_AUTH_ACCOUNTS`: User account registry with hashed passwords, roles, and review statuses.
-- `DIALYCARE_ADMIN_CREDENTIALS`: Master Super Admin password rotation store (default: `admin123`).
-- `DIALYCARE_PATIENTS`: Core clinical registry of active dialysis patients.
-- `DIALYCARE_PATIENT_MEDICATIONS`: Prescribed pharmaceutical regimens.
-- `DIALYCARE_DIALYSIS_SESSIONS`: 14-parameter clinical hemodialysis records.
-- `DIALYCARE_LAB_RESULTS`: 12-parameter clinical biochemistry panels.
-- `DIALYCARE_ADHERENCE_SURVEYS`: 20-question monthly adherence submissions.
-- `DIALYCARE_SURVEY_ACTIVATION_${patientId}`: Doctor manual activation override flag.
-- `DIALYCARE_NOTIFICATIONS`: Individual & broadcast push notifications.
-- `DIALYCARE_ADHERENCE_LOGS`: Daily fluid and dietary compliance checklist.
-- `DIALYCARE_CURRENT_USER`: Active authenticated session token.
-
-### 4.2 Entity Relationship Diagram (ERD)
-
-```
-       +-----------------------+               1:N
-       |       AuthAccount     +---------------------------------+
-       | (username, role, stat)|                                 |
-       +-----------+-----------+                                 |
-                   | 1:1                                         |
-       +-----------v-----------+               1:N               |
-       |        Patient        +---------------------------------+
-       | (id, fullName, dryWt) |                                 |
-       +-----------+-----------+                                 |
-                   | 1:N                                         |
-                   |                                             |
-       +-----------v-----------+                     +-----------v-----------+
-       |   DialysisSession     |                     |    PatientMedication  |
-       | (weights, vitals, UF) |                     | (drug, dose, schedule)|
-       +-----------------------+                     +-----------------------+
-                   | 1:N                                         | 1:N
-                   |                                             |
-       +-----------v-----------+                     +-----------v-----------+
-       |   PatientLabRecord    |                     |  AdherenceSubmission  |
-       | (12 lab parameters)   |                     | (20 questions, scores)|
-       +-----------------------+                     +-----------------------+
-```
-
-### 4.3 Key TypeScript Interfaces
-
-#### `User` and `AccountStatus`
-```typescript
-export type UserRole = 'admin' | 'doctor' | 'patient';
-export type AccountStatus = 'active' | 'pending' | 'rejected';
-
-export interface User {
-  uid: string;
-  role: UserRole;
-  username: string;
-  displayName: string;
-  language: 'ar' | 'en';
-  status?: AccountStatus;
-  phone?: string;
-  email?: string;
-  specialty?: string;
-  hospital?: string;
-  idCardDataUrl?: string;
-  patientProfile?: PatientRegistrationProfile;
-  registeredAt?: string;
-  reviewedAt?: string;
-  reviewedBy?: string;
-  rejectionReason?: string;
-}
-```
-
-#### `PatientRegistrationProfile` & `GeneratedPatientCredentials`
+### 3.2 Patient Intake & Viral Markers Schema (`src/lib/types.ts`)
 ```typescript
 export interface PatientRegistrationProfile {
   dialysisSchedule: 'SMW' | 'STT';
   dryWeightKg: number;
   accessType: 'AVF' | 'AVG' | 'Permcath' | 'Mahurkar';
-  dialysisCenter: string;
+  dialysisCenter?: string;
   age?: number;
   gender?: 'male' | 'female';
-}
-
-export interface GeneratedPatientCredentials {
-  username: string;
-  password: string;
-  phone: string;
-  randomSuffix: string;
+  viralMarkers?: {
+    hcv?: boolean; // Hepatitis C Virus
+    hbv?: boolean; // Hepatitis B Virus
+    hiv?: boolean; // Human Immunodeficiency Virus
+  };
+  emergencyContact?: {
+    name: string;
+    phone: string;
+    relationship?: string;
+  };
 }
 ```
 
 ---
 
-## 5. Security, Isolation & Multi-Tenancy Rules
+## 4. Security & Role-Based Access Control (RBAC)
 
-1. **Pending Account Security Guard:** Any account with `status: 'pending'` or `status: 'rejected'` is prohibited from establishing a persistent session. The login interface immediately intercepts the attempt and surfaces the appropriate clinical review or rejection card with a direct WhatsApp contact link targeting `ADMIN_CONFIG.primaryPhone` (`+201080641670` - Senior Resident).
-2. **Super Admin Restricted Access:** Only `user.role === 'admin'` can access `/admin/approvals` and rotate master credentials in `/admin/settings`.
-3. **Staff Privileges for Clinicians (`isStaff = isAdmin || isDoctor`):** Doctors (`role === 'doctor'`) have access to `/admin/patients`, clinical recording, and prescribing, but cannot approve other doctors or modify system settings.
-4. **Safe Credential Generation Algorithm ($P_{phone} + \Sigma_{safe}^3$):** In-clinic patient account creation automatically generates passwords using the patient's phone concatenated with 3 random, distinct, non-overlapping characters drawn strictly from a sanitized alphabet excluding confusing glyphs (`0, O, 1, l, I`):
-   $$\Sigma_{safe} = \{a..z, A..Z, 2..9\} \setminus \{0, O, 1, l, I\}$$
-5. **Patient Data Isolation:** Every query (`getDialysisSessions`, `getPatientLabResults`, `getPatientMedications`, `getAdherenceSurveys`) enforces strict filtering by `patientId`.
+1. **Super Admin Guard:**
+   - Restricted to `admin` / `admin123` (password rotatable via `/admin/settings`).
+   - Permanent active status; immune to session eviction on refresh.
+   - Exclusive access to `/admin/approvals` for approving doctor Syndicate IDs and enrolling patients.
+2. **Clinician Access Gate:**
+   - Doctors self-register with full credentials and Syndicate ID photo upload.
+   - Status defaults to `'pending'`; blocked from accessing clinical dashboards until approved by Super Admin.
+   - Once approved (`status: 'active'`), doctors gain full access to patient logs, dialysis session records, and medication prescribing.
+3. **Patient Access Gate:**
+   - Self-registered patients remain in `'pending'` review state.
+   - Attempting to sign in surfaces a branded review screen with a direct WhatsApp link to the Senior Resident (`+201080641670`).
+   - Doctors can also provision patients in-clinic with auto-generated credentials (`$P_{phone} + \Sigma_{safe}^3`), which are pre-approved and immediately active.
 
 ---
 
-## 6. CI/CD Pipeline & Deployment Runbook
+## 5. Verification & Test Metrics
 
-```
-[Developer / Agent Git Push] ──> [GitHub: main]
-                                      │
-                                      ▼
-                      [Vercel Webhook & Edge Builder]
-                                      │
-                   ┌──────────────────┴──────────────────┐
-                   ▼                                     ▼
-           [TypeScript Check]                    [Next.js 16 Build]
-           (npx tsc --noEmit)                    (next build: Turbopack)
-                   │                                     │
-                   └──────────────────┬──────────────────┘
-                                      │
-                                      ▼
-                            [Vercel Production Edge]
-                          (https://dialycare.vercel.app)
-                                      │
-                                      ▼
-                       [Playwright E2E Live Verification]
-```
-
-### Build & Test Commands:
-```powershell
-# 1. Typecheck & Linting
-npx tsc --noEmit
-npm run lint
-
-# 2. Comprehensive Test Suites (2,115 Assertions across 10 Suites)
-npm test
-npx tsx src/lib/__tests__/run-all.ts
-
-# 3. Production Compilation (52 Routes)
-npm run build
-
-# 4. Playwright End-to-End Verification (Mobile & Desktop)
-node test-e2e-auth-approvals.mjs
-```
-All builds generate 52 prerendered static and dynamic streaming routes with Turbopack optimization.
+- **Master Test Runner (`run-all.ts`):** 10/10 suites, 2,118 assertions passing.
+- **Adversarial Auth Suite (`adversarial-auth-edgecases.test.ts`):** 1,253 assertions passing.
+- **Regression Cloud & Refresh Suite (`regression-refresh-cloudsync.test.ts`):** 61 assertions passing.
+- **Total Assertions:** **3,432 / 3,432 passing (100% green)**.
+- **Production Build:** Next.js 16 Turbopack compiled 56 routes with zero errors.
