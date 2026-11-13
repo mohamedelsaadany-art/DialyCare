@@ -44,6 +44,9 @@ import { PatientLabResultsView } from '@/components/patient/PatientLabResultsVie
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
 import { PatientCoachingAvatar } from '@/components/PatientCoachingAvatar';
+import { PatientAdherenceSurveySection } from '@/components/patient/PatientAdherenceSurveySection';
+import { PatientNotificationPermissionBanner } from '@/components/patient/PatientNotificationPermissionBanner';
+import { scheduleLocalReminder, cancelScheduledReminder } from '@/lib/notifications';
 
 function formatNotifTime(sentAt?: Date | string | null, isAr: boolean = false): string {
   if (!sentAt) return isAr ? 'اليوم' : 'Today';
@@ -228,6 +231,38 @@ export default function PatientDashboardPage() {
 
   // Today's total active reminders
   const activeReminders = useMemo(() => reminders.filter((r) => r.isActive), [reminders]);
+
+  // Schedule device notifications for today's future reminders if permission granted
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (window.Notification.permission !== 'granted') return;
+
+    const timerIds: number[] = [];
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    activeReminders.forEach((r) => {
+      const parts = r.time.split(':');
+      const remMinutes = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+
+      if (remMinutes > currentMinutes) {
+        const diffMs = (remMinutes - currentMinutes) * 60 * 1000;
+        const title = isAr
+          ? (r.type === 'ttt' ? '💊 موعد تناول الدواء — وَصْلِتي' : r.type === 'fluid' ? '💧 متابعة السوائل — وَصْلِتي' : '🍽️ موعد الوجبة ورابط الفوسفات — وَصْلِتي')
+          : (r.type === 'ttt' ? '💊 Medication Reminder — Waslity' : r.type === 'fluid' ? '💧 Fluid Check Reminder — Waslity' : '🍽️ Meal & Phosphate Binder — Waslity');
+        const body = isAr
+          ? `حان موعد تذكير الساعة ${r.time}. يرجى فتحه وتسجيله في تطبيقك.`
+          : `Reminder scheduled for ${r.time}. Please record your adherence in Waslity.`;
+
+        const id = scheduleLocalReminder(title, body, diffMs);
+        if (id >= 0) timerIds.push(id);
+      }
+    });
+
+    return () => {
+      timerIds.forEach((id) => cancelScheduledReminder(id));
+    };
+  }, [activeReminders, isAr]);
 
   // Calculate status of each active reminder
   const processedReminders = useMemo(() => {
@@ -493,6 +528,12 @@ export default function PatientDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Device Notification Permission Banner (Allows device push/local notifications & troubleshooting) */}
+      <PatientNotificationPermissionBanner onPermissionGranted={() => loadData()} />
+
+      {/* Adherence Survey Section & First Login Pop-Up Modal (R7 Questionnaire) */}
+      <PatientAdherenceSurveySection patientId={activePatientId} autoOpenOnFirstLogin={true} />
 
       {/* Patient Coaching Avatar Hero Placement (R1, R2, R3, R4) */}
       <PatientCoachingAvatar

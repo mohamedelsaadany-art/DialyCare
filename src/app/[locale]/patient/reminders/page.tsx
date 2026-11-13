@@ -26,6 +26,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { DialysisDayCard } from '@/components/DialysisDayCard';
+import { PatientNotificationPermissionBanner } from '@/components/patient/PatientNotificationPermissionBanner';
+import { scheduleLocalReminder, cancelScheduledReminder } from '@/lib/notifications';
 
 interface FormattedReminder {
   id: string;
@@ -124,6 +126,38 @@ export default function PatientRemindersPage() {
       setIsRefreshing(false);
     }, 400);
   };
+
+  // Schedule today's pending reminders via browser notifications
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (window.Notification.permission !== 'granted') return;
+
+    const timerIds: number[] = [];
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    reminders.filter((r) => r.isActive).forEach((r) => {
+      const parts = r.time.split(':');
+      const remMinutes = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+
+      if (remMinutes > currentMinutes) {
+        const diffMs = (remMinutes - currentMinutes) * 60 * 1000;
+        const title = isAr
+          ? (r.type === 'ttt' ? '💊 موعد تناول الدواء — وَصْلِتي' : r.type === 'fluid' ? '💧 متابعة السوائل — وَصْلِتي' : '🍽️ موعد الوجبة ورابط الفوسفات — وَصْلِتي')
+          : (r.type === 'ttt' ? '💊 Medication Reminder — Waslity' : r.type === 'fluid' ? '💧 Fluid Check Reminder — Waslity' : '🍽️ Meal & Phosphate Binder — Waslity');
+        const body = isAr
+          ? `حان موعد تذكير الساعة ${r.time}. يرجى فتحه وتسجيله في تطبيقك.`
+          : `Reminder scheduled for ${r.time}. Please record your adherence in Waslity.`;
+
+        const id = scheduleLocalReminder(title, body, diffMs);
+        if (id >= 0) timerIds.push(id);
+      }
+    });
+
+    return () => {
+      timerIds.forEach((id) => cancelScheduledReminder(id));
+    };
+  }, [reminders, isAr]);
 
   // Group and determine individual status for all reminders today
   const processedReminders = useMemo(() => {
@@ -377,6 +411,9 @@ export default function PatientRemindersPage() {
           <span className="text-xs font-bold">{tCommon('refresh') || (isAr ? 'تحديث' : 'Refresh')}</span>
         </Button>
       </div>
+
+      {/* Device Notification Status / Request Banner */}
+      <PatientNotificationPermissionBanner compact onPermissionGranted={() => fetchData()} />
 
       {/* Dialysis Day vs Non-Dialysis Day Smart Awareness Card */}
       <DialysisDayCard dialysisSchedule={patientRecord?.dialysisSchedule} />

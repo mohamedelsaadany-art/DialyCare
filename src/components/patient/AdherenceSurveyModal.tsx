@@ -162,6 +162,11 @@ export function AdherenceSurveyModal({
                 <Badge variant="info" size="sm" className="bg-white/20 text-white border-white/30">
                   {isAr ? cycleMeta.cycleLabelAr : cycleMeta.cycleLabelEn}
                 </Badge>
+                {cycleNumber === 1 && (
+                  <Badge variant="warning" size="sm" className="bg-amber-400 text-amber-950 font-black">
+                    {isAr ? '✨ استبيان البداية الأولي' : '✨ First Login Baseline'}
+                  </Badge>
+                )}
               </div>
               <h2 className="text-lg sm:text-xl font-bold tracking-tight">
                 {isAr
@@ -170,8 +175,12 @@ export function AdherenceSurveyModal({
               </h2>
               <p className="text-xs text-blue-100 mt-0.5">
                 {isAr
-                  ? 'يرجى الإجابة بصدق عن مدى التزامك خلال الشهر الماضي'
-                  : 'Please answer honestly regarding your adherence over the past month'}
+                  ? (cycleNumber === 1
+                      ? 'أهلاً بك في منصة وَصْلِتي! يساعد هذا الاستبيان المبدئي فريقك الطبي في فهم عاداتك وتصميم خطتك العلاجية.'
+                      : 'يرجى الإجابة بصدق عن مدى التزامك خلال الشهر الماضي')
+                  : (cycleNumber === 1
+                      ? 'Welcome to Waslity! This baseline survey helps your care team tailor your treatment plan.'
+                      : 'Please answer honestly regarding your adherence over the past month')}
               </p>
             </div>
 

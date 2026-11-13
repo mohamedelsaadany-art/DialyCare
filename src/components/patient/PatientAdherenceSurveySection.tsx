@@ -15,9 +15,13 @@ import { AdherenceSurveyModal } from './AdherenceSurveyModal';
 
 export interface PatientAdherenceSurveySectionProps {
   patientId: string;
+  autoOpenOnFirstLogin?: boolean;
 }
 
-export function PatientAdherenceSurveySection({ patientId }: PatientAdherenceSurveySectionProps) {
+export function PatientAdherenceSurveySection({
+  patientId,
+  autoOpenOnFirstLogin = true,
+}: PatientAdherenceSurveySectionProps) {
   const locale = useLocale();
   const isAr = locale === 'ar';
 
@@ -34,6 +38,34 @@ export function PatientAdherenceSurveySection({ patientId }: PatientAdherenceSur
     setStatus(currentStatus);
     setSubmissions(allSubs);
   }, [patientId]);
+
+  // Auto-open questionnaire pop-up when patient first logs in (baseline initial survey)
+  useEffect(() => {
+    if (!autoOpenOnFirstLogin || !status) return;
+    if (status.isDue && status.reason === 'initial') {
+      const seenKey = `WASLITY_INITIAL_SURVEY_POPUP_${patientId}`;
+      if (typeof window !== 'undefined' && !window.sessionStorage.getItem(seenKey)) {
+        const timer = setTimeout(() => {
+          setIsModalOpen(true);
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [status, autoOpenOnFirstLogin, patientId]);
+
+  const handleModalClose = () => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(`WASLITY_INITIAL_SURVEY_POPUP_${patientId}`, 'true');
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleModalSubmitted = () => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(`WASLITY_INITIAL_SURVEY_POPUP_${patientId}`, 'true');
+    }
+    loadData();
+  };
 
   useEffect(() => {
     const initTimer = setTimeout(() => {
@@ -343,12 +375,10 @@ export function PatientAdherenceSurveySection({ patientId }: PatientAdherenceSur
       {/* Modal */}
       <AdherenceSurveyModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleModalClose}
         patientId={patientId}
         cycleNumber={status.currentCycleNumber}
-        onSubmitted={() => {
-          loadData();
-        }}
+        onSubmitted={handleModalSubmitted}
       />
     </div>
   );
