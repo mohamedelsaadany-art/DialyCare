@@ -246,10 +246,10 @@ export default function AdminDashboardPage() {
     ];
     const rows = patients.map((p) => [
       p.id,
-      `"${p.fullName}"`,
-      `"${p.fullNameAr || ''}"`,
+      `"${(p.fullName || '').replace(/"/g, '""')}"`,
+      `"${(p.fullNameAr || p.fullName || '').replace(/"/g, '""')}"`,
       p.dialysisSchedule,
-      `"${p.phone || ''}"`,
+      `"\t${p.phone || ''}"`,
       p.metrics.tttAdherence,
       p.metrics.fluidAdherence,
       p.metrics.dietAdherence,
@@ -259,7 +259,7 @@ export default function AdminDashboardPage() {
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;

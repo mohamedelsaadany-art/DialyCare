@@ -360,11 +360,11 @@ export default function PatientsListPage() {
     const headers = ['ID', 'Name', 'Arabic Name', 'Username', 'Schedule', 'Phone', 'TTT %', 'Fluid %', 'Diet %', 'Overall %', 'Status'];
     const rows = listToExport.map((p) => [
       p.id,
-      `"${p.fullName}"`,
-      `"${p.fullNameAr || ''}"`,
-      p.username,
+      `"${(p.fullName || '').replace(/"/g, '""')}"`,
+      `"${(p.fullNameAr || p.fullName || '').replace(/"/g, '""')}"`,
+      `"${(p.username || '').replace(/"/g, '""')}"`,
       p.dialysisSchedule,
-      `"${p.phone || ''}"`,
+      `"\t${p.phone || ''}"`,
       p.metrics.tttAdherence,
       p.metrics.fluidAdherence,
       p.metrics.dietAdherence,
@@ -373,7 +373,7 @@ export default function PatientsListPage() {
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
