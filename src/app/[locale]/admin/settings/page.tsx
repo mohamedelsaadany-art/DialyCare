@@ -55,6 +55,9 @@ export default function AdminSettingsPage() {
     },
   });
 
+  // Raw text of the threshold field while the admin types; clamped to 40-95 on blur and on save
+  const [thresholdInput, setThresholdInput] = useState('70');
+
   // App stats
   const [totalPatients, setTotalPatients] = useState(0);
   const [totalLogs, setTotalLogs] = useState(0);
@@ -69,6 +72,7 @@ export default function AdminSettingsPage() {
     try {
       const currentSettings = getAdminSettings();
       setSettings(currentSettings);
+      setThresholdInput(String(currentSettings.adherenceThreshold));
 
       const pts = getPatients();
       setTotalPatients(pts.length);
@@ -98,9 +102,19 @@ export default function AdminSettingsPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Clamp the typed threshold to 40-95; non-numbers keep the current value
+  const commitThreshold = (): AdminSettings => {
+    const n = parseInt(thresholdInput, 10);
+    const threshold = isNaN(n) ? settings.adherenceThreshold : Math.max(40, Math.min(95, n));
+    const next = { ...settings, adherenceThreshold: threshold };
+    setSettings(next);
+    setThresholdInput(String(threshold));
+    return next;
+  };
+
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    saveAdminSettings(settings);
+    saveAdminSettings(commitThreshold());
     setSaveSuccess(true);
     setTimeout(() => {
       setSaveSuccess(false);
@@ -244,13 +258,9 @@ export default function AdminSettingsPage() {
                   inputMode="numeric"
                   min={40}
                   max={95}
-                  value={settings.adherenceThreshold}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      adherenceThreshold: Math.max(40, Math.min(95, parseInt(e.target.value, 10) || 70)),
-                    })
-                  }
+                  value={thresholdInput}
+                  onChange={(e) => setThresholdInput(e.target.value)}
+                  onBlur={() => commitThreshold()}
                   className="font-mono font-bold text-center text-lg"
                   required
                 />
