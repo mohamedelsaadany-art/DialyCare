@@ -76,7 +76,7 @@ export function WaslityUpdateBanner() {
       window.removeEventListener('dialycare_notifications_updated', checkForUpdateNotice);
       window.removeEventListener('dialycare_cloud_sync_completed', checkForUpdateNotice);
     };
-  }, []);
+  }, [isAr]);
 
   const handleApplyUpdate = async () => {
     setIsUpdating(true);

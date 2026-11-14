@@ -1,4 +1,4 @@
-import { put, list } from '@vercel/blob';
+import { put, list, getObjectJson, isCloudStorageConfigured } from './r2-client';
 import type {
   StoredAccount,
   Patient,
@@ -126,7 +126,7 @@ let databaseLoadedFromBlob = false;
  * (see decideBlobRead); it throws unless this instance already holds the real list.
  */
 export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<StoredAccount[]> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
+  if (!isCloudStorageConfigured()) {
     return memoryAccounts.map(sanitizeAccount);
   }
   let failed = false;
@@ -138,14 +138,20 @@ export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<
     const hit = blobs.find((b) => b.pathname === ACCOUNTS_BLOB_PATH);
     found = Boolean(hit);
     if (hit) {
-      // Append cache buster to always fetch the freshest copy
-      const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
-      ok = res.ok;
-      if (res.ok) parsed = await res.json();
+      const direct = await getObjectJson<unknown>(ACCOUNTS_BLOB_PATH).catch(() => null);
+      if (direct !== null) {
+        ok = true;
+        parsed = direct;
+      } else {
+        // Fallback to fetch via hit.url
+        const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
+        ok = res.ok;
+        if (res.ok) parsed = await res.json();
+      }
     }
   } catch (error) {
     failed = true;
-    console.warn('[CloudStore] Vercel Blob accounts read failed:', error instanceof Error ? error.message : error);
+    console.warn('[CloudStore] Cloud accounts read failed:', error instanceof Error ? error.message : error);
   }
 
   const decision = decideBlobRead({
@@ -194,7 +200,7 @@ export async function saveCloudAccounts(accounts: StoredAccount[]): Promise<void
   const sanitized = accounts.map(sanitizeAccount);
   memoryAccounts = sanitized;
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
+  if (!isCloudStorageConfigured()) {
     return;
   }
 
@@ -205,7 +211,7 @@ export async function saveCloudAccounts(accounts: StoredAccount[]): Promise<void
       allowOverwrite: true,
     });
   } catch (error) {
-    console.warn('[CloudStore] Failed to write accounts to Vercel Blob:', error);
+    console.warn('[CloudStore] Failed to write accounts to Cloudflare R2:', error);
   }
 }
 
@@ -436,7 +442,7 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
   const fallbackAccounts = await getCloudAccounts(options);
   memoryDatabase.accounts = fallbackAccounts;
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
+  if (!isCloudStorageConfigured()) {
     for (const demoP of INITIAL_DEMO_PATIENTS) {
       if (!memoryDatabase.patients.some((p) => p.id === demoP.id)) {
         memoryDatabase.patients.push(demoP);
@@ -455,13 +461,19 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
     const hit = blobs.find((b) => b.pathname === DATABASE_BLOB_PATH);
     found = Boolean(hit);
     if (hit) {
-      const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
-      ok = res.ok;
-      if (res.ok) parsed = await res.json();
+      const direct = await getObjectJson<unknown>(DATABASE_BLOB_PATH).catch(() => null);
+      if (direct !== null) {
+        ok = true;
+        parsed = direct;
+      } else {
+        const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
+        ok = res.ok;
+        if (res.ok) parsed = await res.json();
+      }
     }
   } catch (error) {
     failed = true;
-    console.warn('[CloudStore] Vercel Blob database read failed:', error instanceof Error ? error.message : error);
+    console.warn('[CloudStore] Cloud database read failed:', error instanceof Error ? error.message : error);
   }
 
   const decision = decideBlobRead({
@@ -578,7 +590,7 @@ export async function saveCloudDatabase(db: UnifiedCloudDatabase): Promise<void>
   // Also keep accounts blob updated for backward-compatibility
   await saveCloudAccounts(db.accounts);
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
+  if (!isCloudStorageConfigured()) {
     return;
   }
 
@@ -589,7 +601,7 @@ export async function saveCloudDatabase(db: UnifiedCloudDatabase): Promise<void>
       allowOverwrite: true,
     });
   } catch (error) {
-    console.warn('[CloudStore] Failed to write unified database to Vercel Blob:', error);
+    console.warn('[CloudStore] Failed to write unified database to Cloudflare R2:', error);
   }
 }
 
