@@ -21,7 +21,8 @@ import {
   LogoutIcon,
   DialyCareLogo,
 } from './admin-icons';
-import { getPendingApprovals, syncFullCloudData } from '@/lib/data-store';
+import { getPendingApprovals, syncFullCloudData, getNotifications } from '@/lib/data-store';
+import { checkAndTriggerLocalNotifications } from '@/app/[locale]/patient/patient-utils';
 import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 
 interface AdminLayoutProps {
@@ -50,13 +51,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       if (synced) {
         const pending = synced.accounts.map((a) => a.user).filter((u) => u.status === 'pending' && u.role !== 'patient');
         setPendingApprovalsCount(pending.length);
+        if (user?.uid) {
+          const notifs = getNotifications();
+          checkAndTriggerLocalNotifications(user.uid, notifs, isRtl);
+        }
       }
     } catch {
       // ignore
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [user, isRtl]);
 
   useEffect(() => {
     let mounted = true;

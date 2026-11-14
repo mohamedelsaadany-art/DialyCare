@@ -377,6 +377,18 @@ export const INITIAL_DEMO_LAB_RESULTS: PatientLabRecord[] = [
 // Default initial demo notifications (deterministic timestamps to avoid hydration mismatch)
 export const INITIAL_DEMO_NOTIFICATIONS: Notification[] = [
   {
+    id: 'waslity-update-broadcast-2026-11-14',
+    senderId: 'admin-1',
+    type: 'broadcast',
+    recipientIds: ['all'],
+    titleAr: 'تحديث هام متاح لتطبيق وَصْلِتي 🚀',
+    titleEn: 'Important Waslity App Update Available 🚀',
+    messageAr: 'يتوفر الآن إصدار جديد ومطور من تطبيق وَصْلِتي يدعم العمل بدون إنترنت، وأعلى معايير الأمان، ومزامنة فورية للبيانات السريرية. يرجى إعادة تحميل التطبيق أو تحديث الصفحة الآن للحصول على أحدث نسخة وميزات المتابعة الطبية.',
+    messageEn: 'A new upgraded version of Waslity is now available featuring full offline support, enhanced security, and real-time clinical sync. Please refresh or update your app now to get the latest features.',
+    sentAt: '2026-11-14T12:00:00.000Z',
+    status: 'sent',
+  },
+  {
     id: 'notif_welcome_broadcast',
     senderId: 'admin-1',
     type: 'broadcast',

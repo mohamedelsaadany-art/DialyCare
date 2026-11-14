@@ -8,7 +8,8 @@ import { useAuth } from '@/lib/auth-context';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { PatientAvatarSvg } from '@/components/avatar/PatientAvatarPresets';
-import { getPatientAvatar, syncFullCloudData } from '@/lib/data-store';
+import { getPatientAvatar, syncFullCloudData, getNotifications } from '@/lib/data-store';
+import { filterPatientNotifications, checkAndTriggerLocalNotifications } from './patient-utils';
 import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 
 interface PatientLayoutProps {
@@ -166,6 +167,11 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
       try {
         if (mounted) {
           await syncFullCloudData();
+          if (user?.uid) {
+            const notifs = getNotifications();
+            const relevant = filterPatientNotifications(notifs, user.uid);
+            checkAndTriggerLocalNotifications(user.uid, relevant, isAr);
+          }
         }
       } catch {
         // ignore
@@ -187,7 +193,7 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
       stopPolling();
       window.removeEventListener('focus', onFocus);
     };
-  }, []);
+  }, [user?.uid, isAr]);
 
   useEffect(() => {
     const updateAvatar = () => {

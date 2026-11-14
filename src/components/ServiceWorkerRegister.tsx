@@ -64,6 +64,7 @@ export function ServiceWorkerRegister() {
                     navigator.serviceWorker.controller
                   ) {
                     console.log('[DialyCare SW] New update installed; ready on reload.');
+                    window.dispatchEvent(new CustomEvent('dialycare:sw-updated'));
                   }
                 };
               }

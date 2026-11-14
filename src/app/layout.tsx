@@ -1,7 +1,9 @@
+import { Suspense } from 'react';
 import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/lib/auth-context';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { InstallPwaPrompt } from '@/components/InstallPwaPrompt';
+import { WaslityUpdateBanner } from '@/components/WaslityUpdateBanner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -48,6 +50,9 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased flex flex-col font-sans">
         <AuthProvider>
           <ServiceWorkerRegister />
+          <Suspense fallback={null}>
+            <WaslityUpdateBanner />
+          </Suspense>
           <InstallPwaPrompt />
           {children}
         </AuthProvider>
