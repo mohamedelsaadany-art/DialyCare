@@ -6,17 +6,21 @@ import {
   addPatient,
   getAuthAccounts,
   saveAuthAccounts,
-  syncCloudAccounts,
-  getAdminPassword,
   registerStaffAccount,
   registerDoctorAccount,
   registerPatientAccount,
   normalizePhone,
-  isPhoneMatch,
   DEFAULT_ADMIN_USER,
-  DEFAULT_PATIENT_USER,
-  DEFAULT_PATIENT2_USER,
 } from './data-store';
+import {
+  CURRENT_USER_KEY,
+  REAUTH_NOTICE_KEY,
+  checkServerSession,
+  loginWithServer,
+  logoutOnServer,
+  registerOnServer,
+  stripLocalPasswords,
+} from './session-client';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface LoginResult {
@@ -43,7 +47,31 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const CURRENT_USER_KEY = 'DIALYCARE_CURRENT_USER';
+/** Remove ONLY the cached current-user keys. Clinical collections and read-notification ids stay. */
+function clearCachedUser(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(CURRENT_USER_KEY);
+    window.sessionStorage.removeItem(CURRENT_USER_KEY);
+  } catch {
+    // storage unavailable
+  }
+}
+
+/**
+ * Pre-B1 builds kept every account's plaintext password in localStorage.
+ * Passwords are verified on the server now, so drop the local copies by
+ * DELETING the key (never ''), so a legacy account merge can't blank the
+ * server's password. See stripLocalPasswords().
+ */
+function purgeLocalPasswords(): void {
+  try {
+    const stripped = stripLocalPasswords(getAuthAccounts());
+    if (stripped) saveAuthAccounts(stripped);
+  } catch {
+    // non-fatal
+  }
+}
 
 /**
  * Admin helper to register new patient user accounts in clinic
@@ -191,6 +219,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Confirm the cached session with the server once on mount. Only a confirmed
+  // 401 signs the user out (e.g. a session cached before the B1 security update,
+  // which has no session cookie). Offline / 5xx / 503 keep the cached session.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
+    const hasCached = () =>
+      Boolean(window.localStorage.getItem(CURRENT_USER_KEY) || window.sessionStorage.getItem(CURRENT_USER_KEY));
+    if (!hasCached()) return;
+    void checkServerSession().then((result) => {
+      if (cancelled || !hasCached()) return;
+      if (result.action === 'clear') {
+        clearCachedUser();
+        try {
+          window.sessionStorage.setItem(REAUTH_NOTICE_KEY, '1');
+        } catch {
+          // ignore
+        }
+        setUser(null);
+      } else if (result.action === 'update') {
+        const fresh: User = { ...result.user, status: result.user.status || 'active' };
+        try {
+          if (window.localStorage.getItem(CURRENT_USER_KEY)) {
+            window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fresh));
+          } else {
+            window.sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fresh));
+          }
+        } catch {
+          // ignore
+        }
+        setUser(fresh);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       syncSession();
@@ -225,10 +291,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ): Promise<LoginResult> => {
     setLoading(true);
     try {
-      const cleanId = identifier.trim();
-      const cleanPhone = cleanId.replace(/[\s\-\(\)\+]/g, '');
-      const cleanPass = password;
-
       const persistSession = (targetUser: User) => {
         setUser(targetUser);
         if (typeof window !== 'undefined') {
@@ -239,87 +301,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             window.sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(targetUser));
             window.localStorage.removeItem(CURRENT_USER_KEY);
           }
+          window.sessionStorage.removeItem(REAUTH_NOTICE_KEY);
         }
       };
 
-      // 1. Check Super Admin Credentials (Dynamic password support)
-      const currentAdminPassword = getAdminPassword();
-      if (cleanId.toLowerCase() === 'admin' && cleanPass === currentAdminPassword) {
-        persistSession(DEFAULT_ADMIN_USER);
-        return { success: true, status: 'active', user: DEFAULT_ADMIN_USER };
+      // Credentials are verified ONLY on the server (B1). The server sets an
+      // HttpOnly session cookie; the client never sees passwords or the token.
+      const result = await loginWithServer(identifier.trim(), password, rememberMe);
+      if (result.success && result.user) {
+        persistSession(result.user);
+        purgeLocalPasswords();
+        return { success: true, status: 'active', user: result.user };
       }
-
-      // 2. Check Stored Accounts (by username, phone, or email)
-      const accounts = getAuthAccounts();
-      const findMatchingAccount = (accList: typeof accounts) => {
-        const matches = accList.filter((acc) => {
-          const u = acc.user;
-          const matchesUsername = acc.username.toLowerCase() === cleanId.toLowerCase();
-          const matchesPhone = Boolean(
-            (acc.phone && isPhoneMatch(acc.phone, cleanId)) ||
-            (u.phone && isPhoneMatch(u.phone, cleanId)) ||
-            (acc.username && isPhoneMatch(acc.username, cleanId)) ||
-            (cleanPhone &&
-              ((acc.phone && acc.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone) ||
-                (u.phone && u.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone)))
-          );
-          const matchesEmail = Boolean(u.email && u.email.toLowerCase() === cleanId.toLowerCase());
-          const passwordMatches = acc.password === cleanPass;
-
-          return (matchesUsername || matchesPhone || matchesEmail) && passwordMatches;
-        });
-
-        if (matches.length === 0) return null;
-        // Prioritize active accounts over pending or rejected
-        const activeMatch = matches.find((m) => (m.user.status || 'active') === 'active');
-        return activeMatch || matches[0];
-      };
-
-      let match = findMatchingAccount(accounts);
-
-      // If not found in local accounts cache, OR if found with status 'pending'
-      // (which occurs when registering on this device before receiving cross-device admin review),
-      // always fetch the freshest cloud account records before deciding the final status!
-      if ((!match || match.user.status === 'pending') && typeof window !== 'undefined') {
-        try {
-          const syncedAccounts = await syncCloudAccounts();
-          const cloudMatch = findMatchingAccount(syncedAccounts);
-          if (cloudMatch) {
-            match = cloudMatch;
-          }
-        } catch {
-          // continue with fallback
-        }
+      if (result.status === 'pending' || result.status === 'rejected') {
+        return {
+          success: false,
+          status: result.status,
+          user: result.user,
+          rejectionReason: result.rejectionReason,
+        };
       }
-
-      if (match) {
-        const userStatus = match.user.status || 'active';
-        if (userStatus === 'pending') {
-          return { success: false, status: 'pending', user: match.user };
-        }
-        if (userStatus === 'rejected') {
-          return {
-            success: false,
-            status: 'rejected',
-            rejectionReason: match.user.rejectionReason,
-            user: match.user,
-          };
-        }
-        persistSession(match.user);
-        return { success: true, status: 'active', user: match.user };
-      }
-
-      // Check default fallback demo patients
-      if (cleanId.toLowerCase() === 'patient1' && cleanPass === 'patient123') {
-        persistSession(DEFAULT_PATIENT_USER);
-        return { success: true, status: 'active', user: DEFAULT_PATIENT_USER };
-      }
-      if (cleanId.toLowerCase() === 'patient2' && cleanPass === 'patient123') {
-        persistSession(DEFAULT_PATIENT2_USER);
-        return { success: true, status: 'active', user: DEFAULT_PATIENT2_USER };
-      }
-
-      return { success: false, error: 'invalidCredentials' };
+      return { success: false, error: result.error || 'invalidCredentials' };
     } finally {
       setLoading(false);
     }
@@ -327,16 +329,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(CURRENT_USER_KEY);
-      window.sessionStorage.removeItem(CURRENT_USER_KEY);
-    }
+    clearCachedUser();
+    void logoutOnServer();
   };
 
+  // Registration goes to the server FIRST (throws a localized RegistrationError
+  // on 409/400/network), then is cached locally under the SERVER's uid.
   const registerDoctor = async (data: Parameters<typeof registerDoctorAccount>[0]): Promise<User> => {
     setLoading(true);
     try {
-      return registerDoctorAccount(data);
+      const role = data.role || 'doctor';
+      const serverUser = await registerOnServer(role, { ...data, role });
+      return registerDoctorAccount({ ...data, role, uid: serverUser.uid }, { skipCloudPush: true });
     } finally {
       setLoading(false);
     }
@@ -345,7 +349,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const registerStaff = async (data: Parameters<typeof registerStaffAccount>[0]): Promise<User> => {
     setLoading(true);
     try {
-      return registerStaffAccount(data);
+      const role = data.role || 'doctor';
+      const serverUser = await registerOnServer(role, { ...data, role });
+      return registerStaffAccount({ ...data, role, uid: serverUser.uid }, { skipCloudPush: true });
     } finally {
       setLoading(false);
     }
@@ -354,7 +360,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const registerPatient = async (data: Parameters<typeof registerPatientAccount>[0]): Promise<User> => {
     setLoading(true);
     try {
-      return registerPatientAccount(data);
+      const serverUser = await registerOnServer('patient', { ...data });
+      return registerPatientAccount({ ...data, uid: serverUser.uid }, { skipCloudPush: true });
     } finally {
       setLoading(false);
     }

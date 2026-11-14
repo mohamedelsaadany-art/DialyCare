@@ -2138,11 +2138,13 @@ export function registerStaffAccount(data: {
   hospital?: string;
   idCardDataUrl?: string;
   language?: Language;
-}): User {
+  /** uid assigned by the server (/api/auth/register); generated locally when absent */
+  uid?: string;
+}, options: { skipCloudPush?: boolean } = {}): User {
   const accounts = getAuthAccounts();
   const cleanUsername = data.username.trim();
   const cleanPhone = data.phone.trim();
-  const uid = uuidv4();
+  const uid = data.uid || uuidv4();
   const now = new Date().toISOString();
   const role: UserRole = data.role || 'doctor';
 
@@ -2183,7 +2185,8 @@ export function registerStaffAccount(data: {
   saveAuthAccounts(filtered);
 
   // Background push to cloud store so it immediately syncs across all devices!
-  if (typeof window !== 'undefined') {
+  // (skipped when the caller already registered the account on the server)
+  if (typeof window !== 'undefined' && !options.skipCloudPush) {
     fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2196,8 +2199,11 @@ export function registerStaffAccount(data: {
   return cloneValue(newUser);
 }
 
-export function registerDoctorAccount(data: Parameters<typeof registerStaffAccount>[0]): User {
-  return registerStaffAccount({ ...data, role: data.role || 'doctor' });
+export function registerDoctorAccount(
+  data: Parameters<typeof registerStaffAccount>[0],
+  options: { skipCloudPush?: boolean } = {}
+): User {
+  return registerStaffAccount({ ...data, role: data.role || 'doctor' }, options);
 }
 
 export function registerPatientAccount(data: {
@@ -2206,10 +2212,12 @@ export function registerPatientAccount(data: {
   password: string;
   profile: PatientRegistrationProfile;
   language?: Language;
-}): User {
+  /** uid assigned by the server (/api/auth/register); generated locally when absent */
+  uid?: string;
+}, options: { skipCloudPush?: boolean } = {}): User {
   const accounts = getAuthAccounts();
   const cleanPhone = data.phone.replace(/[\s\-\(\)\+]/g, '').trim();
-  const uid = uuidv4();
+  const uid = data.uid || uuidv4();
   const now = new Date().toISOString();
 
   const newUser: User = {
@@ -2262,7 +2270,8 @@ export function registerPatientAccount(data: {
   saveAuthAccounts(filtered);
 
   // Background push to cloud store so it immediately syncs across all devices!
-  if (typeof window !== 'undefined') {
+  // (skipped when the caller already registered the account on the server)
+  if (typeof window !== 'undefined' && !options.skipCloudPush) {
     fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

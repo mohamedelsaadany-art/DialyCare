@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { ADMIN_CONFIG, syncCloudAccounts, syncFullCloudData } from '@/lib/data-store';
+import { ADMIN_CONFIG } from '@/lib/data-store';
+import { fetchRegistrationStatus, REAUTH_NOTICE_KEY, reauthNoticeText } from '@/lib/session-client';
 import type { User, DialysisAccessType } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -67,10 +68,22 @@ export default function LoginPage() {
   // General error for registration
   const [regError, setRegError] = useState('');
 
-  // Proactively fetch freshest cloud accounts on mount to sync cross-device approvals
+  // One-time notice after a forced re-login (e.g. a session cached before the
+  // security update). The flag is consumed immediately, so no loop is possible.
   useEffect(() => {
-    void syncCloudAccounts();
-  }, []);
+    let show = false;
+    try {
+      if (window.sessionStorage.getItem(REAUTH_NOTICE_KEY)) {
+        window.sessionStorage.removeItem(REAUTH_NOTICE_KEY);
+        show = true;
+      }
+    } catch {
+      // storage unavailable
+    }
+    if (!show) return;
+    const timer = setTimeout(() => setStatusNotice(reauthNoticeText(locale)), 0);
+    return () => clearTimeout(timer);
+  }, [locale]);
 
   // If already authenticated and active, redirect to appropriate portal
   useEffect(() => {
@@ -89,23 +102,17 @@ export default function LoginPage() {
 
     const interval = setInterval(async () => {
       try {
-        const synced = await syncCloudAccounts();
-        const cleanPendingPhone = (pendingAccount.phone || '').replace(/[\s\-\(\)\+]/g, '');
-        const updated = synced.find(
-          (a) =>
-            a.user.uid === pendingAccount.uid ||
-            (cleanPendingPhone && a.phone && a.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPendingPhone) ||
-            a.username.toLowerCase() === pendingAccount.username.toLowerCase()
-        );
+        // Status-only endpoint: no account list ever leaves the server.
+        const updated = await fetchRegistrationStatus(pendingAccount.uid);
 
-        if (updated && updated.user.status === 'active') {
+        if (updated && updated.status === 'active') {
           setPendingAccount(null);
           setStatusNotice(
             isRtl
-              ? `تهانينا ${updated.user.displayName}! تم اعتماد حسابك بنجاح. يمكنك الآن تسجيل الدخول مباشرة.`
-              : `Congratulations ${updated.user.displayName}! Your account has been approved. You can now sign in.`
+              ? `تهانينا ${pendingAccount.displayName}! تم اعتماد حسابك بنجاح. يمكنك الآن تسجيل الدخول مباشرة.`
+              : `Congratulations ${pendingAccount.displayName}! Your account has been approved. You can now sign in.`
           );
-          setIdentifier(updated.username || updated.phone || '');
+          setIdentifier(pendingAccount.username || pendingAccount.phone || '');
         }
       } catch {
         // silent fallback
@@ -124,23 +131,17 @@ export default function LoginPage() {
     setIsCheckingApproval(true);
     setApprovalFeedback('');
     try {
-      const synced = await syncCloudAccounts();
-      const cleanPendingPhone = (pendingAccount.phone || '').replace(/[\s\-\(\)\+]/g, '');
-      const updated = synced.find(
-        (a) =>
-          a.user.uid === pendingAccount.uid ||
-          (cleanPendingPhone && a.phone && a.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPendingPhone) ||
-          a.username.toLowerCase() === pendingAccount.username.toLowerCase()
-      );
+      const updated = await fetchRegistrationStatus(pendingAccount.uid);
+      if (!updated) throw new Error('status unavailable');
 
-      if (updated && updated.user.status === 'active') {
+      if (updated.status === 'active') {
         setPendingAccount(null);
         setStatusNotice(
           isRtl
-            ? `تهانينا ${updated.user.displayName}! تم اعتماد حسابك بنجاح من قبل الإدارة الطبية. يرجى تسجيل الدخول.`
-            : `Congratulations ${updated.user.displayName}! Your account has been approved. Please sign in.`
+            ? `تهانينا ${pendingAccount.displayName}! تم اعتماد حسابك بنجاح من قبل الإدارة الطبية. يرجى تسجيل الدخول.`
+            : `Congratulations ${pendingAccount.displayName}! Your account has been approved. Please sign in.`
         );
-        setIdentifier(updated.username || updated.phone || '');
+        setIdentifier(pendingAccount.username || pendingAccount.phone || '');
       } else {
         setApprovalFeedback(
           isRtl
@@ -183,6 +184,12 @@ export default function LoginPage() {
         setPendingAccount(res.user);
       } else if (res.status === 'rejected' && res.user) {
         setRejectedAccount({ user: res.user, reason: res.rejectionReason });
+      } else if (res.error === 'loginError') {
+        setSignInError(
+          isRtl
+            ? 'تعذّر الاتصال بالخادم. يرجى التحقق من الإنترنت والمحاولة مرة أخرى.'
+            : 'Could not reach the server. Please check your connection and try again.'
+        );
       } else {
         setSignInError(tAuth('invalidCredentials'));
       }
@@ -329,34 +336,7 @@ export default function LoginPage() {
         },
       });
 
-      // Explicitly await cloud registration & full bidirectional sync to guarantee immediate cross-device persistence
-      try {
-        await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'patient',
-            data: {
-              uid: newUser.uid,
-              fullName: newUser.displayName,
-              phone: newUser.phone,
-              password: patPassword,
-              profile: {
-                dialysisSchedule: patSchedule,
-                dryWeightKg: dryWeight,
-                accessType: patAccessType,
-                dialysisCenter: patDialysisCenter.trim() || (isRtl ? 'وحدة الغسيل الكلوي' : 'Hemodialysis Unit'),
-                age: patAge ? Number(patAge) : undefined,
-                gender: patGender,
-              },
-            },
-          }),
-        });
-        await syncFullCloudData();
-      } catch (cloudErr) {
-        console.warn('[Login] Direct cloud registration push warning:', cloudErr);
-      }
-
+      // registerPatient() already registered the account on the server (awaited) before caching it locally.
       setPatientSuccessUser(newUser);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Patient registration failed';
