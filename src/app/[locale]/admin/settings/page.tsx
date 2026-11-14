@@ -227,7 +227,7 @@ export default function AdminSettingsPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <label className="text-sm font-bold text-slate-800 block">
+                <label htmlFor="adherence-threshold-input" className="text-sm font-bold text-slate-800 block">
                   {isRtl ? 'الحد الأدنى لنسبة الالتزام المقبولة (%)' : 'Minimum Acceptable Adherence Target (%)'}
                 </label>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -239,7 +239,9 @@ export default function AdminSettingsPage() {
 
               <div className="w-32">
                 <Input
+                  id="adherence-threshold-input"
                   type="number"
+                  inputMode="numeric"
                   min={40}
                   max={95}
                   value={settings.adherenceThreshold}

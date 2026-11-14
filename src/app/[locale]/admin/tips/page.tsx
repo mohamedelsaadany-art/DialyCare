@@ -446,6 +446,7 @@ export default function CoachingTipsManagerPage() {
             <Input
               label={isRtl ? 'ترتيب الظهور' : 'Display Sequence Order'}
               type="number"
+              inputMode="numeric"
               placeholder={String(tips.length + 1)}
               value={formOrder}
               onChange={(e) => setFormOrder(e.target.value)}

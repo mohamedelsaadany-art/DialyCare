@@ -396,6 +396,7 @@ export function PatientLabResultsModal({
                   <div className="relative">
                     <input
                       type="number"
+                      inputMode="decimal"
                       step={test.step || 'any'}
                       value={currentVal}
                       onChange={(e) => handleValueChange(test.key, e.target.value)}
