@@ -13,10 +13,10 @@ run at 14:00 Cairo on 2026-11-14. Read it before touching auth, sync or storage 
 
 | Thing | Value |
 |---|---|
-| Branch | `main` on GitHub = `6db9baa` = the live production build. Work branch `team/overnight-2026-11-14` = `main` + `022b78b` (B11/B2.1/B9, **committed but NOT deployed**, see §5) + this handover |
+| Branch | `main` on GitHub = `team/overnight-2026-11-14` = the live production build (`1a53ec3` + this doc update) |
 | Production | waslity.vercel.app and dialycare.vercel.app (one Vercel project, `dialycare`, deployed with the Vercel CLI; **not** git-connected, so pushing does not deploy) |
-| Live version | `6db9baa`, Vercel deployment `dialycare-4z6uq316w`, deployed 13:12 Cairo |
-| Tests | `npm test` runs every suite in `src/lib/__tests__` (30 files on `6db9baa`, 31 on the branch tip) as a fail-fast chain; `npx tsc --noEmit`, `npm run lint` clean; GitHub CI green |
+| Live version | `1a53ec3`, Vercel deployment `dialycare-e0dmuwmwk`, deployed ~13:34 Cairo |
+| Tests | `npm test` runs every suite in `src/lib/__tests__` (32 files) as a fail-fast chain; `npx tsc --noEmit`, `npm run lint` clean; GitHub CI green |
 
 ## 2. Why so much changed: what was found
 
@@ -48,7 +48,8 @@ At the start of the run, production had these holes, all verified without loggin
 | U6 | `fa7d422` | Background sync backs off while the tab is hidden (one sync on hide/show, ≤ 1 per 2 min hidden); duplicate admin-dashboard poll removed (`src/lib/visibility-poll.ts`) |
 | B14 | `fde2668` | Every login lasts 30 days, all roles ("remember me" only controls whether the cookie survives closing the browser) — for clinics with poor connectivity |
 | U7 | `6db9baa` | Admin settings adherence threshold can be typed again (clamped 40–95 on blur/save) |
-| B11+B2.1+B9 | `022b78b` **(NOT deployed)** | Storage reads fail safe (a failed read never falls back to demo seeds or an empty DB that a write would save; production never seeds; read-then-write paths read fresh); account reconcile never takes passwords from the DB-blob copy; DB blob never stores password fields |
+| B11+B2.1+B9 | `022b78b` (deployed 13:22, owner watching) | Storage reads fail safe (a failed read never falls back to demo seeds or an empty DB that a write would save; production never seeds; read-then-write paths read fresh); account reconcile never takes passwords from the DB-blob copy; DB blob never stores password fields |
+| B13 | `1a53ec3` | A confirmed 401 from sync while signed in → one-time Arabic "please sign in again" and the login page; local entries kept and synced after re-login; offline/5xx stay silent |
 
 ### Offline behaviour (the owner's main requirement: low/no internet)
 Verified on a production build with the network switched off, for a patient and a doctor who first signed in online:
@@ -78,7 +79,9 @@ automatically, so after 30 days the user signs in again once (when online).
 | R0 | 08:20 | `2971a5d` | U1–U4, B1a |
 | R1 | ~08:25 | `34f520c` | the security release; prod smoke 20/20 on both hosts; `/api/sync` went from 200/41 KB (13 accounts with passwords) to 401/40 B |
 | R2 | 08:33 | `d95b896` | hashing, password change, Arabic digits, U5, B7. By 13:02 all live accounts were hashed |
-| R3 | 13:12 | `6db9baa` | U6, B14, U7 — final release of the run |
+| R3 | 13:12 | `6db9baa` | U6, B14, U7 |
+| R4 | 13:22 | `8044378` | B11+B2.1+B9 (storage fail-safe), deployed while the owner was awake to watch; smoke 22/22 |
+| R5 | ~13:34 | `1a53ec3` | B13 — final release of the run |
 
 Every release: production data backed up first, deployed from a clean worktree of the exact commit (never from a dirty
 tree — the Vercel CLI uploads the working directory), GitHub `main` fast-forwarded to the deployed commit, then an
@@ -88,9 +91,8 @@ unauthenticated, zero-write smoke test.
 
 | ID | Pri | Problem | Notes |
 |---|---|---|---|
-| B11 deploy | P0 | **Live hazard (pre-existing):** in the deployed code, if one read of the accounts blob fails, `getCloudAccounts` overwrites it with the 8 demo seed accounts (demo passwords become live, real users locked out). | Fixed in `022b78b` but **not deployed**: it changes the real storage read/write path, which can only be fully tested against the real store. Deploy it when someone can watch production writes for ~30 min; roll back to `6db9baa` if syncs start failing. If the live account count ever drops to exactly 8, restore the accounts file from a backup. |
+| B11 watch | P1 | B11 (storage fail-safe) went live at 13:22. Watch the first hours of real use: if syncs start failing or pages error, roll back to `dialycare-4z6uq316w` (`6db9baa`). If the live account count ever drops to exactly 8 (the demo set), restore the accounts file from a backup. | |
 | B12 | P1 | Deleting a dialysis session (and probably labs, meds, reminders, tips) doesn't stick: it reappears within ~1 s. | Pre-existing. Sync is union-only; deletes never reach the server. Needs a staff-only `deletedAt` tombstone merged server-side. |
-| B13 | P2 | If a session ends mid-use (password changed on another device, account rejected), the app says nothing; sync 401s are ignored. | Entries are kept and sync after the next sign-in. Fix: treat a sync 401 like the startup check (Arabic "please sign in again"). |
 | B10 | P2 | Clinic-created patient: the background registration in `admin/patients/new` ignores failures, so the clinic sees success but the patient may have no login. | Show the error / offer retry. |
 | B8 | P3 | The one-time re-login notice doesn't show under `next dev` (StrictMode double effect). Production is fine. | |
 | — | P2 | Logout doesn't revoke the 30-day token (rejection and password change do). No login rate limit. | |
@@ -110,7 +112,7 @@ unauthenticated, zero-write smoke test.
    token would sign everyone out.
 5. **Change the default passwords** (admin and demo accounts from the previous handover are in the public repo history).
 6. **Rollback rule:** passwords are now hashed in production. Rolling back to any build before `d95b896` breaks every
-   login. Roll back only to `d95b896` or later, or restore the accounts file from a pre-hash backup (losing changes since).
+   login. Safe rollback targets: `dialycare-n2blvi15k` (B11), `dialycare-4z6uq316w` (`6db9baa`), `dialycare-o7woywfxt` (`d95b896`).
 
 ## 7. User impact to know about
 - Since R1, every user had to sign in once (Arabic notice); first sign-in on a device needs internet. After that the app
