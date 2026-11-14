@@ -23,6 +23,7 @@ import type {
   UnifiedCloudDatabase,
 } from './types';
 import { getCycleInfo } from './questionnaire-data';
+import { CURRENT_USER_KEY, REAUTH_NOTICE_KEY } from './session-client';
 
 import defaultCoachingTips from '@/data/coaching-tips.json';
 import defaultReminderTemplates from '@/data/reminder-templates.json';
@@ -1684,6 +1685,32 @@ export function saveAuthAccounts(accounts: StoredAccount[]): void {
 let isSyncingCloud = false;
 
 /**
+ * B13: a data call got a confirmed 401 (session expired, password changed on another
+ * device, account rejected). Run the same flow as the B1b mount check: clear ONLY the
+ * cached current-user keys (every local clinical entry and read-notification id stays,
+ * and syncs after the next login), set the one-time re-login notice, and let
+ * auth-context drop the user so the layouts route to the login page.
+ * Does nothing without a cached user (e.g. the login page itself). Network errors
+ * and 5xx never reach this. Returns true when it signed the user out.
+ */
+export function handleSessionExpired(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const hadUser = Boolean(
+      window.localStorage.getItem(CURRENT_USER_KEY) || window.sessionStorage.getItem(CURRENT_USER_KEY)
+    );
+    if (!hadUser) return false;
+    window.localStorage.removeItem(CURRENT_USER_KEY);
+    window.sessionStorage.removeItem(CURRENT_USER_KEY);
+    window.sessionStorage.setItem(REAUTH_NOTICE_KEY, '1');
+    window.dispatchEvent(new CustomEvent('dialycare_users_updated'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Universal Bidirectional Cloud Synchronization Engine.
  * Collects all 12 local data entities from the browser, posts them to /api/sync,
  * merges them with the unified cloud database (Vercel Blob), writes the merged truth
@@ -1731,6 +1758,10 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
       res = await fetch(`${baseUrl}/api/sync?t=${Date.now()}`, { cache: 'no-store' });
     }
 
+    if (res.status === 401) {
+      handleSessionExpired();
+      return null;
+    }
     if (!res.ok) return null;
     const body = await res.json();
     if (!body.success || !body.data) return null;
@@ -1908,6 +1939,7 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
       res = await fetch(`${baseUrl}/api/auth/accounts?t=${Date.now()}`, { cache: 'no-store' });
     }
 
+    if (res.status === 401) handleSessionExpired();
     if (!res.ok) return getAuthAccounts();
     const data = await res.json();
     if (!data.success || !Array.isArray(data.accounts)) return getAuthAccounts();
