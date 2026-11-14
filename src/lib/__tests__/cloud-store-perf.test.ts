@@ -33,7 +33,7 @@ import {
   decideBlobRead,
 } from '../cloud-store';
 import { createSessionToken } from '../server-auth';
-import { GET as syncGet } from '../../app/api/sync/route';
+import { GET as syncGet, POST as syncPost, isIfNoneMatch } from '../../app/api/sync/route';
 import type { StoredAccount } from '../types';
 
 let assertions = 0;
@@ -161,6 +161,22 @@ async function run() {
     );
   }
 
+  // Defensive Cloning & Immutability Check
+  const dbCloneTest1 = await getCloudDatabase();
+  const initialPatientCount = dbCloneTest1.patients.length;
+  // Mutate returned array in caller space
+  (dbCloneTest1.patients as unknown[]).push({ id: 'injected-patient-hacker' });
+  const dbCloneTest2 = await getCloudDatabase();
+  eq(
+    dbCloneTest2.patients.length,
+    initialPatientCount,
+    'Mutating returned database arrays does not pollute cached database'
+  );
+  check(
+    !dbCloneTest2.patients.some((p) => p.id === 'injected-patient-hacker'),
+    'Defensive cloning isolates cache from external array mutation'
+  );
+
   console.log('  ✓ In-memory micro-cache hit and TTL expiration verified.\n');
 
   // ==========================================================================
@@ -178,6 +194,13 @@ async function run() {
 
   const writeAcc = await getCloudAccounts({ forWrite: true });
   check(writeAcc !== null, 'forWrite accounts read returned successfully');
+
+  // forWrite must NOT populate micro-cache if cache was empty
+  invalidateCloudStoreCache();
+  await getCloudAccounts({ forWrite: true });
+  eq(getCloudStoreCache().accounts, null, 'forWrite accounts read does not populate cache');
+  await getCloudDatabase({ forWrite: true });
+  eq(getCloudStoreCache().database, null, 'forWrite database read does not populate cache');
 
   console.log('  ✓ Cache bypass with { forWrite: true } verified.\n');
 
@@ -339,6 +362,47 @@ async function run() {
   const mismatchedBody = await mismatchedRes.json();
   eq(mismatchedBody.success, true, 'Fresh body returned on ETag mismatch');
 
+  // 5.3b Adversarial Substring Collision: client sends uid-10 when server is uid-1
+  // Prior bug: clientEtag.includes(etag) returned true because 'admin-10'.includes('admin-1') is true!
+  const substringCollisionTag = etag!.replace('admin-1', 'admin-10');
+  const collisionReq = new Request('http://localhost:3000/api/sync', {
+    method: 'GET',
+    headers: {
+      ...authHeaders,
+      'If-None-Match': substringCollisionTag,
+    },
+  });
+  const collisionRes = await syncGet(collisionReq);
+  eq(
+    collisionRes.status,
+    200,
+    'Substrings do NOT trigger false 304 (e.g. admin-10 does not match admin-1)'
+  );
+  const collisionBody = await collisionRes.json();
+  eq(collisionBody.success, true, 'Collision test returned fresh payload');
+
+  // 5.3c Comma-separated list of ETags
+  const commaReq = new Request('http://localhost:3000/api/sync', {
+    method: 'GET',
+    headers: {
+      ...authHeaders,
+      'If-None-Match': `W/"unrelated-v1-tag", ${etag!}`,
+    },
+  });
+  const commaRes = await syncGet(commaReq);
+  eq(commaRes.status, 304, 'Comma-separated If-None-Match list returns 304 when matching tag is present');
+
+  // 5.3d Strong vs Weak equivalence (RFC 7232 Section 2.3.2)
+  const strongReq = new Request('http://localhost:3000/api/sync', {
+    method: 'GET',
+    headers: {
+      ...authHeaders,
+      'If-None-Match': etag!.replace(/^W\//, ''),
+    },
+  });
+  const strongRes = await syncGet(strongReq);
+  eq(strongRes.status, 304, 'Strong vs weak ETag equivalence honored (returns 304)');
+
   // 5.4 Conditional GET /api/sync with wildcard If-None-Match: * -> returns 304
   const wildcardReq = new Request('http://localhost:3000/api/sync', {
     method: 'GET',
@@ -363,6 +427,21 @@ async function run() {
   const patientEtag = patientRes.headers.get('ETag');
   check(patientEtag?.includes('patient-1'), 'Patient ETag is scoped to patient uid');
   check(patientEtag !== etag, 'Patient ETag differs from admin ETag due to user-scoping');
+
+  // 5.6 POST /api/sync ETag response check
+  const postReq = new Request('http://localhost:3000/api/sync', {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ dialysisSessions: [] }),
+  });
+  const postRes = await syncPost(postReq);
+  eq(postRes.status, 200, 'POST /api/sync returns 200 OK');
+  const postEtag = postRes.headers.get('ETag');
+  check(Boolean(postEtag), 'POST /api/sync includes ETag header for client sync cache');
+  check(postEtag!.includes('admin-1'), 'POST ETag is scoped to current user uid');
 
   console.log('  ✓ HTTP 304 conditional request handling and user-scoped ETags verified.\n');
 

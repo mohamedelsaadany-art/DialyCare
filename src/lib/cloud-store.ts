@@ -46,6 +46,26 @@ export function getCloudStoreCache(): {
   };
 }
 
+/** Defensive shallow-clone for database collections to protect cache immutability */
+export function shallowCloneDatabase(db: UnifiedCloudDatabase): UnifiedCloudDatabase {
+  return {
+    ...db,
+    accounts: db.accounts ? [...db.accounts] : [],
+    patients: db.patients ? [...db.patients] : [],
+    dialysisSessions: db.dialysisSessions ? [...db.dialysisSessions] : [],
+    labResults: db.labResults ? [...db.labResults] : [],
+    medications: db.medications ? [...db.medications] : [],
+    notifications: db.notifications ? [...db.notifications] : [],
+    adherenceLogs: db.adherenceLogs ? [...db.adherenceLogs] : [],
+    fluidLogs: db.fluidLogs ? [...db.fluidLogs] : [],
+    dietLogs: db.dietLogs ? [...db.dietLogs] : [],
+    adherenceSurveys: db.adherenceSurveys ? [...db.adherenceSurveys] : [],
+    reminders: db.reminders ? [...db.reminders] : [],
+    coachingTips: db.coachingTips ? [...db.coachingTips] : [],
+    archivedPatients: db.archivedPatients ? [...db.archivedPatients] : [],
+  };
+}
+
 // In-memory fallback for local dev / offline / CI test environments
 let memoryAccounts: StoredAccount[] = [
   { username: 'admin', password: getAdminPassword(), user: DEFAULT_ADMIN_USER },
@@ -158,9 +178,9 @@ export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<
   if (!isCloudStorageConfigured()) {
     const sanitized = memoryAccounts.map(sanitizeAccount);
     if (!options.forWrite) {
-      cachedCloudAccounts = { data: sanitized, fetchedAt: Date.now() };
+      cachedCloudAccounts = { data: sanitized.map(sanitizeAccount), fetchedAt: Date.now() };
     }
-    return sanitized;
+    return sanitized.map(sanitizeAccount);
   }
   let failed = false;
   let found = false;
@@ -206,16 +226,16 @@ export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<
     memoryAccounts = sanitized;
     accountsLoadedFromBlob = true;
     if (!options.forWrite) {
-      cachedCloudAccounts = { data: sanitized, fetchedAt: Date.now() };
+      cachedCloudAccounts = { data: sanitized.map(sanitizeAccount), fetchedAt: Date.now() };
     }
-    return sanitized;
+    return sanitized.map(sanitizeAccount);
   }
   if (decision === 'cached') {
     const sanitized = memoryAccounts.map(sanitizeAccount);
     if (!options.forWrite) {
-      cachedCloudAccounts = { data: sanitized, fetchedAt: Date.now() };
+      cachedCloudAccounts = { data: sanitized.map(sanitizeAccount), fetchedAt: Date.now() };
     }
-    return sanitized;
+    return sanitized.map(sanitizeAccount);
   }
   if (decision === 'throw') {
     throw new Error('[CloudStore] accounts store temporarily unavailable');
@@ -234,8 +254,10 @@ export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<
   ];
   await saveCloudAccounts(initialAccounts);
   accountsLoadedFromBlob = true;
-  cachedCloudAccounts = { data: initialAccounts, fetchedAt: Date.now() };
-  return initialAccounts;
+  if (!options.forWrite) {
+    cachedCloudAccounts = { data: initialAccounts.map(sanitizeAccount), fetchedAt: Date.now() };
+  }
+  return initialAccounts.map(sanitizeAccount);
 }
 
 /**
@@ -510,7 +532,7 @@ export async function rejectCloudAccount(
  */
 export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<UnifiedCloudDatabase> {
   if (!options.forWrite && cachedCloudDatabase && Date.now() - cachedCloudDatabase.fetchedAt < CACHE_TTL_MS) {
-    return { ...cachedCloudDatabase.data };
+    return shallowCloneDatabase(cachedCloudDatabase.data);
   }
 
   const fallbackAccounts = await getCloudAccounts(options);
@@ -575,9 +597,9 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
     }
     ensurePatientsFromAccounts(memoryDatabase.accounts, memoryDatabase.patients, memoryDatabase.archivedPatients);
     if (!options.forWrite) {
-      cachedCloudDatabase = { data: memoryDatabase, fetchedAt: Date.now() };
+      cachedCloudDatabase = { data: shallowCloneDatabase(memoryDatabase), fetchedAt: Date.now() };
     }
-    return { ...memoryDatabase };
+    return shallowCloneDatabase(memoryDatabase);
   }
 
   let failed = false;
@@ -625,9 +647,9 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
   if (decision === 'cached') {
     memoryDatabase.accounts = fallbackAccounts;
     if (!options.forWrite) {
-      cachedCloudDatabase = { data: memoryDatabase, fetchedAt: Date.now() };
+      cachedCloudDatabase = { data: shallowCloneDatabase(memoryDatabase), fetchedAt: Date.now() };
     }
-    return { ...memoryDatabase };
+    return shallowCloneDatabase(memoryDatabase);
   }
   {
     if (decision === 'use') {
@@ -678,9 +700,9 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
           memoryDatabase = completeDb;
           databaseLoadedFromBlob = true;
           if (!options.forWrite) {
-            cachedCloudDatabase = { data: completeDb, fetchedAt: Date.now() };
+            cachedCloudDatabase = { data: shallowCloneDatabase(completeDb), fetchedAt: Date.now() };
           }
-          return completeDb;
+          return shallowCloneDatabase(completeDb);
         }
       }
     }
@@ -706,9 +728,9 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
     await saveCloudDatabase(initialDb);
     databaseLoadedFromBlob = true;
     if (!options.forWrite) {
-      cachedCloudDatabase = { data: initialDb, fetchedAt: Date.now() };
+      cachedCloudDatabase = { data: shallowCloneDatabase(initialDb), fetchedAt: Date.now() };
     }
-    return initialDb;
+    return shallowCloneDatabase(initialDb);
   }
 }
 

@@ -27,7 +27,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { NextResponse } from 'next/server';
 import type { StoredAccount, User, UserRole } from './types';
 import { isPhoneMatch, toAsciiDigits } from './phone';
-import { getCloudAccounts, saveCloudAccounts } from './cloud-store';
+import { getCloudAccounts, saveCloudAccounts, changePasswordInCloud } from './cloud-store';
 
 export const SESSION_COOKIE = 'waslity_session';
 export const SESSION_TTL_REMEMBER_SECONDS = 30 * 24 * 60 * 60; // 30 days
@@ -358,16 +358,7 @@ export function passwordMatches(stored: unknown, given: unknown): boolean {
  * markChanged=true records passwordUpdatedAt, which ends sessions issued before it.
  */
 export async function storeAccountPassword(uid: string, stored: string, markChanged: boolean): Promise<boolean> {
-  const accounts = await getCloudAccounts({ forWrite: true });
-  const idx = accounts.findIndex((a) => a.user && a.user.uid === uid);
-  if (idx === -1) return false;
-  const updated: StoredAccount = {
-    ...accounts[idx],
-    password: stored,
-    ...(markChanged ? { passwordUpdatedAt: new Date().toISOString() } : {}),
-  };
-  await saveCloudAccounts(accounts.map((a, i) => (i === idx ? updated : a)));
-  return true;
+  return changePasswordInCloud(uid, stored, markChanged);
 }
 
 export const MIGRATION_CAP = 300;

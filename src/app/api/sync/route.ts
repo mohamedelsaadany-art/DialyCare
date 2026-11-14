@@ -4,6 +4,22 @@ import { filterIncomingForAccount, scopeDatabaseForAccount } from '@/lib/api-sco
 import { getSession, isCrossOriginRequest, NO_STORE_HEADERS, sessionErrorResponse } from '@/lib/server-auth';
 
 /**
+ * RFC 7232 Section 3.2 If-None-Match conditional request matching.
+ * Performs tokenized weak/strong equivalence comparison and supports wildcard '*' and comma lists.
+ * Prevents substring false matches (e.g. W/"v1-patient1" vs W/"v1-patient10").
+ */
+export function isIfNoneMatch(clientHeader: string | null, serverEtag: string): boolean {
+  if (!clientHeader) return false;
+  const trimmed = clientHeader.trim();
+  if (!trimmed) return false;
+  if (trimmed === '*') return true;
+  const normalizeTag = (tag: string) => tag.trim().replace(/^W\//, '').replace(/^"|"$/g, '');
+  const serverNormalized = normalizeTag(serverEtag);
+  const clientTags = trimmed.split(',').map(normalizeTag);
+  return clientTags.includes(serverNormalized);
+}
+
+/**
  * GET  /api/sync — the caller's view of the database (B1c):
  *      staff: everything (accounts without passwords); patient: only their own data.
  * POST /api/sync — merge the caller's local changes, filtered per role
@@ -18,7 +34,7 @@ export async function GET(request: Request) {
     const scoped = scopeDatabaseForAccount(data, session.account);
     const etag = `W/"${data.lastUpdated || 'v1'}-${session.account.user.uid}"`;
     const clientEtag = request.headers.get('if-none-match');
-    if (clientEtag && (clientEtag === etag || clientEtag.trim() === etag || clientEtag.includes(etag) || clientEtag === '*')) {
+    if (isIfNoneMatch(clientEtag, etag)) {
       return new NextResponse(null, {
         status: 304,
         headers: {
@@ -60,9 +76,10 @@ export async function POST(request: Request) {
     }
     const hasWrites = Object.values(patch).some((v) => Array.isArray(v) && v.length > 0);
     const merged = hasWrites ? await mergeCloudDatabase(patch) : current;
+    const postEtag = `W/"${merged.lastUpdated || 'v1'}-${session.account.user.uid}"`;
     return NextResponse.json(
       { success: true, data: scopeDatabaseForAccount(merged, session.account) },
-      { headers: NO_STORE_HEADERS }
+      { headers: { ...NO_STORE_HEADERS, ETag: postEtag } }
     );
   } catch (error: unknown) {
     console.error('[API /api/sync POST] Error:', error instanceof Error ? error.message : error);
