@@ -34,6 +34,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { PatientMedicationSection } from '@/components/patient/PatientMedicationSection';
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
+import { CLINICAL_RANGES, isInRange } from '@/lib/clinical-validation';
 import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
 
 type LogTab = 'medication' | 'fluid' | 'diet' | 'dialysis' | 'labs';
@@ -82,6 +83,7 @@ function LogContent() {
 
   // Fluid Tab State
   const [customAmount, setCustomAmount] = useState<string>('');
+  const [customAmountError, setCustomAmountError] = useState<string | null>(null);
   const [fluidUnit, setFluidUnit] = useState<'ml' | 'cups'>('ml');
 
   // Diet Tab State (starts unchecked)
@@ -227,9 +229,19 @@ function LogContent() {
   const handleCustomFluidSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(customAmount);
-    if (isNaN(val) || val <= 0) return;
-
     const amountInMl = fluidUnit === 'cups' ? Math.round(val * 240) : Math.round(val);
+
+    // Catch typos (e.g. 15000 instead of 150) before they hit the log and fire the critical alarm
+    const { fluidEntryMl } = CLINICAL_RANGES;
+    if (isNaN(val) || val <= 0 || !isInRange(amountInMl, fluidEntryMl)) {
+      setCustomAmountError(
+        isAr
+          ? `يرجى إدخال كمية بين ${fluidEntryMl.min} و ${fluidEntryMl.max} مل (حتى 12 كوب) في المرة الواحدة.`
+          : `Please enter an amount between ${fluidEntryMl.min} and ${fluidEntryMl.max} mL (up to 12 cups) per entry.`
+      );
+      return;
+    }
+    setCustomAmountError(null);
     const nextTotal = totalFluidConsumed + amountInMl;
     const willBeCritical = nextTotal >= fluidLimits.critical;
 
@@ -772,9 +784,14 @@ function LogContent() {
                     min={fluidUnit === 'cups' ? '0.1' : '1'}
                     step={fluidUnit === 'cups' ? '0.1' : '1'}
                     value={customAmount}
-                    onChange={(e) => setCustomAmount(e.target.value)}
+                    onChange={(e) => {
+                      setCustomAmount(e.target.value);
+                      setCustomAmountError(null);
+                    }}
                     placeholder={fluidUnit === 'ml' ? 'e.g. 150' : 'e.g. 0.5'}
                     required
+                    aria-invalid={Boolean(customAmountError)}
+                    aria-describedby={customAmountError ? 'custom-fluid-error' : undefined}
                   />
                 </div>
                 <div className="flex rounded-xl border border-slate-300 overflow-hidden shrink-0">
@@ -802,6 +819,12 @@ function LogContent() {
                   </button>
                 </div>
               </div>
+
+              {customAmountError && (
+                <p id="custom-fluid-error" role="alert" className="text-xs font-bold text-red-600">
+                  {customAmountError}
+                </p>
+              )}
 
               <Button
                 type="submit"

@@ -16,6 +16,7 @@ import {
   showLocalNotification,
 } from '@/lib/notifications';
 import type { Patient } from '@/lib/types';
+import { CLINICAL_RANGES, isInRange } from '@/lib/clinical-validation';
 import { getDialysisScheduleFullLabel } from '@/app/[locale]/patient/patient-utils';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -41,6 +42,7 @@ export default function PatientProfilePage() {
   const [patientRecord, setPatientRecord] = useState<Patient | null>(null);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
   const [fluidLimitInput, setFluidLimitInput] = useState<string>('');
+  const [fluidLimitError, setFluidLimitError] = useState<string | null>(null);
   const [isLimitSaved, setIsLimitSaved] = useState<boolean>(false);
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
@@ -152,7 +154,16 @@ export default function PatientProfilePage() {
   const handleSaveFluidLimit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseInt(fluidLimitInput, 10);
-    if (isNaN(val) || val <= 0) return;
+    const { fluidLimitMl } = CLINICAL_RANGES;
+    if (isNaN(val) || !isInRange(val, fluidLimitMl)) {
+      setFluidLimitError(
+        isAr
+          ? `يرجى إدخال حد يومي بين ${fluidLimitMl.min} و ${fluidLimitMl.max} مل.`
+          : `Please enter a daily limit between ${fluidLimitMl.min} and ${fluidLimitMl.max} mL.`
+      );
+      return;
+    }
+    setFluidLimitError(null);
 
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(activeFluidLimitKey, String(val));
@@ -417,9 +428,14 @@ export default function PatientProfilePage() {
               step="50"
               placeholder="1000"
               value={fluidLimitInput}
-              onChange={(e) => setFluidLimitInput(e.target.value)}
+              onChange={(e) => {
+                setFluidLimitInput(e.target.value);
+                setFluidLimitError(null);
+              }}
               className="flex-1"
               required
+              aria-invalid={Boolean(fluidLimitError)}
+              aria-describedby={fluidLimitError ? 'fluid-limit-error' : undefined}
             />
             <Button
               type="submit"
@@ -430,6 +446,11 @@ export default function PatientProfilePage() {
               {isLimitSaved ? (isAr ? 'تم الحفظ ✓' : 'Saved ✓') : (isAr ? 'حفظ' : 'Save')}
             </Button>
           </div>
+          {fluidLimitError && (
+            <p id="fluid-limit-error" role="alert" className="text-xs font-bold text-red-600">
+              {fluidLimitError}
+            </p>
+          )}
         </form>
       </Card>
 
