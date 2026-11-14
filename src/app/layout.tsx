@@ -4,6 +4,7 @@ import { AuthProvider } from '@/lib/auth-context';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { InstallPwaPrompt } from '@/components/InstallPwaPrompt';
 import { WaslityUpdateBanner } from '@/components/WaslityUpdateBanner';
+import { InAppNotificationToast } from '@/components/InAppNotificationToast';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -52,6 +53,7 @@ export default function RootLayout({
           <ServiceWorkerRegister />
           <Suspense fallback={null}>
             <WaslityUpdateBanner />
+            <InAppNotificationToast />
           </Suspense>
           <InstallPwaPrompt />
           {children}

@@ -2,20 +2,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { getNotifications } from '@/lib/data-store';
+import { showLocalNotification, testNotificationTrigger } from '@/lib/notifications';
 
 const UPDATE_DISMISS_KEY = 'WASLITY_UPDATE_BANNER_DISMISSED';
 
 export function WaslityUpdateBanner() {
   const [showBanner, setShowBanner] = useState<boolean>(false);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
-  const [isAr, setIsAr] = useState<boolean>(true);
+  const [isAr] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return !window.location.pathname.startsWith('/en');
+  });
+  const [testStatus, setTestStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
-    // Detect language safely without usePathname bailouts
-    const isEnglish = window.location.pathname.startsWith('/en') || document.documentElement.lang === 'en';
-    setIsAr(!isEnglish);
 
     // Check if dismissed recently (within 12 hours)
     const dismissedAt = window.localStorage.getItem(UPDATE_DISMISS_KEY);
@@ -29,7 +30,7 @@ export function WaslityUpdateBanner() {
     const checkForUpdateNotice = () => {
       try {
         const notifs = getNotifications();
-        const hasUpdateBroadcast = notifs.some(
+        const updateNotif = notifs.find(
           (n) =>
             n &&
             n.type === 'broadcast' &&
@@ -37,8 +38,22 @@ export function WaslityUpdateBanner() {
               n.titleAr?.includes('تحديث') ||
               n.titleEn?.toLowerCase().includes('update'))
         );
-        if (hasUpdateBroadcast) {
+        if (updateNotif) {
           setShowBanner(true);
+
+          // Trigger native device notification if permissions granted and not alerted yet
+          const alertedKey = `WASLITY_ALERTED_${updateNotif.id}`;
+          if (
+            typeof window !== 'undefined' &&
+            'Notification' in window &&
+            window.Notification.permission === 'granted' &&
+            !window.localStorage.getItem(alertedKey)
+          ) {
+            window.localStorage.setItem(alertedKey, 'true');
+            const title = isAr ? updateNotif.titleAr || updateNotif.titleEn : updateNotif.titleEn || updateNotif.titleAr;
+            const message = isAr ? updateNotif.messageAr || updateNotif.messageEn : updateNotif.messageEn || updateNotif.messageAr;
+            showLocalNotification(title, message);
+          }
         }
       } catch {
         // ignore
@@ -97,6 +112,12 @@ export function WaslityUpdateBanner() {
     }
   };
 
+  const handleTestNotification = async () => {
+    const res = await testNotificationTrigger(isAr);
+    setTestStatus(res.message);
+    setTimeout(() => setTestStatus(null), 6000);
+  };
+
   if (!showBanner) return null;
 
   return (
@@ -122,10 +143,25 @@ export function WaslityUpdateBanner() {
                 ? 'يتوفر الآن إصدار جديد يدعم العمل بدون إنترنت، وأعلى معايير الأمان وسرعة مزامنة البيانات السريرية.'
                 : 'A new release is available with offline support, top-tier security, and real-time clinical sync.'}
             </p>
+            {testStatus && (
+              <p className="text-xs font-bold text-amber-200 mt-1 bg-black/30 px-2 py-0.5 rounded-lg inline-block animate-in fade-in">
+                {testStatus}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+          <button
+            type="button"
+            onClick={handleTestNotification}
+            title={isAr ? 'اضغط لتجربة وصول إشعار لهاتفك الآن' : 'Test phone notification now'}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-sky-500/80 hover:bg-sky-500 active:bg-sky-400 text-white font-bold text-xs sm:text-sm border border-sky-300/40 shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>🔔</span>
+            <span>{isAr ? 'تجربة الإشعار لهاتفي' : 'Test Phone Alert'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleApplyUpdate}
