@@ -11,6 +11,7 @@ import {
 } from '@/lib/cloud-store';
 import { normalizePhone, toAsciiDigits, isPhoneMatch } from '@/lib/phone';
 import { hashPassword, isCrossOriginRequest, NO_STORE_HEADERS, passwordMatches } from '@/lib/server-auth';
+import { isR2Configured, put, getPublicUrl } from '@/lib/r2-client';
 import type { User, StoredAccount, UserRole, Patient } from '@/lib/types';
 
 /**
@@ -94,6 +95,31 @@ export async function POST(request: Request) {
           ? (language === 'en' ? 'Hemodialysis Unit Administrator' : 'إدارة وحدة الغسيل الكلوي')
           : (language === 'en' ? 'Nephrologist / Dialysis Physician' : 'طبيب أمراض كلى وغسيل كلوي');
 
+      let savedIdCardUrl: string | undefined = undefined;
+      if (typeof data.idCardDataUrl === 'string' && data.idCardDataUrl.startsWith('data:image/') && isR2Configured()) {
+        try {
+          const match = data.idCardDataUrl.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+          if (match) {
+            const rawExt = match[1].toLowerCase();
+            const ext = rawExt === 'jpeg' ? 'jpg' : rawExt;
+            const buffer = Buffer.from(match[2], 'base64');
+            const key = `id-cards/${requestedUid}.${ext}`;
+            await put(key, buffer, {
+              contentType: `image/${rawExt}`,
+              allowOverwrite: true,
+            });
+            savedIdCardUrl = getPublicUrl(key);
+          } else {
+            savedIdCardUrl = data.idCardDataUrl;
+          }
+        } catch (err) {
+          console.warn('[Register] Failed to upload ID card image to R2:', err);
+          savedIdCardUrl = data.idCardDataUrl;
+        }
+      } else if (typeof data.idCardDataUrl === 'string') {
+        savedIdCardUrl = data.idCardDataUrl;
+      }
+
       const newUser: User = {
         uid: requestedUid,
         role,
@@ -104,7 +130,7 @@ export async function POST(request: Request) {
         displayName: str(data.fullName, 200) || cleanUsername,
         specialty: str(data.specialty, 200) || defaultSpecialty,
         hospital: str(data.hospital, 200) || 'وحدة الغسيل الكلوي',
-        idCardDataUrl: typeof data.idCardDataUrl === 'string' ? data.idCardDataUrl : undefined,
+        idCardDataUrl: savedIdCardUrl,
         language,
         registeredAt: now,
         createdAt: now,
