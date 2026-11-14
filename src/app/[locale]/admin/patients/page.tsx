@@ -41,7 +41,6 @@ import {
   CheckCircleIcon,
   TrashIcon,
 } from '../admin-icons';
-import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 
 interface PatientRow extends Patient {
   username: string;
@@ -185,15 +184,21 @@ export default function PatientsListPage() {
   const handleCloudSync = React.useCallback(async (showToastNotice = false) => {
     setIsSyncing(true);
     try {
-      await syncFullCloudData();
+      const synced = await syncFullCloudData();
       loadData();
       void loadArchived();
-      setLastSyncedAt(new Date());
+      if (synced) {
+        setLastSyncedAt(new Date());
+      }
       if (showToastNotice) {
         setClinicalToast(
-          isRtl
-            ? 'تمت مزامنة جميع حسابات وسجلات المرضى مع السحابة بنجاح ✓'
-            : 'All patient records successfully synchronized with cloud ✓'
+          synced
+            ? (isRtl
+                ? 'تمت مزامنة جميع حسابات وسجلات المرضى مع السحابة بنجاح ✓'
+                : 'All patient records successfully synchronized with cloud ✓')
+            : (isRtl
+                ? 'تعذرت المزامنة مع السحابة، يرجى المحاولة لاحقاً'
+                : 'Cloud sync unavailable, please try again')
         );
         if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
         toastTimerRef.current = setTimeout(() => setClinicalToast(null), 3500);
@@ -225,14 +230,14 @@ export default function PatientsListPage() {
       }
     }, 0);
 
-    // Regular cloud sync polling (every 12 seconds) so newly registered patients appear in real-time
-    const stopPolling = startVisibilityAwarePolling(() => {
-      void handleCloudSync(false);
-    }, { intervalMs: 12000 });
-
     const handleSync = () => {
       loadData();
       void loadArchived();
+    };
+    const handleCloudSyncCompleted = () => {
+      loadData();
+      void loadArchived();
+      setLastSyncedAt(new Date());
     };
     const handleStorage = (e: StorageEvent) => {
       if (
@@ -250,6 +255,7 @@ export default function PatientsListPage() {
       }
     };
 
+    window.addEventListener('dialycare_cloud_sync_completed', handleCloudSyncCompleted);
     window.addEventListener('dialycare_patient_updated', handleSync);
     window.addEventListener('dialycare_users_updated', handleSync);
     window.addEventListener('dialycare_sessions_updated', handleSync);
@@ -260,13 +266,13 @@ export default function PatientsListPage() {
 
     return () => {
       clearTimeout(timer);
-      stopPolling();
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
       }
       if (notifTimerRef.current) {
         clearTimeout(notifTimerRef.current);
       }
+      window.removeEventListener('dialycare_cloud_sync_completed', handleCloudSyncCompleted);
       window.removeEventListener('dialycare_patient_updated', handleSync);
       window.removeEventListener('dialycare_users_updated', handleSync);
       window.removeEventListener('dialycare_sessions_updated', handleSync);

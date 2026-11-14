@@ -15,9 +15,21 @@ export async function GET(request: Request) {
   if (!session.ok) return sessionErrorResponse(session);
   try {
     const data = await getCloudDatabase();
+    const scoped = scopeDatabaseForAccount(data, session.account);
+    const etag = `W/"${data.lastUpdated || 'v1'}-${session.account.user.uid}"`;
+    const clientEtag = request.headers.get('if-none-match');
+    if (clientEtag && (clientEtag === etag || clientEtag.trim() === etag || clientEtag.includes(etag) || clientEtag === '*')) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: {
+          ...NO_STORE_HEADERS,
+          ETag: etag,
+        },
+      });
+    }
     return NextResponse.json(
-      { success: true, data: scopeDatabaseForAccount(data, session.account) },
-      { headers: NO_STORE_HEADERS }
+      { success: true, data: scoped },
+      { headers: { ...NO_STORE_HEADERS, ETag: etag } }
     );
   } catch (error: unknown) {
     console.error('[API /api/sync GET] Error:', error instanceof Error ? error.message : error);

@@ -1491,6 +1491,17 @@ export function getDietChecklist(): DietChecklistItem[] {
 // ==========================================
 let isSyncingFullCloud = false;
 let bgCloudSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSyncETag: string | null = null;
+let cachedCloudData: UnifiedCloudDatabase | null = null;
+
+export function getLastSyncETag(): string | null {
+  return lastSyncETag;
+}
+
+export function resetSyncETag(): void {
+  lastSyncETag = null;
+  cachedCloudData = null;
+}
 
 export function triggerBackgroundCloudSync(): void {
   if (typeof window === 'undefined') return;
@@ -2152,6 +2163,7 @@ let isSyncingCloud = false;
 export function handleSessionExpired(): boolean {
   if (typeof window === 'undefined') return false;
   try {
+    resetSyncETag();
     const hadUser = Boolean(
       window.localStorage.getItem(CURRENT_USER_KEY) || window.sessionStorage.getItem(CURRENT_USER_KEY)
     );
@@ -2202,28 +2214,79 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
       ? window.location.origin
       : 'http://localhost:3000';
 
+    const postHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (lastSyncETag) {
+      postHeaders['If-None-Match'] = lastSyncETag;
+    }
+
     let res: Response;
     try {
       res = await fetch(`${baseUrl}/api/sync?t=${Date.now()}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: postHeaders,
         body: JSON.stringify(localPayload),
         cache: 'no-store',
       });
     } catch {
       // Fallback to GET if POST network is interrupted
-      res = await fetch(`${baseUrl}/api/sync?t=${Date.now()}`, { cache: 'no-store' });
+      const getHeaders: Record<string, string> = {};
+      if (lastSyncETag) {
+        getHeaders['If-None-Match'] = lastSyncETag;
+      }
+      res = await fetch(`${baseUrl}/api/sync?t=${Date.now()}`, {
+        headers: getHeaders,
+        cache: 'no-store',
+      });
     }
 
     if (res.status === 401) {
+      resetSyncETag();
       handleSessionExpired();
       return null;
     }
+
+    if (res.status === 304) {
+      // The cloud database has not changed! Zero body was transferred.
+      // Return the current local data or cached cloud data without throwing or re-rendering unnecessarily.
+      const currentLocalData: UnifiedCloudDatabase = {
+        accounts: localPayload.accounts || [],
+        patients: localPayload.patients || [],
+        dialysisSessions: localPayload.dialysisSessions || [],
+        labResults: localPayload.labResults || [],
+        medications: localPayload.medications || [],
+        notifications: localPayload.notifications || [],
+        adherenceLogs: localPayload.adherenceLogs || [],
+        fluidLogs: localPayload.fluidLogs || [],
+        dietLogs: localPayload.dietLogs || [],
+        adherenceSurveys: localPayload.adherenceSurveys || [],
+        reminders: localPayload.reminders || [],
+        coachingTips: localPayload.coachingTips || [],
+        archivedPatients: localPayload.archivedPatients || [],
+        lastUpdated: cachedCloudData?.lastUpdated || new Date().toISOString(),
+      };
+      cachedCloudData = currentLocalData;
+      return currentLocalData;
+    }
+
     if (!res.ok) return null;
+
     const body = await res.json();
-    if (!body.success || !body.data) return null;
+    if (!body || !body.success || !body.data) return null;
+
+    if (res.status === 200) {
+      const newETag =
+        typeof res.headers?.get === 'function'
+          ? res.headers.get('ETag') || res.headers.get('etag')
+          : null;
+      if (newETag) {
+        lastSyncETag = newETag;
+      }
+    }
 
     const cloudData: UnifiedCloudDatabase = body.data;
+    cachedCloudData = cloudData;
 
     // 3. Atomically update local storage collections with merged server data
     if (Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {

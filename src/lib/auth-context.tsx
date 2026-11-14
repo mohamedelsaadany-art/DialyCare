@@ -11,6 +11,7 @@ import {
   registerPatientAccount,
   normalizePhone,
   DEFAULT_ADMIN_USER,
+  resetSyncETag,
 } from './data-store';
 import {
   CURRENT_USER_KEY,
@@ -56,6 +57,7 @@ function clearCachedUser(): void {
   try {
     window.localStorage.removeItem(CURRENT_USER_KEY);
     window.sessionStorage.removeItem(CURRENT_USER_KEY);
+    resetSyncETag();
   } catch {
     // storage unavailable
   }

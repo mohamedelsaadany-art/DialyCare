@@ -1,4 +1,4 @@
-import { put, list, getObjectJson, isCloudStorageConfigured } from './r2-client';
+import { put, getObjectJson, isCloudStorageConfigured } from './r2-client';
 import type {
   StoredAccount,
   Patient,
@@ -25,6 +25,26 @@ export type { UnifiedCloudDatabase, ArchivedPatientRecord };
 
 const ACCOUNTS_BLOB_PATH = 'dialycare_cloud_accounts.json';
 const DATABASE_BLOB_PATH = 'dialycare_cloud_database_v1.json';
+
+// In-memory micro-cache for serverless environments (3s TTL)
+let cachedCloudDatabase: { data: UnifiedCloudDatabase; fetchedAt: number } | null = null;
+let cachedCloudAccounts: { data: StoredAccount[]; fetchedAt: number } | null = null;
+export const CACHE_TTL_MS = 3000; // 3 seconds
+
+export function invalidateCloudStoreCache(): void {
+  cachedCloudDatabase = null;
+  cachedCloudAccounts = null;
+}
+
+export function getCloudStoreCache(): {
+  database: { data: UnifiedCloudDatabase; fetchedAt: number } | null;
+  accounts: { data: StoredAccount[]; fetchedAt: number } | null;
+} {
+  return {
+    database: cachedCloudDatabase,
+    accounts: cachedCloudAccounts,
+  };
+}
 
 // In-memory fallback for local dev / offline / CI test environments
 let memoryAccounts: StoredAccount[] = [
@@ -131,32 +151,44 @@ let memoryArchivedInitialSeeded = false;
  * (see decideBlobRead); it throws unless this instance already holds the real list.
  */
 export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<StoredAccount[]> {
+  if (!options.forWrite && cachedCloudAccounts && Date.now() - cachedCloudAccounts.fetchedAt < CACHE_TTL_MS) {
+    return cachedCloudAccounts.data.map(sanitizeAccount);
+  }
+
   if (!isCloudStorageConfigured()) {
-    return memoryAccounts.map(sanitizeAccount);
+    const sanitized = memoryAccounts.map(sanitizeAccount);
+    if (!options.forWrite) {
+      cachedCloudAccounts = { data: sanitized, fetchedAt: Date.now() };
+    }
+    return sanitized;
   }
   let failed = false;
   let found = false;
   let ok = false;
   let parsed: unknown = undefined;
   try {
-    const { blobs } = await list({ prefix: ACCOUNTS_BLOB_PATH });
-    const hit = blobs.find((b) => b.pathname === ACCOUNTS_BLOB_PATH);
-    found = Boolean(hit);
-    if (hit) {
-      const direct = await getObjectJson<unknown>(ACCOUNTS_BLOB_PATH).catch(() => null);
-      if (direct !== null) {
-        ok = true;
-        parsed = direct;
-      } else {
-        // Fallback to fetch via hit.url
-        const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
-        ok = res.ok;
-        if (res.ok) parsed = await res.json();
-      }
+    const direct = await getObjectJson<unknown>(ACCOUNTS_BLOB_PATH);
+    if (direct !== null) {
+      found = true;
+      ok = true;
+      parsed = direct;
+    } else {
+      found = false;
+      ok = false;
     }
-  } catch (error) {
-    failed = true;
-    console.warn('[CloudStore] Cloud accounts read failed:', error instanceof Error ? error.message : error);
+  } catch (error: unknown) {
+    const status = (error as { $metadata?: { httpStatusCode?: number }; status?: number })?.$metadata?.httpStatusCode || (error as { status?: number })?.status;
+    const name = (error as { name?: string })?.name;
+    const code = (error as { code?: string })?.code;
+    const msg = error instanceof Error ? error.message : String(error);
+    const isNotFound = status === 404 || name === 'NotFound' || name === 'NoSuchKey' || code === 'NoSuchKey' || code === 'NotFound' || msg.includes('NoSuchKey') || msg.includes('404');
+    if (isNotFound) {
+      found = false;
+      ok = false;
+    } else {
+      failed = true;
+      console.warn('[CloudStore] Cloud accounts read failed:', msg);
+    }
   }
 
   const decision = decideBlobRead({
@@ -173,10 +205,17 @@ export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<
     const sanitized = (parsed as StoredAccount[]).map(sanitizeAccount);
     memoryAccounts = sanitized;
     accountsLoadedFromBlob = true;
+    if (!options.forWrite) {
+      cachedCloudAccounts = { data: sanitized, fetchedAt: Date.now() };
+    }
     return sanitized;
   }
   if (decision === 'cached') {
-    return memoryAccounts.map(sanitizeAccount);
+    const sanitized = memoryAccounts.map(sanitizeAccount);
+    if (!options.forWrite) {
+      cachedCloudAccounts = { data: sanitized, fetchedAt: Date.now() };
+    }
+    return sanitized;
   }
   if (decision === 'throw') {
     throw new Error('[CloudStore] accounts store temporarily unavailable');
@@ -195,6 +234,7 @@ export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<
   ];
   await saveCloudAccounts(initialAccounts);
   accountsLoadedFromBlob = true;
+  cachedCloudAccounts = { data: initialAccounts, fetchedAt: Date.now() };
   return initialAccounts;
 }
 
@@ -202,6 +242,7 @@ export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<
  * Overwrite accounts in Vercel Blob
  */
 export async function saveCloudAccounts(accounts: StoredAccount[]): Promise<void> {
+  invalidateCloudStoreCache();
   const sanitized = accounts.map(sanitizeAccount);
   memoryAccounts = sanitized;
 
@@ -251,7 +292,29 @@ export async function addCloudAccountIfAbsent(account: StoredAccount): Promise<'
   const accounts = await getCloudAccounts({ forWrite: true });
   if (findConflictingAccount(accounts, account)) return 'conflict';
   await saveCloudAccounts([...accounts, sanitizeAccount(account)]);
+  invalidateCloudStoreCache();
   return 'created';
+}
+
+/**
+ * Change an account password in cloud store and invalidate micro-cache.
+ */
+export async function changePasswordInCloud(
+  uid: string,
+  newPasswordHash: string,
+  markChanged: boolean = true
+): Promise<boolean> {
+  const accounts = await getCloudAccounts({ forWrite: true });
+  const idx = accounts.findIndex((a) => a.user && a.user.uid === uid);
+  if (idx === -1) return false;
+  const updated: StoredAccount = {
+    ...accounts[idx],
+    password: newPasswordHash,
+    ...(markChanged ? { passwordUpdatedAt: new Date().toISOString() } : {}),
+  };
+  await saveCloudAccounts(accounts.map((a, i) => (i === idx ? updated : a)));
+  invalidateCloudStoreCache();
+  return true;
 }
 
 export function findConflictingAccount(accounts: StoredAccount[], candidate: StoredAccount): StoredAccount | undefined {
@@ -403,6 +466,7 @@ export async function approveCloudAccount(
     console.warn('[CloudStore] approveCloudAccount mergeCloudDatabase warning:', err);
   }
 
+  invalidateCloudStoreCache();
   return { account: target, newPatient };
 }
 
@@ -433,6 +497,7 @@ export async function rejectCloudAccount(
     console.warn('[CloudStore] rejectCloudAccount mergeCloudDatabase warning:', err);
   }
 
+  invalidateCloudStoreCache();
   return target;
 }
 
@@ -444,6 +509,10 @@ export async function rejectCloudAccount(
  * Retrieve the complete unified clinical database from Vercel Blob
  */
 export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<UnifiedCloudDatabase> {
+  if (!options.forWrite && cachedCloudDatabase && Date.now() - cachedCloudDatabase.fetchedAt < CACHE_TTL_MS) {
+    return { ...cachedCloudDatabase.data };
+  }
+
   const fallbackAccounts = await getCloudAccounts(options);
   memoryDatabase.accounts = fallbackAccounts;
 
@@ -505,7 +574,10 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
       }
     }
     ensurePatientsFromAccounts(memoryDatabase.accounts, memoryDatabase.patients, memoryDatabase.archivedPatients);
-    return memoryDatabase;
+    if (!options.forWrite) {
+      cachedCloudDatabase = { data: memoryDatabase, fetchedAt: Date.now() };
+    }
+    return { ...memoryDatabase };
   }
 
   let failed = false;
@@ -513,23 +585,28 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
   let ok = false;
   let parsed: unknown = undefined;
   try {
-    const { blobs } = await list({ prefix: DATABASE_BLOB_PATH });
-    const hit = blobs.find((b) => b.pathname === DATABASE_BLOB_PATH);
-    found = Boolean(hit);
-    if (hit) {
-      const direct = await getObjectJson<unknown>(DATABASE_BLOB_PATH).catch(() => null);
-      if (direct !== null) {
-        ok = true;
-        parsed = direct;
-      } else {
-        const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
-        ok = res.ok;
-        if (res.ok) parsed = await res.json();
-      }
+    const direct = await getObjectJson<unknown>(DATABASE_BLOB_PATH);
+    if (direct !== null) {
+      found = true;
+      ok = true;
+      parsed = direct;
+    } else {
+      found = false;
+      ok = false;
     }
-  } catch (error) {
-    failed = true;
-    console.warn('[CloudStore] Cloud database read failed:', error instanceof Error ? error.message : error);
+  } catch (error: unknown) {
+    const status = (error as { $metadata?: { httpStatusCode?: number }; status?: number })?.$metadata?.httpStatusCode || (error as { status?: number })?.status;
+    const name = (error as { name?: string })?.name;
+    const code = (error as { code?: string })?.code;
+    const msg = error instanceof Error ? error.message : String(error);
+    const isNotFound = status === 404 || name === 'NotFound' || name === 'NoSuchKey' || code === 'NoSuchKey' || code === 'NotFound' || msg.includes('NoSuchKey') || msg.includes('404');
+    if (isNotFound) {
+      found = false;
+      ok = false;
+    } else {
+      failed = true;
+      console.warn('[CloudStore] Cloud database read failed:', msg);
+    }
   }
 
   const decision = decideBlobRead({
@@ -547,7 +624,10 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
   }
   if (decision === 'cached') {
     memoryDatabase.accounts = fallbackAccounts;
-    return memoryDatabase;
+    if (!options.forWrite) {
+      cachedCloudDatabase = { data: memoryDatabase, fetchedAt: Date.now() };
+    }
+    return { ...memoryDatabase };
   }
   {
     if (decision === 'use') {
@@ -597,6 +677,9 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
 
           memoryDatabase = completeDb;
           databaseLoadedFromBlob = true;
+          if (!options.forWrite) {
+            cachedCloudDatabase = { data: completeDb, fetchedAt: Date.now() };
+          }
           return completeDb;
         }
       }
@@ -622,6 +705,9 @@ export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<
     ensurePatientsFromAccounts(initialDb.accounts, initialDb.patients, initialDb.archivedPatients);
     await saveCloudDatabase(initialDb);
     databaseLoadedFromBlob = true;
+    if (!options.forWrite) {
+      cachedCloudDatabase = { data: initialDb, fetchedAt: Date.now() };
+    }
     return initialDb;
   }
 }
@@ -657,6 +743,7 @@ export function serializeDatabaseForBlob(db: UnifiedCloudDatabase): string {
 }
 
 export async function saveCloudDatabase(db: UnifiedCloudDatabase): Promise<void> {
+  invalidateCloudStoreCache();
   memoryDatabase = db;
   // Also keep accounts blob updated for backward-compatibility
   await saveCloudAccounts(db.accounts);
@@ -743,6 +830,7 @@ function ensurePatientsFromAccounts(
 export async function mergeCloudDatabase(
   incoming: Partial<UnifiedCloudDatabase>
 ): Promise<UnifiedCloudDatabase> {
+  invalidateCloudStoreCache();
   const current = await getCloudDatabase({ forWrite: true });
 
   // 1. Merge Archived Patients FIRST so all other entities can be reconciled & isolated against it
@@ -1140,6 +1228,7 @@ export async function archivePatients(
   patientIds: string[],
   reviewerName: string = 'Super Admin'
 ): Promise<{ archivedCount: number; archivedPatients?: ArchivedPatientRecord[] }> {
+  invalidateCloudStoreCache();
   if (!patientIds || !Array.isArray(patientIds) || patientIds.length === 0) {
     return { archivedCount: 0, archivedPatients: [] };
   }
@@ -1335,6 +1424,7 @@ export async function restoreArchivedPatient(
   patientId: string,
   reviewerName: string = 'Super Admin'
 ): Promise<{ success: boolean; patient?: Patient; account?: StoredAccount }> {
+  invalidateCloudStoreCache();
   const db = await getCloudDatabase({ forWrite: true });
   if (!db.archivedPatients || db.archivedPatients.length === 0) {
     return { success: false };
@@ -1499,8 +1589,10 @@ export const restorePatient = restoreArchivedPatient;
  * Returns count of permanently deleted records.
  */
 export async function purgeExpiredArchivedPatients(now: Date = new Date()): Promise<number> {
+  invalidateCloudStoreCache();
   const db = await getCloudDatabase({ forWrite: true });
   if (!db.archivedPatients || db.archivedPatients.length === 0) {
+    invalidateCloudStoreCache();
     return 0;
   }
 
@@ -1525,7 +1617,7 @@ export async function purgeExpiredArchivedPatients(now: Date = new Date()): Prom
     db.archivedPatients = kept;
     await saveCloudDatabase(db);
   }
-
+  invalidateCloudStoreCache();
   return purgedCount;
 }
 

@@ -43,8 +43,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const tNav = useTranslations('nav');
 
   const isRtl = locale === 'ar';
+  const syncingRef = React.useRef(false);
 
   const runFullCloudSync = React.useCallback(async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
     setIsSyncing(true);
     try {
       const synced = await syncFullCloudData();
@@ -59,6 +62,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     } catch {
       // ignore
     } finally {
+      syncingRef.current = false;
       setIsSyncing(false);
     }
   }, [user, isRtl]);
@@ -83,7 +87,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       if (mounted) void runFullCloudSync();
     }, { intervalMs: 12000 });
 
+    let lastFocusSyncTime = 0;
     const handleFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusSyncTime < 5000) return; // 5-second cooldown
+      lastFocusSyncTime = now;
       if (mounted) void runFullCloudSync();
     };
     window.addEventListener('focus', handleFocus);
