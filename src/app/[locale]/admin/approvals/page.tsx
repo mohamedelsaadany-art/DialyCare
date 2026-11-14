@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   getAuthAccounts,
   syncCloudAccounts,
+  syncFullCloudData,
   approveUserRegistration,
   rejectUserRegistration,
   ADMIN_CONFIG,
@@ -108,6 +109,7 @@ export default function RegistrationApprovalsPage() {
             ? `تم اعتماد وتفعيل حساب ${u.displayName} بنجاح ✓`
             : `Successfully approved and activated ${u.displayName} ✓`
         );
+        void syncFullCloudData();
         loadData();
       }
     } finally {
@@ -132,6 +134,7 @@ export default function RegistrationApprovalsPage() {
         );
         setRejectingUser(null);
         setRejectionReason('');
+        void syncFullCloudData();
         loadData();
       }
     } finally {

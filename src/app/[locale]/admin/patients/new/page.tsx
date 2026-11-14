@@ -10,7 +10,7 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import { addPatientAccount } from '@/lib/auth-context';
-import { generatePatientCredentials } from '@/lib/data-store';
+import { generatePatientCredentials, syncFullCloudData } from '@/lib/data-store';
 import type { Patient, DialysisAccessType, User } from '@/lib/types';
 import {
   getReminderTemplates,
@@ -96,12 +96,9 @@ export default function NewPatientPage() {
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
 
-    if (!fullName.trim()) {
-      errs.fullName = isRtl ? 'الاسم بالإنجليزية مطلوب' : 'Full name in English is required';
-    }
-
-    if (!fullNameAr.trim()) {
-      errs.fullNameAr = isRtl ? 'الاسم بالعربية مطلوب' : 'Full name in Arabic is required';
+    const effectiveName = fullName.trim() || fullNameAr.trim();
+    if (!effectiveName) {
+      errs.fullName = isRtl ? 'اسم المريض مطلوب' : 'Patient name is required';
     }
 
     if (!username.trim()) {
@@ -137,10 +134,13 @@ export default function NewPatientPage() {
     setSubmitting(true);
 
     try {
+      const effectiveFullName = fullName.trim() || fullNameAr.trim();
+      const effectiveFullNameAr = fullNameAr.trim() || fullName.trim();
+
       // 1. Create Patient + Auth Account via addPatientAccount
       const patientData: Partial<Patient> & { language?: 'ar' | 'en' } = {
-        fullName: fullName.trim(),
-        fullNameAr: fullNameAr.trim(),
+        fullName: effectiveFullName,
+        fullNameAr: effectiveFullNameAr,
         phone: phone.trim(),
         dialysisSchedule,
         dryWeightKg: dryWeightKg.trim() ? Number(dryWeightKg) : undefined,
@@ -214,6 +214,9 @@ export default function NewPatientPage() {
         user: newUser,
         rawPassword: password,
       });
+
+      // Instantly push to unified cloud database so all clinic tablets & phones see new patient immediately
+      void syncFullCloudData();
     } catch (error) {
       console.error('Failed to create patient account:', error);
       setErrors({ form: isRtl ? 'حدث خطأ أثناء إنشاء الحساب' : 'An error occurred while creating the account' });

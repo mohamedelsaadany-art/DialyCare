@@ -27,7 +27,7 @@ import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { AdminClinicalQuickPanel } from '@/components/admin/AdminClinicalQuickPanel';
-import { STORAGE_KEYS, syncCloudAccounts } from '@/lib/data-store';
+import { STORAGE_KEYS, syncFullCloudData } from '@/lib/data-store';
 import type { Patient } from '@/lib/types';
 import {
   getPatients,
@@ -130,17 +130,17 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       loadDashboardData();
-      void syncCloudAccounts().then(() => {
+      void syncFullCloudData().then(() => {
         loadDashboardData();
       });
     }, 0);
 
-    // Regular cloud sync polling so newly registered patients appear in real-time
+    // Regular full cloud sync polling so newly registered patients and clinical logs appear in real-time
     const pollInterval = setInterval(() => {
-      void syncCloudAccounts().then(() => {
+      void syncFullCloudData().then(() => {
         loadDashboardData();
       });
-    }, 15000);
+    }, 12000);
 
     const handleSync = () => {
       loadDashboardData();

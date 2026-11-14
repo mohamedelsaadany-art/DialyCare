@@ -21,7 +21,7 @@ import {
   LogoutIcon,
   DialyCareLogo,
 } from './admin-icons';
-import { getPendingApprovals, syncCloudAccounts } from '@/lib/data-store';
+import { getPendingApprovals, syncFullCloudData } from '@/lib/data-store';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -35,11 +35,27 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const tCommon = useTranslations('common');
   const tNav = useTranslations('nav');
 
   const isRtl = locale === 'ar';
+
+  const runFullCloudSync = React.useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const synced = await syncFullCloudData();
+      if (synced) {
+        const pending = synced.accounts.map((a) => a.user).filter((u) => u.status === 'pending' && u.role !== 'patient');
+        setPendingApprovalsCount(pending.length);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -51,34 +67,34 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       }
     };
 
-    // Background cloud sync function (runs on interval only)
-    const pollCloudApprovals = async () => {
-      try {
-        const synced = await syncCloudAccounts();
-        if (mounted) {
-          const pending = synced.map((a) => a.user).filter((u) => u.status === 'pending' && u.role !== 'patient');
-          setPendingApprovalsCount(pending.length);
-        }
-      } catch {
-        // ignore
-      }
-    };
-
     updateLocalCount();
-    const interval = setInterval(pollCloudApprovals, 20000);
+    const initTimer = setTimeout(() => {
+      if (mounted) void runFullCloudSync();
+    }, 0);
 
+    // Universal background auto-polling every 12 seconds
+    const interval = setInterval(() => {
+      if (mounted) void runFullCloudSync();
+    }, 12000);
+
+    const handleFocus = () => {
+      if (mounted) void runFullCloudSync();
+    };
+    window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', updateLocalCount);
     window.addEventListener('dialycare_approvals_updated', updateLocalCount);
     window.addEventListener('dialycare_users_updated', updateLocalCount);
 
     return () => {
       mounted = false;
+      clearTimeout(initTimer);
       clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', updateLocalCount);
       window.removeEventListener('dialycare_approvals_updated', updateLocalCount);
       window.removeEventListener('dialycare_users_updated', updateLocalCount);
     };
-  }, []);
+  }, [runFullCloudSync]);
 
   // Navigation Items
   const navItems = [
@@ -221,8 +237,24 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           </form>
 
-          {/* Right section: Language Toggle + Admin Info + Logout */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Right section: Cloud Sync Status + Language Toggle + Admin Info + Logout */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => void runFullCloudSync()}
+              disabled={isSyncing}
+              title={isRtl ? 'مزامنة السحابة ثنائية الاتجاه الفورية' : 'Instant Bidirectional Cloud Sync'}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100/90 text-emerald-800 text-xs font-bold transition-all cursor-pointer shadow-xs min-h-[36px]"
+            >
+              <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
+              <span className="hidden sm:inline">
+                {isSyncing
+                  ? (isRtl ? 'جارِ المزامنة...' : 'Syncing...')
+                  : (isRtl ? 'السحابة متزامنة' : 'Cloud Synced')}
+              </span>
+              <span className={`text-xs ${isSyncing ? 'animate-spin' : ''}`}>🔄</span>
+            </button>
+
             <LanguageToggle variant="badge" />
 
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl border border-slate-200">

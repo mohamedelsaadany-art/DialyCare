@@ -20,6 +20,7 @@ import type {
   GeneratedPatientCredentials,
   PatientRegistrationProfile,
   Language,
+  UnifiedCloudDatabase,
 } from './types';
 import { getCycleInfo } from './questionnaire-data';
 
@@ -693,6 +694,7 @@ export function addAdherenceLog(log: Omit<AdherenceLog, 'id'> | AdherenceLog): A
   };
   logs.unshift(newLog);
   writeStorage(STORAGE_KEYS.ADHERENCE_LOGS, logs);
+  dispatchStorageEvent('dialycare_adherence_updated');
   return newLog;
 }
 
@@ -733,6 +735,7 @@ export function addFluidLog(log: Omit<FluidLog, 'id'> | FluidLog): FluidLog {
   };
   logs.unshift(newLog);
   writeStorage(STORAGE_KEYS.FLUID_LOGS, logs);
+  dispatchStorageEvent('dialycare_adherence_updated');
   return newLog;
 }
 
@@ -762,6 +765,7 @@ export function addDietLog(log: Omit<DietLog, 'id'> | DietLog): DietLog {
   };
   logs.unshift(newLog);
   writeStorage(STORAGE_KEYS.DIET_LOGS, logs);
+  dispatchStorageEvent('dialycare_adherence_updated');
   return newLog;
 }
 
@@ -888,6 +892,7 @@ export function addReminder(reminder: PatientReminder): PatientReminder {
   };
   reminders.push(newReminder);
   writeStorage(STORAGE_KEYS.REMINDERS, reminders);
+  dispatchStorageEvent('dialycare_reminders_updated');
   return newReminder;
 }
 
@@ -899,6 +904,7 @@ export function updateReminder(id: string, data: Partial<PatientReminder>): Pati
   const updated = { ...reminders[index], ...data };
   reminders[index] = updated;
   writeStorage(STORAGE_KEYS.REMINDERS, reminders);
+  dispatchStorageEvent('dialycare_reminders_updated');
   return updated;
 }
 
@@ -908,6 +914,7 @@ export function deleteReminder(id: string): boolean {
   const filtered = reminders.filter((r) => r.id !== id);
   if (filtered.length === reminders.length) return false;
   writeStorage(STORAGE_KEYS.REMINDERS, filtered);
+  dispatchStorageEvent('dialycare_reminders_updated');
   return true;
 }
 
@@ -933,6 +940,7 @@ export function updateReminderTemplate(
   const updated = { ...templates[index], ...data };
   templates[index] = updated;
   writeStorage(STORAGE_KEYS.REMINDER_TEMPLATES, templates);
+  dispatchStorageEvent('dialycare_reminders_updated');
   return updated;
 }
 
@@ -945,12 +953,25 @@ export function getDietChecklist(): DietChecklistItem[] {
 }
 
 // ==========================================
-// REACTIVE STORAGE EVENT DISPATCHER
+// REACTIVE STORAGE EVENT DISPATCHER & AUTO-SYNC
 // ==========================================
+let isSyncingFullCloud = false;
+let bgCloudSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function triggerBackgroundCloudSync(): void {
+  if (typeof window === 'undefined') return;
+  if (isSyncingFullCloud) return;
+  if (bgCloudSyncTimer) clearTimeout(bgCloudSyncTimer);
+  bgCloudSyncTimer = setTimeout(() => {
+    void syncFullCloudData();
+  }, 1000);
+}
+
 function dispatchStorageEvent(eventName: string): void {
   if (typeof window !== 'undefined') {
     try {
       window.dispatchEvent(new Event(eventName));
+      triggerBackgroundCloudSync();
     } catch {
       // ignore in environments without DOM event dispatch
     }
@@ -1526,12 +1547,168 @@ export function saveAuthAccounts(accounts: StoredAccount[]): void {
 let isSyncingCloud = false;
 
 /**
+ * Universal Bidirectional Cloud Synchronization Engine.
+ * Collects all 12 local data entities from the browser, posts them to /api/sync,
+ * merges them with the unified cloud database (Vercel Blob), writes the merged truth
+ * back to localStorage, and dispatches reactive UI update events.
+ */
+export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> {
+  if (typeof window === 'undefined') return null;
+  if (isSyncingFullCloud) return null;
+  isSyncingFullCloud = true;
+
+  try {
+    initDataStore();
+
+    // 1. Gather all local entities from browser storage
+    const localPayload: Partial<UnifiedCloudDatabase> = {
+      accounts: getAuthAccounts(),
+      patients: getPatients(),
+      dialysisSessions: getDialysisSessions(),
+      labResults: getPatientLabResults(),
+      medications: getPatientMedications(),
+      notifications: getNotifications(),
+      adherenceLogs: getAdherenceLogs(),
+      fluidLogs: readStorage<FluidLog[]>(STORAGE_KEYS.FLUID_LOGS, []),
+      dietLogs: readStorage<DietLog[]>(STORAGE_KEYS.DIET_LOGS, []),
+      adherenceSurveys: getAdherenceSurveys(),
+      reminders: getReminders(),
+      coachingTips: getCoachingTips(),
+    };
+
+    // 2. Transmit bidirectional merge request to unified sync API
+    const baseUrl = typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'http://localhost:3000';
+
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/api/sync?t=${Date.now()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localPayload),
+        cache: 'no-store',
+      });
+    } catch {
+      // Fallback to GET if POST network is interrupted
+      res = await fetch(`${baseUrl}/api/sync?t=${Date.now()}`, { cache: 'no-store' });
+    }
+
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (!body.success || !body.data) return null;
+
+    const cloudData: UnifiedCloudDatabase = body.data;
+
+    // 3. Atomically update local storage collections with merged server data
+    if (Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {
+      writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, cloudData.accounts);
+    }
+    if (Array.isArray(cloudData.patients) && cloudData.patients.length > 0) {
+      writeStorage(STORAGE_KEYS.PATIENTS, cloudData.patients);
+    }
+    if (Array.isArray(cloudData.dialysisSessions)) {
+      writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, cloudData.dialysisSessions);
+    }
+    if (Array.isArray(cloudData.labResults)) {
+      writeStorage(STORAGE_KEYS.LAB_RESULTS, cloudData.labResults);
+    }
+    if (Array.isArray(cloudData.medications)) {
+      writeStorage(STORAGE_KEYS.PATIENT_MEDICATIONS, cloudData.medications);
+    }
+    if (Array.isArray(cloudData.notifications)) {
+      writeStorage(STORAGE_KEYS.NOTIFICATIONS, cloudData.notifications);
+    }
+    if (Array.isArray(cloudData.adherenceLogs)) {
+      writeStorage(STORAGE_KEYS.ADHERENCE_LOGS, cloudData.adherenceLogs);
+    }
+    if (Array.isArray(cloudData.fluidLogs)) {
+      writeStorage(STORAGE_KEYS.FLUID_LOGS, cloudData.fluidLogs);
+    }
+    if (Array.isArray(cloudData.dietLogs)) {
+      writeStorage(STORAGE_KEYS.DIET_LOGS, cloudData.dietLogs);
+    }
+    if (Array.isArray(cloudData.adherenceSurveys)) {
+      writeStorage(STORAGE_KEYS.ADHERENCE_SURVEYS, cloudData.adherenceSurveys);
+    }
+    if (Array.isArray(cloudData.reminders)) {
+      writeStorage(STORAGE_KEYS.REMINDERS, cloudData.reminders);
+    }
+    if (Array.isArray(cloudData.coachingTips)) {
+      writeStorage(STORAGE_KEYS.COACHING_TIPS, cloudData.coachingTips);
+    }
+
+    // 4. Auto-resolve pending user state if cloud shows account was approved
+    const sessionRaw = window.localStorage.getItem('dialycare_current_user');
+    if (sessionRaw) {
+      try {
+        const curUser = JSON.parse(sessionRaw) as User;
+        if (curUser && curUser.status === 'pending') {
+          const freshAcc = cloudData.accounts.find(
+            (a) =>
+              a.user.uid === curUser.uid ||
+              a.username.toLowerCase() === curUser.username.toLowerCase() ||
+              (curUser.phone && a.phone === curUser.phone)
+          );
+          if (freshAcc && freshAcc.user.status === 'active') {
+            window.localStorage.setItem('dialycare_current_user', JSON.stringify(freshAcc.user));
+            if (typeof window.sessionStorage !== 'undefined') {
+              window.sessionStorage.setItem('dialycare_current_user', JSON.stringify(freshAcc.user));
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 5. Notify all reactive listeners across the application
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('dialycare_users_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_patient_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_sessions_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_labs_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_medications_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_notifications_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_adherence_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_survey_updated'));
+      window.dispatchEvent(new CustomEvent('dialycare_cloud_sync_completed', { detail: cloudData }));
+    }
+
+    return cloudData;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isOfflineOrTest =
+      msg.includes('ECONNREFUSED') ||
+      msg.includes('fetch failed') ||
+      (err && typeof err === 'object' && 'cause' in err && String((err as { cause: unknown }).cause).includes('ECONNREFUSED'));
+    if (!isOfflineOrTest) {
+      console.warn('[DataStore] syncFullCloudData failed:', err);
+    }
+    return null;
+  } finally {
+    isSyncingFullCloud = false;
+  }
+}
+
+/**
  * Synchronize accounts from the cloud API (Vercel Blob / Next.js backend)
  * Merges cloud registrations into local cache so they are visible across devices.
  * Uses a re-entrancy lock and silent write to prevent recursive event storms.
  */
 export async function syncCloudAccounts(): Promise<StoredAccount[]> {
   if (typeof window === 'undefined') return getAuthAccounts();
+
+  // Try full unified cloud sync first
+  try {
+    const full = await syncFullCloudData();
+    if (full && Array.isArray(full.accounts) && full.accounts.length > 0) {
+      return full.accounts;
+    }
+  } catch {
+    // continue to accounts fallback
+  }
+
   if (isSyncingCloud) return getAuthAccounts();
   isSyncingCloud = true;
 
@@ -1540,9 +1717,13 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
 
     // Bidirectional sync: Push local accounts to cloud store so in-clinic created patients
     // on doctors' devices are automatically merged with the server database.
+    const baseUrl = typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'http://localhost:3000';
+
     let res: Response;
     try {
-      res = await fetch(`/api/auth/accounts?t=${Date.now()}`, {
+      res = await fetch(`${baseUrl}/api/auth/accounts?t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accounts: localAccounts }),
@@ -1550,7 +1731,7 @@ export async function syncCloudAccounts(): Promise<StoredAccount[]> {
       });
     } catch {
       // Fallback to GET if POST is blocked or fails
-      res = await fetch(`/api/auth/accounts?t=${Date.now()}`, { cache: 'no-store' });
+      res = await fetch(`${baseUrl}/api/auth/accounts?t=${Date.now()}`, { cache: 'no-store' });
     }
 
     if (!res.ok) return getAuthAccounts();
@@ -1833,7 +2014,9 @@ export function registerStaffAccount(data: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: role, role, data: { ...data, uid, role } }),
-    }).catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
+    })
+      .then(() => void syncFullCloudData())
+      .catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
   }
 
   return cloneValue(newUser);
@@ -1910,7 +2093,9 @@ export function registerPatientAccount(data: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'patient', data: { ...data, uid } }),
-    }).catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
+    })
+      .then(() => void syncFullCloudData())
+      .catch((err) => console.warn('[DataStore] Background cloud registration push failed:', err));
   }
 
   return cloneValue(newUser);

@@ -355,4 +355,24 @@ export interface PatientSurveyStatus {
   totalSubmissions: number;
 }
 
+// ==========================================
+// UNIFIED CLOUD CLUSTER DATABASE (R1-R7)
+// ==========================================
+export interface UnifiedCloudDatabase {
+  accounts: StoredAccount[];
+  patients: Patient[];
+  dialysisSessions: DialysisSession[];
+  labResults: PatientLabRecord[];
+  medications: PatientMedication[];
+  notifications: Notification[];
+  adherenceLogs: AdherenceLog[];
+  fluidLogs: FluidLog[];
+  dietLogs: DietLog[];
+  adherenceSurveys: AdherenceSurveySubmission[];
+  reminders: PatientReminder[];
+  coachingTips: CoachingTip[];
+  lastUpdated: string;
+}
+
+
 

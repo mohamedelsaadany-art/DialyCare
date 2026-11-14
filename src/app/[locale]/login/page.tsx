@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { ADMIN_CONFIG, syncCloudAccounts } from '@/lib/data-store';
+import { ADMIN_CONFIG, syncCloudAccounts, syncFullCloudData } from '@/lib/data-store';
 import type { User, DialysisAccessType } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -287,8 +287,8 @@ export default function LoginPage() {
     }
 
     if (patientStep === 2) {
-      if (!patDryWeight || isNaN(Number(patDryWeight)) || Number(patDryWeight) <= 0) {
-        setRegError(isRtl ? 'يرجى إدخال الوزن الجاف المستهدف بدقة' : 'Please enter target dry weight');
+      if (patDryWeight && (isNaN(Number(patDryWeight)) || Number(patDryWeight) <= 0)) {
+        setRegError(isRtl ? 'يرجى إدخال وزن جاف صحيح بالكيلوجرام' : 'Please enter valid dry weight in kg');
         return;
       }
       setPatientStep(3);
@@ -313,6 +313,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setRegError('');
     try {
+      const dryWeight = patDryWeight && Number(patDryWeight) > 0 ? Number(patDryWeight) : 70;
       const newUser = await registerPatient({
         fullName: patFullName.trim(),
         phone: patPhone.trim(),
@@ -320,7 +321,7 @@ export default function LoginPage() {
         language: locale as 'ar' | 'en',
         profile: {
           dialysisSchedule: patSchedule,
-          dryWeightKg: Number(patDryWeight),
+          dryWeightKg: dryWeight,
           accessType: patAccessType,
           dialysisCenter: patDialysisCenter.trim() || (isRtl ? 'وحدة الغسيل الكلوي' : 'Hemodialysis Unit'),
           age: patAge ? Number(patAge) : undefined,
@@ -328,7 +329,7 @@ export default function LoginPage() {
         },
       });
 
-      // Explicitly await cloud registration to guarantee immediate cross-device persistence
+      // Explicitly await cloud registration & full bidirectional sync to guarantee immediate cross-device persistence
       try {
         await fetch('/api/auth/register', {
           method: 'POST',
@@ -342,7 +343,7 @@ export default function LoginPage() {
               password: patPassword,
               profile: {
                 dialysisSchedule: patSchedule,
-                dryWeightKg: Number(patDryWeight),
+                dryWeightKg: dryWeight,
                 accessType: patAccessType,
                 dialysisCenter: patDialysisCenter.trim() || (isRtl ? 'وحدة الغسيل الكلوي' : 'Hemodialysis Unit'),
                 age: patAge ? Number(patAge) : undefined,
@@ -351,6 +352,7 @@ export default function LoginPage() {
             },
           }),
         });
+        await syncFullCloudData();
       } catch (cloudErr) {
         console.warn('[Login] Direct cloud registration push warning:', cloudErr);
       }

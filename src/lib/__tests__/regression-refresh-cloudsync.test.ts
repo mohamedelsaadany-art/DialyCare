@@ -57,18 +57,22 @@ import {
   getAdminPassword,
   getPatients,
   syncCloudAccounts,
+  syncFullCloudData,
   DEFAULT_ADMIN_USER,
 } from '../data-store';
 import {
   getCloudAccounts,
   saveCloudAccounts,
   approveCloudAccount,
+  getCloudDatabase,
+  mergeCloudDatabase,
 } from '../cloud-store';
 import { POST as registerRoute } from '../../app/api/auth/register/route';
 import { GET as accountsRoute } from '../../app/api/auth/accounts/route';
 import { POST as approveRoute } from '../../app/api/auth/approve/route';
 import { POST as rejectRoute } from '../../app/api/auth/reject/route';
-import type { User, StoredAccount, Patient } from '../types';
+import { GET as syncRouteGet, POST as syncRoutePost } from '../../app/api/sync/route';
+import type { User, StoredAccount, Patient, DialysisSession } from '../types';
 
 const CURRENT_USER_KEY = 'dialycare_current_user';
 
@@ -692,6 +696,111 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     }
 
     console.log('  ✓ Cross-device doctor approval reconciliation & deduplication verified!');
+
+    // ==============================================================
+    // 5. Full-Spectrum Bidirectional Clinical Synchronization Engine
+    // ==============================================================
+    console.log('\n--- 5. Testing Full-Spectrum Bidirectional Clinical Synchronization Engine ---');
+
+    // 5.1 Test direct merge of clinical entities in cloud database
+    const cloudDbBefore = await getCloudDatabase();
+    assert.ok(Array.isArray(cloudDbBefore.accounts), 'Cloud DB contains accounts');
+    count();
+
+    const testPatientId = 'cloud-sync-test-patient-1';
+    const testPatient: Patient = {
+      id: testPatientId,
+      fullName: 'Dr. Provisioned Patient',
+      fullNameAr: 'مريض مدخل سريرياً',
+      phone: '01055566677',
+      username: '01055566677',
+      dialysisSchedule: 'SMW',
+      dryWeightKg: 68,
+      accessType: 'AVF',
+      isActive: true,
+      gender: 'male',
+      avatarId: 'male_mature_1',
+      createdAt: new Date().toISOString(),
+    };
+
+    const testSession: DialysisSession = {
+      id: 'session-sync-test-1',
+      patientId: testPatientId,
+      sessionDate: '2026-11-14',
+      recordedBy: 'doc-1',
+      recordedAt: new Date().toISOString(),
+      durationHours: 4,
+      ultrafiltrationVolumeMl: 2200,
+      preWeightKg: 70.2,
+      postWeightKg: 68.0,
+      machineSodiumMeqL: 138,
+    };
+
+    const mergedDb = await mergeCloudDatabase({
+      patients: [testPatient],
+      dialysisSessions: [testSession],
+    });
+
+    assert.ok(mergedDb.patients.some((p) => p.id === testPatientId), 'Patient merged into cloud DB');
+    count();
+    assert.ok(mergedDb.dialysisSessions.some((s) => s.id === 'session-sync-test-1'), 'Session merged into cloud DB');
+    count();
+
+    // 5.2 Test /api/sync route GET and POST directly
+    const getRes = await syncRouteGet();
+    const getJson = await getRes.json();
+    assert.strictEqual(getJson.success, true, 'GET /api/sync returned success');
+    count();
+    assert.ok(getJson.data.patients.some((p: Patient) => p.id === testPatientId), 'GET /api/sync contains merged patient');
+    count();
+
+    const postReq = new Request('http://localhost:3000/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patients: [{
+          ...testPatient,
+          dryWeightKg: 67.5,
+        }],
+      }),
+    });
+    const postRes = await syncRoutePost(postReq);
+    const postJson = await postRes.json();
+    assert.strictEqual(postJson.success, true, 'POST /api/sync returned success');
+    count();
+    const updatedInCloud = postJson.data.patients.find((p: Patient) => p.id === testPatientId);
+    assert.strictEqual(updatedInCloud?.dryWeightKg, 67.5, 'POST /api/sync reconciled patient update in cloud');
+    count();
+
+    // 5.3 Test client synchronizer syncFullCloudData
+    const clientSyncOriginal = globalThis.fetch;
+    globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url instanceof Request ? url.url : url.toString();
+      if (urlStr.includes('/api/sync')) {
+        const bodyObj = init?.body ? JSON.parse(String(init.body)) : {};
+        const resDb = await mergeCloudDatabase(bodyObj);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, data: resDb }),
+        } as unknown as Response;
+      }
+      return clientSyncOriginal(url, init);
+    };
+
+    try {
+      const clientSynced = await syncFullCloudData();
+      assert.ok(clientSynced, 'syncFullCloudData returned synced database');
+      count();
+      assert.ok(clientSynced?.patients.some((p) => p.id === testPatientId), 'syncFullCloudData holds test patient');
+      count();
+      assert.ok(clientSynced?.dialysisSessions.some((s) => s.id === 'session-sync-test-1'), 'syncFullCloudData holds test session');
+      count();
+    } finally {
+      globalThis.fetch = clientSyncOriginal;
+    }
+
+    console.log('  ✓ Full-spectrum bidirectional clinical synchronization engine verified!');
 
     console.log('\n================================================================');
     console.log(`REGRESSION SUITE PASSED SUCCESSFULLY: ${assertions} assertions passed`);

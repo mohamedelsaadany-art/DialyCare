@@ -18,7 +18,7 @@ import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
 import type { Patient, Notification, PatientLabRecord } from '@/lib/types';
 import { getDialysisScheduleLabel } from '@/app/[locale]/patient/patient-utils';
-import { STORAGE_KEYS, syncCloudAccounts } from '@/lib/data-store';
+import { STORAGE_KEYS, syncFullCloudData } from '@/lib/data-store';
 import {
   getPatients,
   updatePatient,
@@ -121,7 +121,7 @@ export default function PatientsListPage() {
   const handleCloudSync = React.useCallback(async (showToastNotice = false) => {
     setIsSyncing(true);
     try {
-      await syncCloudAccounts();
+      await syncFullCloudData();
       loadData();
       setLastSyncedAt(new Date());
       if (showToastNotice) {
