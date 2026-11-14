@@ -75,8 +75,19 @@ export function isNotificationVisibleToPatient(n: Notification, patientId: strin
 
 /** What the caller is allowed to read. Never returns a password. */
 export function scopeDatabaseForAccount(db: UnifiedCloudDatabase, account: StoredAccount): UnifiedCloudDatabase {
+  const scrubbedArchived = Array.isArray(db.archivedPatients)
+    ? db.archivedPatients.map((arch) => ({
+        ...arch,
+        account: arch.account ? (toPublicAccount(arch.account) as unknown as StoredAccount) : undefined,
+      }))
+    : undefined;
+
   if (isStaffRole(account.user.role)) {
-    return { ...db, accounts: publicAccounts(arr<StoredAccount>(db.accounts)) };
+    return {
+      ...db,
+      accounts: publicAccounts(arr<StoredAccount>(db.accounts)),
+      ...(scrubbedArchived !== undefined ? { archivedPatients: scrubbedArchived } : {}),
+    };
   }
   const uid = account.user.uid;
   const own = <T extends { patientId?: string }>(rows: unknown): T[] => arr<T>(rows).filter((r) => r.patientId === uid);

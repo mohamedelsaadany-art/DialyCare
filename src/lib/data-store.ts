@@ -21,6 +21,7 @@ import type {
   PatientRegistrationProfile,
   Language,
   UnifiedCloudDatabase,
+  ArchivedPatientRecord,
 } from './types';
 import { getCycleInfo } from './questionnaire-data';
 import { CURRENT_USER_KEY, REAUTH_NOTICE_KEY } from './session-client';
@@ -82,6 +83,7 @@ export const STORAGE_KEYS = {
   ADHERENCE_SURVEYS: 'DIALYCARE_ADHERENCE_SURVEYS',
   AUTH_ACCOUNTS: 'DIALYCARE_AUTH_ACCOUNTS',
   ADMIN_CREDENTIALS: 'DIALYCARE_ADMIN_CREDENTIALS',
+  ARCHIVED_PATIENTS: 'DIALYCARE_ARCHIVED_PATIENTS',
 } as const;
 
 // Safe LocalStorage helpers with deep copy to prevent in-memory mutation
@@ -232,6 +234,31 @@ export const INITIAL_DEMO_PATIENTS: Patient[] = [
     avatarStyle: 'modern',
     isActive: true,
     createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+// Initial demo archived patients (14-day archive with sample reactivation request)
+export const INITIAL_ARCHIVED_PATIENTS: Patient[] = [
+  {
+    id: 'patient-archived-1',
+    fullName: 'Sameh Nabil Kamel',
+    fullNameAr: 'سامح نبيل كامل',
+    phone: '+201099998888',
+    username: '01099998888',
+    dialysisSchedule: 'SMW',
+    dryWeightKg: 74,
+    accessType: 'AVF',
+    gender: 'male',
+    avatarId: 'male_mature_2',
+    avatarStyle: 'classic',
+    isActive: false,
+    isArchived: true,
+    archivedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    archiveExpiresAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
+    archivedBy: 'Super Admin',
+    reactivationStatus: 'pending',
+    reactivationRequestedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    createdAt: '2026-01-15T00:00:00.000Z',
   },
 ];
 
@@ -740,6 +767,423 @@ export function deletePatient(id: string): boolean {
   const filtered = patients.filter((p) => p.id !== id);
   if (filtered.length === patients.length) return false;
   writeStorage(STORAGE_KEYS.PATIENTS, filtered);
+  return true;
+}
+
+// ==========================================
+// 14-DAY ARCHIVE & REACTIVATION CONTROLS
+// ==========================================
+
+export function calculateArchiveDaysRemaining(archivedAt?: string, archiveExpiresAt?: string): number {
+  if (archiveExpiresAt) {
+    const diff = new Date(archiveExpiresAt).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }
+  if (archivedAt) {
+    const elapsed = Date.now() - new Date(archivedAt).getTime();
+    const remainingMs = 14 * 24 * 60 * 60 * 1000 - elapsed;
+    return Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
+  }
+  return 14;
+}
+
+export function getArchivedPatientRecordsLocal(): ArchivedPatientRecord[] {
+  initDataStore();
+  const rawRecords = readStorage<any[]>(STORAGE_KEYS.ARCHIVED_PATIENTS, []);
+  const nowMs = Date.now();
+  const records: ArchivedPatientRecord[] = rawRecords.map((r) => {
+    if (!r.patient && r.id) {
+      const purgeAt =
+        r.purgeAt ||
+        r.archiveExpiresAt ||
+        (r.archivedAt ? new Date(new Date(r.archivedAt).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString() : new Date(nowMs + 14 * 24 * 60 * 60 * 1000).toISOString());
+      return {
+        archiveId: r.archiveId || `arch_${r.id}`,
+        id: r.id,
+        patientId: r.id,
+        fullName: r.fullName,
+        fullNameAr: r.fullNameAr,
+        phone: r.phone,
+        username: r.username,
+        patient: r,
+        sessions: [],
+        labResults: [],
+        medications: [],
+        adherenceSurveys: [],
+        fluidLogs: [],
+        dietLogs: [],
+        adherenceLogs: [],
+        reminders: [],
+        archivedAt: r.archivedAt || new Date().toISOString(),
+        purgeAt,
+        archivedBy: r.archivedBy || 'Super Admin',
+        reactivationStatus: r.reactivationStatus || 'none',
+      };
+    }
+    return r as ArchivedPatientRecord;
+  });
+
+  const valid = records.filter((r) => {
+    const purgeTime = new Date(r.purgeAt || r.patient?.archiveExpiresAt || 0).getTime();
+    if (Number.isNaN(purgeTime) || purgeTime === 0) {
+      if (r.archivedAt) {
+        const archTime = new Date(r.archivedAt).getTime();
+        if (!Number.isNaN(archTime) && nowMs - archTime < 14 * 24 * 60 * 60 * 1000) return true;
+      }
+      return false;
+    }
+    return purgeTime > nowMs;
+  });
+
+  if (valid.length !== rawRecords.length) {
+    writeStorage(STORAGE_KEYS.ARCHIVED_PATIENTS, valid);
+  }
+  return valid;
+}
+
+export function saveArchivedPatientRecordsLocal(records: ArchivedPatientRecord[]): void {
+  initDataStore();
+  writeStorage(STORAGE_KEYS.ARCHIVED_PATIENTS, records);
+}
+
+export function getArchivedPatients(): Patient[] {
+  initDataStore();
+  const allPatients = readStorage<Patient[]>(STORAGE_KEYS.PATIENTS, INITIAL_DEMO_PATIENTS);
+  const archivedInMain = allPatients.filter((p) => Boolean(p.isArchived));
+  const rawArchived = readStorage<any[]>(STORAGE_KEYS.ARCHIVED_PATIENTS, INITIAL_ARCHIVED_PATIENTS);
+  const map = new Map<string, Patient>();
+
+  rawArchived.forEach((raw) => {
+    const p: Patient = raw.patient ? raw.patient : raw;
+    if (p && p.id) {
+      map.set(p.id, {
+        ...p,
+        isArchived: true,
+        archivedAt: p.archivedAt || raw.archivedAt,
+        archiveExpiresAt: p.archiveExpiresAt || raw.purgeAt,
+        archivedBy: p.archivedBy || raw.archivedBy,
+        reactivationStatus: p.reactivationStatus || raw.reactivationStatus,
+        reactivationRequestedAt: p.reactivationRequestedAt || raw.reactivationRequestedAt,
+      });
+    }
+  });
+
+  archivedInMain.forEach((p) => {
+    if (p && p.id) {
+      map.set(p.id, p);
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+export function archivePatients(ids: string[], adminName = 'Super Admin'): boolean {
+  if (!ids || ids.length === 0) return false;
+  initDataStore();
+  const now = new Date();
+  const archivedAt = now.toISOString();
+  const archiveExpiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+  // 1. Read existing clinical stores
+  const allPatients = getPatients();
+  const allSessions = readStorage<DialysisSession[]>(STORAGE_KEYS.DIALYSIS_SESSIONS, []);
+  const allLabs = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, []);
+  const allMeds = readStorage<PatientMedication[]>(STORAGE_KEYS.PATIENT_MEDICATIONS, []);
+  const allSurveys = readStorage<AdherenceSurveySubmission[]>(STORAGE_KEYS.ADHERENCE_SURVEYS, []);
+  const allFluid = readStorage<FluidLog[]>(STORAGE_KEYS.FLUID_LOGS, []);
+  const allDiet = readStorage<DietLog[]>(STORAGE_KEYS.DIET_LOGS, []);
+  const allAdherence = readStorage<AdherenceLog[]>(STORAGE_KEYS.ADHERENCE_LOGS, []);
+  const allReminders = readStorage<PatientReminder[]>(STORAGE_KEYS.REMINDERS, []);
+  const allAccounts = getAuthAccounts();
+
+  const targetIds = new Set(ids);
+  const existingRecords = getArchivedPatientRecordsLocal();
+  const updatedRecords = [...existingRecords];
+
+  let patientsModified = false;
+  const updatedPatients: Patient[] = [];
+
+  for (const p of allPatients) {
+    if (targetIds.has(p.id)) {
+      patientsModified = true;
+      const matchingAccount = allAccounts.find((a) => a.user.uid === p.id || (p.username && a.username.toLowerCase() === p.username.toLowerCase()));
+
+      const archivedPatient: Patient = {
+        ...p,
+        isArchived: true,
+        archivedAt,
+        archiveExpiresAt,
+        archivedBy: adminName,
+        isActive: false,
+      };
+
+      const record: ArchivedPatientRecord = {
+        archiveId: `arch_${p.id}_${now.getTime()}`,
+        id: p.id,
+        patientId: p.id,
+        fullName: p.fullName,
+        fullNameAr: p.fullNameAr || p.fullName,
+        phone: p.phone,
+        username: p.username,
+        patient: archivedPatient,
+        account: matchingAccount,
+        sessions: allSessions.filter((s) => s.patientId === p.id),
+        labResults: allLabs.filter((l) => l.patientId === p.id),
+        medications: allMeds.filter((m) => m.patientId === p.id),
+        adherenceSurveys: allSurveys.filter((s) => s.patientId === p.id),
+        fluidLogs: allFluid.filter((f) => f.patientId === p.id),
+        dietLogs: allDiet.filter((d) => d.patientId === p.id),
+        adherenceLogs: allAdherence.filter((a) => a.patientId === p.id),
+        reminders: allReminders.filter((r) => r.patientId === p.id),
+        archivedAt,
+        purgeAt: archiveExpiresAt,
+        archivedBy: adminName,
+        reactivationStatus: 'none',
+      };
+
+      const existingIdx = updatedRecords.findIndex((r) => r.patient?.id === p.id || r.id === p.id);
+      if (existingIdx >= 0) {
+        updatedRecords[existingIdx] = record;
+      } else {
+        updatedRecords.push(record);
+      }
+    } else {
+      updatedPatients.push(p);
+    }
+  }
+
+  if (patientsModified) {
+    writeStorage(STORAGE_KEYS.PATIENTS, updatedPatients);
+    saveArchivedPatientRecordsLocal(updatedRecords);
+
+    // Filter clinical collections in active store
+    writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, allSessions.filter((s) => !targetIds.has(s.patientId)));
+    writeStorage(STORAGE_KEYS.LAB_RESULTS, allLabs.filter((l) => !targetIds.has(l.patientId)));
+    writeStorage(STORAGE_KEYS.PATIENT_MEDICATIONS, allMeds.filter((m) => !targetIds.has(m.patientId)));
+    writeStorage(STORAGE_KEYS.ADHERENCE_SURVEYS, allSurveys.filter((s) => !targetIds.has(s.patientId)));
+    writeStorage(STORAGE_KEYS.FLUID_LOGS, allFluid.filter((f) => !targetIds.has(f.patientId)));
+    writeStorage(STORAGE_KEYS.DIET_LOGS, allDiet.filter((d) => !targetIds.has(d.patientId)));
+    writeStorage(STORAGE_KEYS.ADHERENCE_LOGS, allAdherence.filter((a) => !targetIds.has(a.patientId)));
+    writeStorage(STORAGE_KEYS.REMINDERS, allReminders.filter((r) => !targetIds.has(r.patientId)));
+
+    // Update matching AUTH_ACCOUNTS
+    let accountsChanged = false;
+    const updatedAccounts = allAccounts.map((a) => {
+      if (targetIds.has(a.user.uid)) {
+        accountsChanged = true;
+        return {
+          ...a,
+          user: {
+            ...a.user,
+            isArchived: true,
+            archivedAt,
+            archiveExpiresAt,
+            archivedBy: adminName,
+          },
+        };
+      }
+      return a;
+    });
+    if (accountsChanged) {
+      saveAuthAccounts(updatedAccounts);
+      dispatchStorageEvent('dialycare_users_updated');
+    }
+
+    dispatchStorageEvent('dialycare_patient_updated');
+    dispatchStorageEvent('dialycare_archive_updated');
+    return true;
+  }
+
+  return false;
+}
+
+export function archivePatient(id: string, adminName = 'Super Admin'): boolean {
+  return archivePatients([id], adminName);
+}
+
+export function restorePatient(id: string): boolean {
+  if (!id) return false;
+  initDataStore();
+
+  const records = getArchivedPatientRecordsLocal();
+  const targetRecord = records.find((r) => r.patient?.id === id || r.id === id || r.archiveId === id);
+
+  if (!targetRecord && !getPatients().some((p) => p.id === id && p.isArchived)) {
+    return false;
+  }
+
+  // 1. Restore patient to PATIENTS list
+  const patients = getPatients();
+  const existingIdx = patients.findIndex((p) => p.id === id);
+  const patientToRestore: Patient = targetRecord?.patient
+    ? {
+        ...targetRecord.patient,
+        isArchived: false,
+        archivedAt: undefined,
+        archiveExpiresAt: undefined,
+        archivedBy: undefined,
+        reactivationStatus: undefined,
+        reactivationRequestedAt: undefined,
+        isActive: true,
+      }
+    : {
+        id,
+        fullName: 'Restored Patient',
+        fullNameAr: 'مريض مستعاد',
+        dialysisSchedule: 'SMW',
+        dryWeightKg: 70,
+        accessType: 'AVF',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+
+  if (existingIdx >= 0) {
+    patients[existingIdx] = {
+      ...patients[existingIdx],
+      ...patientToRestore,
+      isActive: true,
+      isArchived: false,
+    };
+  } else {
+    patients.push(patientToRestore);
+  }
+  writeStorage(STORAGE_KEYS.PATIENTS, patients);
+
+  // 2. Remove from ARCHIVED_PATIENTS list preserving full records for others
+  const remainingRecords = records.filter((r) => r.patient?.id !== id && r.id !== id && r.archiveId !== id);
+  saveArchivedPatientRecordsLocal(remainingRecords);
+
+  // 3. Restore clinical collections
+  if (targetRecord) {
+    if (Array.isArray(targetRecord.sessions) && targetRecord.sessions.length > 0) {
+      const activeSessions = readStorage<DialysisSession[]>(STORAGE_KEYS.DIALYSIS_SESSIONS, []);
+      for (const s of targetRecord.sessions) {
+        if (!activeSessions.some((ex) => ex.id === s.id)) activeSessions.push(s);
+      }
+      writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, activeSessions);
+    }
+    if (Array.isArray(targetRecord.labResults) && targetRecord.labResults.length > 0) {
+      const activeLabs = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, []);
+      for (const l of targetRecord.labResults) {
+        if (!activeLabs.some((ex) => ex.id === l.id)) activeLabs.push(l);
+      }
+      writeStorage(STORAGE_KEYS.LAB_RESULTS, activeLabs);
+    }
+    if (Array.isArray(targetRecord.medications) && targetRecord.medications.length > 0) {
+      const activeMeds = readStorage<PatientMedication[]>(STORAGE_KEYS.PATIENT_MEDICATIONS, []);
+      for (const m of targetRecord.medications) {
+        if (!activeMeds.some((ex) => ex.id === m.id)) activeMeds.push(m);
+      }
+      writeStorage(STORAGE_KEYS.PATIENT_MEDICATIONS, activeMeds);
+    }
+    if (Array.isArray(targetRecord.adherenceSurveys) && targetRecord.adherenceSurveys.length > 0) {
+      const activeSurveys = readStorage<AdherenceSurveySubmission[]>(STORAGE_KEYS.ADHERENCE_SURVEYS, []);
+      for (const s of targetRecord.adherenceSurveys) {
+        if (!activeSurveys.some((ex) => ex.id === s.id)) activeSurveys.push(s);
+      }
+      writeStorage(STORAGE_KEYS.ADHERENCE_SURVEYS, activeSurveys);
+    }
+    if (Array.isArray(targetRecord.fluidLogs) && targetRecord.fluidLogs.length > 0) {
+      const activeFluid = readStorage<FluidLog[]>(STORAGE_KEYS.FLUID_LOGS, []);
+      for (const f of targetRecord.fluidLogs) {
+        if (!activeFluid.some((ex) => ex.id === f.id)) activeFluid.push(f);
+      }
+      writeStorage(STORAGE_KEYS.FLUID_LOGS, activeFluid);
+    }
+    if (Array.isArray(targetRecord.dietLogs) && targetRecord.dietLogs.length > 0) {
+      const activeDiet = readStorage<DietLog[]>(STORAGE_KEYS.DIET_LOGS, []);
+      for (const d of targetRecord.dietLogs) {
+        if (!activeDiet.some((ex) => ex.id === d.id)) activeDiet.push(d);
+      }
+      writeStorage(STORAGE_KEYS.DIET_LOGS, activeDiet);
+    }
+    if (Array.isArray(targetRecord.adherenceLogs) && targetRecord.adherenceLogs.length > 0) {
+      const activeAdherence = readStorage<AdherenceLog[]>(STORAGE_KEYS.ADHERENCE_LOGS, []);
+      for (const a of targetRecord.adherenceLogs) {
+        if (!activeAdherence.some((ex) => ex.id === a.id)) activeAdherence.push(a);
+      }
+      writeStorage(STORAGE_KEYS.ADHERENCE_LOGS, activeAdherence);
+    }
+    if (Array.isArray(targetRecord.reminders) && targetRecord.reminders.length > 0) {
+      const activeReminders = readStorage<PatientReminder[]>(STORAGE_KEYS.REMINDERS, []);
+      for (const r of targetRecord.reminders) {
+        if (!activeReminders.some((ex) => ex.id === r.id)) activeReminders.push(r);
+      }
+      writeStorage(STORAGE_KEYS.REMINDERS, activeReminders);
+    }
+  }
+
+  // 4. Update AUTH_ACCOUNTS
+  const accounts = getAuthAccounts();
+  let accountsChanged = false;
+  const updatedAccounts = accounts.map((a) => {
+    if (a.user.uid === id) {
+      accountsChanged = true;
+      return {
+        ...a,
+        user: {
+          ...a.user,
+          isArchived: false,
+          archivedAt: undefined,
+          archiveExpiresAt: undefined,
+          archivedBy: undefined,
+          reactivationStatus: undefined,
+          reactivationRequestedAt: undefined,
+          status: 'active' as const,
+        },
+      };
+    }
+    return a;
+  });
+  if (accountsChanged) {
+    saveAuthAccounts(updatedAccounts);
+    dispatchStorageEvent('dialycare_users_updated');
+  }
+
+  dispatchStorageEvent('dialycare_patient_updated');
+  dispatchStorageEvent('dialycare_archive_updated');
+  dispatchStorageEvent('dialycare_approvals_updated');
+  return true;
+}
+
+export function getPendingReactivations(): Patient[] {
+  const archived = getArchivedPatients();
+  return archived.filter((p) => p.reactivationStatus === 'pending');
+}
+
+export function requestPatientReactivation(idOrPhone: string): boolean {
+  initDataStore();
+  const archived = getArchivedPatients();
+  const clean = idOrPhone.trim();
+  const target = archived.find((p) => p.id === clean || p.phone?.includes(clean) || p.username === clean);
+  if (!target) return false;
+
+  target.reactivationStatus = 'pending';
+  target.reactivationRequestedAt = new Date().toISOString();
+
+  // Save back to ARCHIVED_PATIENTS
+  const updatedArchived = archived.map((p) => (p.id === target.id ? target : p));
+  writeStorage(STORAGE_KEYS.ARCHIVED_PATIENTS, updatedArchived);
+
+  // Also update AUTH_ACCOUNTS
+  const accounts = getAuthAccounts();
+  const updatedAccounts = accounts.map((a) => {
+    if (a.user.uid === target.id || a.phone?.includes(clean) || a.username === clean) {
+      return {
+        ...a,
+        user: {
+          ...a.user,
+          reactivationStatus: 'pending' as const,
+          reactivationRequestedAt: new Date().toISOString(),
+        },
+      };
+    }
+    return a;
+  });
+  saveAuthAccounts(updatedAccounts);
+
+  dispatchStorageEvent('dialycare_archive_updated');
+  dispatchStorageEvent('dialycare_approvals_updated');
   return true;
 }
 
@@ -1750,6 +2194,7 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
       adherenceSurveys: getAdherenceSurveys(),
       reminders: getReminders(),
       coachingTips: getCoachingTips(),
+      archivedPatients: getArchivedPatientRecordsLocal(),
     };
 
     // 2. Transmit bidirectional merge request to unified sync API
@@ -1785,10 +2230,22 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
       writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, cloudData.accounts);
     }
     if (Array.isArray(cloudData.patients) && cloudData.patients.length > 0) {
-      const mergedPatients = [...cloudData.patients];
+      let mergedPatients = [...cloudData.patients];
+      if (Array.isArray(cloudData.archivedPatients) && cloudData.archivedPatients.length > 0) {
+        mergedPatients = mergedPatients.filter(
+          (p) => !cloudData.archivedPatients!.some((a) => a.patient?.id === p.id)
+        );
+      }
       if (Array.isArray(cloudData.accounts)) {
         for (const acc of cloudData.accounts) {
           if (acc.user.role === 'patient' && (acc.user.status === 'active' || !acc.user.status)) {
+            if (
+              cloudData.archivedPatients?.some(
+                (a) => a.patient?.id === acc.user.uid || (a.account && a.account.user.uid === acc.user.uid)
+              )
+            ) {
+              continue;
+            }
             const cleanPhone = (acc.phone || acc.user.phone || '').replace(/[\s\-\(\)\+]/g, '');
             const exists = mergedPatients.some(
               (p) =>
@@ -1853,6 +2310,9 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
     }
     if (Array.isArray(cloudData.coachingTips)) {
       writeStorage(STORAGE_KEYS.COACHING_TIPS, cloudData.coachingTips);
+    }
+    if (Array.isArray(cloudData.archivedPatients)) {
+      writeStorage(STORAGE_KEYS.ARCHIVED_PATIENTS, cloudData.archivedPatients);
     }
 
     // 4. Auto-resolve pending user state if cloud shows account was approved

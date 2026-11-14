@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getCloudAccounts } from '@/lib/cloud-store';
+import { getArchivedPatients, getCloudAccounts } from '@/lib/cloud-store';
+import { isPhoneMatch } from '@/lib/phone';
 import {
+  accountMatchesIdentifier,
   authenticate,
   buildSessionCookie,
   createSessionToken,
@@ -9,6 +11,7 @@ import {
   isCrossOriginRequest,
   migratePlaintextPasswords,
   storeAccountPassword,
+  verifyPassword,
   NO_STORE_HEADERS,
   SESSION_TTL_REMEMBER_SECONDS,
 } from '@/lib/server-auth';
@@ -58,9 +61,74 @@ export async function POST(request: Request) {
     const result = authenticate(accounts, identifier, password);
 
     if (result.kind === 'invalid') {
+      // Check if credentials match an account that is currently archived
+      const archivedList = await getArchivedPatients();
+      const adminWhatsApp = process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678';
+
+      for (const rec of archivedList) {
+        const purgeTime = new Date(rec.purgeAt).getTime();
+        if (!Number.isNaN(purgeTime) && purgeTime <= Date.now()) {
+          continue;
+        }
+
+        const matchesIdentifier =
+          (rec.account && accountMatchesIdentifier(rec.account, identifier)) ||
+          (rec.patient?.phone && isPhoneMatch(rec.patient.phone, identifier)) ||
+          (rec.patient?.username && rec.patient.username.toLowerCase() === identifier.trim().toLowerCase()) ||
+          (rec.patient?.id === identifier.trim()) ||
+          (rec.id === identifier.trim()) ||
+          (rec.phone && isPhoneMatch(rec.phone, identifier));
+
+        if (matchesIdentifier && rec.account) {
+          const pwCheck = verifyPassword(rec.account.password, password);
+          if (pwCheck.ok) {
+            const patientName =
+              rec.patient?.fullName ||
+              rec.patient?.fullNameAr ||
+              rec.fullName ||
+              rec.fullNameAr ||
+              rec.account.user.displayName;
+            const patientPhone =
+              rec.patient?.phone ||
+              rec.phone ||
+              rec.account.phone ||
+              rec.account.user.phone ||
+              identifier;
+
+            return json(
+              {
+                success: false,
+                error: 'accountArchivedOnHold',
+                status: 'pending_reactivation',
+                adminWhatsApp,
+                patientName,
+                phone: patientPhone,
+              },
+              403
+            );
+          }
+        }
+      }
+
       return json({ success: false, error: 'invalidCredentials' }, 401);
     }
     const user = { ...result.account.user };
+
+    // Also check if active accounts list had this account marked as archived
+    if (user.isArchived || (user.status as string) === 'archived') {
+      const adminWhatsApp = process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678';
+      return json(
+        {
+          success: false,
+          error: 'accountArchivedOnHold',
+          status: 'pending_reactivation',
+          adminWhatsApp,
+          patientName: user.displayName,
+          phone: user.phone || identifier,
+        },
+        403
+      );
+    }
     if (result.kind === 'pending') {
       return json({ success: false, status: 'pending', user }, 403);
     }

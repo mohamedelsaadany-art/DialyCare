@@ -25,10 +25,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 export interface LoginResult {
   success: boolean;
-  status?: AccountStatus;
+  status?: AccountStatus | 'pending_reactivation';
   error?: string;
   user?: User;
   rejectionReason?: string;
+  adminWhatsApp?: string;
+  patientName?: string;
+  phone?: string;
 }
 
 interface AuthContextType {
@@ -313,6 +316,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         purgeLocalPasswords();
         return { success: true, status: 'active', user: result.user };
       }
+      if (result.status === 'pending_reactivation' || result.error === 'accountArchivedOnHold') {
+        return {
+          success: false,
+          status: 'pending_reactivation',
+          error: 'accountArchivedOnHold',
+          adminWhatsApp: result.adminWhatsApp,
+          patientName: result.patientName,
+          phone: result.phone,
+        };
+      }
       if (result.status === 'pending' || result.status === 'rejected') {
         return {
           success: false,
@@ -361,6 +374,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const serverUser = await registerOnServer('patient', { ...data });
+      if (serverUser.reactivationStatus === 'pending' || (serverUser as any).status === 'pending_reactivation') {
+        return serverUser;
+      }
       return registerPatientAccount({ ...data, uid: serverUser.uid }, { skipCloudPush: true });
     } finally {
       setLoading(false);

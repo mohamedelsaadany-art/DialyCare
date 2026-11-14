@@ -409,7 +409,7 @@ export function toPublicAccount(acc: StoredAccount): PublicAccount {
   return { ...rest, user: { ...acc.user } } as PublicAccount;
 }
 
-function accountMatchesIdentifier(acc: StoredAccount, identifier: string): boolean {
+export function accountMatchesIdentifier(acc: StoredAccount, identifier: string): boolean {
   if (!acc || !acc.user) return false;
   const id = toAsciiDigits(identifier.trim()); // B5: Arabic-Indic digits typed on Arabic keyboards
   if (!id) return false;

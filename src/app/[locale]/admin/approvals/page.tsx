@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import {
   getAuthAccounts,
@@ -9,9 +9,12 @@ import {
   syncFullCloudData,
   approveUserRegistration,
   rejectUserRegistration,
+  getPendingReactivations,
+  restorePatient,
+  calculateArchiveDaysRemaining,
   ADMIN_CONFIG,
 } from '@/lib/data-store';
-import type { User } from '@/lib/types';
+import type { User, Patient } from '@/lib/types';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -22,9 +25,11 @@ import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 export default function RegistrationApprovalsPage() {
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const tAdmin = useTranslations('admin');
   const { user, isAdmin } = useAuth();
 
   const [users, setUsers] = useState<User[]>([]);
+  const [reactivationRequests, setReactivationRequests] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'doctors' | 'nurses' | 'staff'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,6 +42,7 @@ export default function RegistrationApprovalsPage() {
   const [rejectingUser, setRejectingUser] = useState<User | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRestoringPatientId, setIsRestoringPatientId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -48,9 +54,41 @@ export default function RegistrationApprovalsPage() {
       if (localAccs.length > 0) {
         setUsers(localAccs.map((a) => a.user));
       }
-      // 2. Fetch latest registrations from Cloud Store (Vercel Blob / Next.js backend)
+      // Read local pending reactivations
+      const localReactivations = getPendingReactivations();
+      setReactivationRequests(localReactivations);
+
+      // 2. Fetch latest registrations from Cloud Store (Next.js backend)
       const syncedAccs = await syncCloudAccounts();
       setUsers(syncedAccs.map((a) => a.user));
+
+      // 3. Fetch latest archive & reactivation requests from /api/admin/archive
+      try {
+        const res = await fetch('/api/admin/archive').catch(() => null);
+        if (res && res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data && Array.isArray(data.reactivationRequests)) {
+            const mappedReactivations: Patient[] = data.reactivationRequests.map((r: any) => ({
+              ...((r && r.patient) || {}),
+              ...r,
+              id: r.id || r.patientId || (r.patient && r.patient.id),
+              fullName: r.fullName || (r.patient && r.patient.fullName),
+              fullNameAr: r.fullNameAr || (r.patient && (r.patient.fullNameAr || r.patient.fullName)),
+              phone: r.phone || (r.patient && r.patient.phone) || r.username,
+              username: r.username || (r.patient && r.patient.username),
+              dialysisSchedule: r.dialysisSchedule || (r.patient && r.patient.dialysisSchedule) || 'SMW',
+              archivedAt: r.archivedAt || (r.patient && r.patient.archivedAt),
+              archiveExpiresAt: r.archiveExpiresAt || r.purgeAt || (r.patient && r.patient.archiveExpiresAt),
+              daysRemaining: r.daysRemaining ?? calculateArchiveDaysRemaining(r.archivedAt, r.archiveExpiresAt || r.purgeAt),
+              reactivationStatus: r.reactivationStatus || (r.patient && r.patient.reactivationStatus) || 'pending',
+              reactivationRequestedAt: r.reactivationRequestedAt || (r.patient && r.patient.reactivationRequestedAt),
+            }));
+            setReactivationRequests(mappedReactivations);
+          }
+        }
+      } catch {
+        // network / offline fallback
+      }
     } catch (err) {
       console.error('Failed to load accounts for approvals:', err);
     } finally {
@@ -76,12 +114,15 @@ export default function RegistrationApprovalsPage() {
       if (!mounted) return;
       const localAccs = getAuthAccounts();
       setUsers(localAccs.map((a) => a.user));
+      const localReactivations = getPendingReactivations();
+      setReactivationRequests(localReactivations);
     };
 
     window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleLocalUpdate);
     window.addEventListener('dialycare_approvals_updated', handleLocalUpdate);
     window.addEventListener('dialycare_users_updated', handleLocalUpdate);
+    window.addEventListener('dialycare_archive_updated', handleLocalUpdate);
 
     return () => {
       mounted = false;
@@ -91,6 +132,7 @@ export default function RegistrationApprovalsPage() {
       window.removeEventListener('storage', handleLocalUpdate);
       window.removeEventListener('dialycare_approvals_updated', handleLocalUpdate);
       window.removeEventListener('dialycare_users_updated', handleLocalUpdate);
+      window.removeEventListener('dialycare_archive_updated', handleLocalUpdate);
     };
   }, [loadData]);
 
@@ -115,6 +157,37 @@ export default function RegistrationApprovalsPage() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleApproveReactivation = async (patient: Patient) => {
+    const targetId = patient.id || (patient as any).patientId || (patient as any).patient?.id;
+    if (!targetId) return;
+    setIsRestoringPatientId(targetId);
+    try {
+      // 1. Call /api/admin/restore
+      await fetch('/api/admin/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId: targetId, uid: targetId }),
+      }).catch((err) => console.warn('API restore failed:', err));
+
+      // 2. Local fallback update
+      restorePatient(targetId);
+
+      // 3. Feedback & reload
+      const patientName = isAr ? patient.fullNameAr || patient.fullName : patient.fullName;
+      showFeedback(
+        isAr
+          ? `تم اعتماد واستعادة الملف الطبي للمريض ${patientName} بنجاح ✓`
+          : `Successfully approved and restored medical record for ${patient.fullName} ✓`
+      );
+      void syncFullCloudData();
+      await loadData();
+    } catch (err) {
+      console.error('Failed to approve reactivation request:', err);
+    } finally {
+      setIsRestoringPatientId(null);
     }
   };
 
@@ -251,12 +324,158 @@ export default function RegistrationApprovalsPage() {
           <button
             type="button"
             onClick={() => setActionFeedback(null)}
-            className="text-emerald-700 hover:text-emerald-900 min-h-[44px] min-w-[44px] flex items-center justify-center p-1"
+            className="text-emerald-700 hover:text-emerald-900 min-h-[48px] min-w-[48px] flex items-center justify-center p-1 rounded-lg"
+            aria-label={isAr ? 'إغلاق الإشعار' : 'Dismiss notice'}
           >
             ✕
           </button>
         </div>
       )}
+
+      {/* Dedicated Section: Reactivation Requests for Archived Patients */}
+      <Card
+        data-testid="reactivation-requests-card"
+        className="p-6 border-emerald-300 bg-linear-to-br from-emerald-50/70 via-teal-50/40 to-white shadow-xs"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-emerald-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">♻️</span>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                {isAr
+                  ? 'طلبات استعادة الحسابات المعلقة (Reactivation Requests)'
+                  : 'Pending Reactivation Requests'}
+              </h2>
+              <Badge variant={reactivationRequests.length > 0 ? 'warning' : 'neutral'} size="sm">
+                {reactivationRequests.length} {isAr ? 'طلب' : 'Pending'}
+              </Badge>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {isAr
+                ? 'مرضى كانوا في الأرشيف المؤقت وقاموا بإعادة التسجيل وطلبوا اعتماد واستعادة ملفاتهم الطبية قبل انتهاء مهلة الـ 14 يوماً.'
+                : 'Archived patients who re-registered and requested their clinical history and medical records be restored before the 14-day purge deadline.'}
+            </p>
+          </div>
+        </div>
+
+        {reactivationRequests.length === 0 ? (
+          <div className="py-6 text-center text-slate-400">
+            <span className="text-3xl block mb-2">✓</span>
+            <p className="text-sm font-bold text-slate-700">
+              {isAr
+                ? 'لا توجد طلبات استعادة حسابات معلقة حالياً'
+                : 'No pending patient reactivation requests at this time'}
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {isAr
+                ? 'عندما يسجل مريض مؤرشف خلال مهلة الـ 14 يوماً، يظهر طلبه هنا للمراجعة والاعتماد.'
+                : 'When an archived patient re-registers within 14 days, their request appears here for authorization.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {reactivationRequests.map((patient) => {
+              const patientId = patient.id || (patient as any).patientId || (patient as any).patient?.id || '';
+              const daysRemaining =
+                (patient as any).daysRemaining ??
+                calculateArchiveDaysRemaining(
+                  patient.archivedAt || (patient as any).patient?.archivedAt,
+                  patient.archiveExpiresAt || (patient as any).purgeAt || (patient as any).patient?.archiveExpiresAt
+                );
+              const requestedDate =
+                patient.reactivationRequestedAt ||
+                (patient as any).patient?.reactivationRequestedAt ||
+                patient.createdAt ||
+                (patient as any).patient?.createdAt;
+              const isUrgent = daysRemaining <= 3;
+              const phone = patient.phone || (patient as any).patient?.phone || patient.username || '—';
+              const schedule = patient.dialysisSchedule || (patient as any).patient?.dialysisSchedule || 'SMW';
+
+              return (
+                <div
+                  key={patientId}
+                  data-testid={`reactivation-card-${patientId}`}
+                  className="p-4 rounded-xl border border-emerald-200 bg-white hover:border-emerald-400 transition-all shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="text-lg">🩺</span>
+                      <h3 className="text-base font-extrabold text-slate-900">
+                        {isAr ? patient.fullNameAr || patient.fullName : patient.fullName}
+                      </h3>
+                      {patient.fullNameAr && patient.fullName !== patient.fullNameAr && (
+                        <span className="text-xs font-semibold text-slate-500">
+                          ({patient.fullName})
+                        </span>
+                      )}
+                      <Badge variant="success" size="sm">
+                        {isAr ? 'مريض غسيل كلوي' : 'Dialysis Patient'}
+                      </Badge>
+                      {/* Days Remaining Badge */}
+                      <span
+                        data-testid={`reactivation-badge-days-${patientId}`}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                          isUrgent
+                            ? 'bg-red-50 text-red-700 border-red-200 animate-pulse'
+                            : daysRemaining <= 7
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-blue-50 text-[#1e6bb8] border-blue-200'
+                        }`}
+                      >
+                        <span aria-hidden="true">⏳</span>
+                        <span>
+                          {isAr
+                            ? `متبقي ${daysRemaining} يوماً قبل الحذف النهائي`
+                            : `${daysRemaining} days remaining before purge`}
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs text-slate-600">
+                      <div>
+                        <span className="font-semibold text-slate-700">{isAr ? 'رقم الهاتف:' : 'Phone:'} </span>
+                        <span dir="ltr" className="font-mono font-bold text-slate-900">
+                          {phone}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-700">{isAr ? 'جدول الغسيل:' : 'Schedule:'} </span>
+                        <span>{schedule}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-700">{isAr ? 'تاريخ طلب الاستعادة:' : 'Date Requested:'} </span>
+                        <span className="font-mono">
+                          {requestedDate
+                            ? new Date(requestedDate).toLocaleDateString(isAr ? 'ar-EG' : 'en-US', {
+                                dateStyle: 'medium',
+                              })
+                            : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Approve & Restore Button (Calls /api/admin/restore) */}
+                  <div className="shrink-0 flex items-center">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="md"
+                      onClick={() => handleApproveReactivation(patient)}
+                      disabled={isRestoringPatientId === patientId}
+                      isLoading={isRestoringPatientId === patientId}
+                      data-testid={`approve-reactivation-btn-${patientId}`}
+                      className="min-h-[48px] bg-emerald-600 hover:bg-emerald-700 font-extrabold px-5 text-white shadow-xs"
+                    >
+                      ✓ {isAr ? 'اعتماد واستعادة الملف الطبي (Approve & Restore Data)' : 'Approve & Restore Data'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       {/* Filter and Tab Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">

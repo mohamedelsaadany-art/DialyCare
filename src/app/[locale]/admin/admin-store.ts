@@ -27,9 +27,26 @@ import {
   getPatientSurveyStatus as dsGetPatientSurveyStatus,
   setDoctorSurveyActivation as dsSetDoctorSurveyActivation,
   sendSurveyReminderNotification as dsSendSurveyReminderNotification,
+  calculateArchiveDaysRemaining,
+  getArchivedPatients,
+  archivePatient,
+  archivePatients,
+  restorePatient,
+  getPendingReactivations,
+  requestPatientReactivation,
   initDataStore,
   STORAGE_KEYS,
 } from '@/lib/data-store';
+
+export {
+  calculateArchiveDaysRemaining,
+  getArchivedPatients,
+  archivePatient,
+  archivePatients,
+  restorePatient,
+  getPendingReactivations,
+  requestPatientReactivation,
+};
 
 export const getAdherenceSurveys = dsGetAdherenceSurveys;
 export const saveAdherenceSurvey = dsSaveAdherenceSurvey;

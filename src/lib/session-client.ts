@@ -87,10 +87,13 @@ export async function checkServerSession(
 
 export interface ServerLoginResult {
   success: boolean;
-  status?: AccountStatus;
-  error?: 'invalidCredentials' | 'loginError';
+  status?: AccountStatus | 'pending_reactivation';
+  error?: 'invalidCredentials' | 'loginError' | 'accountArchivedOnHold' | string;
   user?: User;
   rejectionReason?: string;
+  adminWhatsApp?: string;
+  patientName?: string;
+  phone?: string;
 }
 
 export async function loginWithServer(
@@ -116,6 +119,16 @@ export async function loginWithServer(
     return { success: false, error: 'loginError' };
   }
   const body = await readJson(res);
+  if (body && (body.error === 'accountArchivedOnHold' || body.status === 'pending_reactivation')) {
+    return {
+      success: false,
+      error: 'accountArchivedOnHold',
+      status: 'pending_reactivation',
+      adminWhatsApp: typeof body.adminWhatsApp === 'string' ? body.adminWhatsApp : undefined,
+      patientName: typeof body.patientName === 'string' ? body.patientName : undefined,
+      phone: typeof body.phone === 'string' ? body.phone : undefined,
+    };
+  }
   if (res.ok && body && body.success === true && isUser(body.user)) {
     const user = body.user;
     return { success: true, status: 'active', user: { ...user, status: user.status || 'active' } };
@@ -198,7 +211,23 @@ export async function registerOnServer(
     throw new RegistrationError('network', registrationMessage('network', language));
   }
   const body = await readJson(res);
-  if (res.ok && body && body.success === true && isUser(body.user)) return body.user;
+  if (res.ok && body && body.success === true) {
+    if (body.status === 'pending_reactivation') {
+      return {
+        uid: 'archived',
+        role: 'patient',
+        status: 'pending' as AccountStatus,
+        username: String(data.phone || ''),
+        displayName: String(data.fullName || data.phone || ''),
+        language: language === 'en' ? 'en' : 'ar',
+        createdAt: new Date().toISOString(),
+        phone: String(data.phone || ''),
+        reactivationStatus: 'pending',
+        adminWhatsApp: typeof body.adminWhatsApp === 'string' ? body.adminWhatsApp : undefined,
+      } as User & { adminWhatsApp?: string };
+    }
+    if (isUser(body.user)) return body.user;
+  }
   if (res.status === 409) throw new RegistrationError('alreadyRegistered', registrationMessage('alreadyRegistered', language));
   if (res.status === 400) throw new RegistrationError('invalid', registrationMessage('invalid', language));
   throw new RegistrationError('server', registrationMessage('server', language));

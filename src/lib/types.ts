@@ -34,6 +34,8 @@ export interface GeneratedPatientCredentials {
 
 export type Language = 'ar' | 'en';
 
+export type ReactivationStatus = 'none' | 'pending' | 'approved' | 'rejected';
+
 export interface User {
   uid: string;
   role: UserRole;
@@ -53,6 +55,12 @@ export interface User {
   reviewedAt?: string;
   reviewedBy?: string;
   rejectionReason?: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
+  archiveExpiresAt?: string;
+  reactivationStatus?: ReactivationStatus;
+  reactivationRequestedAt?: string;
 }
 
 export interface StoredAccount {
@@ -95,6 +103,12 @@ export interface Patient {
   emergencyContact?: EmergencyContact;
   isActive: boolean;
   createdAt: Date | string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
+  archiveExpiresAt?: string;
+  reactivationStatus?: ReactivationStatus;
+  reactivationRequestedAt?: string;
 }
 
 export type ReminderType = 'ttt' | 'fluid' | 'diet';
@@ -360,6 +374,39 @@ export interface PatientSurveyStatus {
 // ==========================================
 // UNIFIED CLOUD CLUSTER DATABASE (R1-R7)
 // ==========================================
+export type LabResult = PatientLabRecord;
+export type Medication = PatientMedication;
+export type AdherenceSurvey = AdherenceSurveySubmission;
+export type Reminder = PatientReminder;
+
+export interface ArchivedPatientRecord {
+  archiveId: string;
+  id?: string;
+  patientId?: string;
+  fullName?: string;
+  fullNameAr?: string;
+  phone?: string;
+  username?: string;
+  patient: Patient;
+  account?: StoredAccount;
+  sessions: DialysisSession[];
+  labResults: LabResult[];
+  medications: Medication[];
+  adherenceSurveys: AdherenceSurvey[];
+  fluidLogs: FluidLog[];
+  dietLogs: DietLog[];
+  adherenceLogs: AdherenceLog[];
+  reminders: Reminder[];
+  archivedAt: string; // ISO date
+  purgeAt: string; // ISO date (archivedAt + 14 days)
+  archivedBy: string; // Super Admin name/uid
+  reactivationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  reactivationRequestedAt?: string;
+  rejectionReason?: string;
+}
+
+export type ArchivedPatient = ArchivedPatientRecord;
+
 export interface UnifiedCloudDatabase {
   accounts: StoredAccount[];
   patients: Patient[];
@@ -373,6 +420,7 @@ export interface UnifiedCloudDatabase {
   adherenceSurveys: AdherenceSurveySubmission[];
   reminders: PatientReminder[];
   coachingTips: CoachingTip[];
+  archivedPatients?: ArchivedPatientRecord[];
   lastUpdated: string;
 }
 

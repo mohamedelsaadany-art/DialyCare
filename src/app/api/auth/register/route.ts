@@ -5,8 +5,11 @@ import {
   getCloudAccounts,
   getCloudDatabase,
   mergeCloudDatabase,
+  findUnexpiredArchivedPatientByPhone,
+  updateArchivedPatient,
+  saveCloudAccounts,
 } from '@/lib/cloud-store';
-import { normalizePhone, toAsciiDigits } from '@/lib/phone';
+import { normalizePhone, toAsciiDigits, isPhoneMatch } from '@/lib/phone';
 import { hashPassword, isCrossOriginRequest, NO_STORE_HEADERS, passwordMatches } from '@/lib/server-auth';
 import type { User, StoredAccount, UserRole, Patient } from '@/lib/types';
 
@@ -110,6 +113,74 @@ export async function POST(request: Request) {
     } else {
       const cleanPhone = toAsciiDigits(str(data.phone, 40)).replace(/[\s\-\(\)\+]/g, '');
       if (!cleanPhone) return invalid('missingPhone');
+
+      // Check if the phone number belongs to a record in archivedPatients (unexpired)
+      const archived = await findUnexpiredArchivedPatientByPhone(cleanPhone);
+      if (archived) {
+        const nowIso = new Date().toISOString();
+        archived.reactivationStatus = 'pending';
+        archived.reactivationRequestedAt = nowIso;
+        if (archived.patient) {
+          archived.patient.reactivationStatus = 'pending';
+          archived.patient.reactivationRequestedAt = nowIso;
+        }
+        if (!archived.account) {
+          archived.account = {
+            username: cleanPhone,
+            phone: cleanPhone,
+            password: hashPassword(password),
+            passwordUpdatedAt: nowIso,
+            user: {
+              uid: archived.patient?.id || archived.id || requestedUid,
+              role: 'patient',
+              status: 'active',
+              username: cleanPhone,
+              phone: cleanPhone,
+              displayName: archived.patient?.fullName || cleanPhone,
+              language,
+              reactivationStatus: 'pending',
+              reactivationRequestedAt: nowIso,
+              createdAt: nowIso,
+            },
+          };
+        } else {
+          archived.account.password = hashPassword(password);
+          archived.account.passwordUpdatedAt = nowIso;
+          if (archived.account.user) {
+            archived.account.user.reactivationStatus = 'pending';
+            archived.account.user.reactivationRequestedAt = nowIso;
+          }
+        }
+        await updateArchivedPatient(archived);
+
+        // Also check if account is in cloud accounts
+        const allAccs = await getCloudAccounts({ forWrite: true });
+        const matchingAcc = allAccs.find(
+          (a) =>
+            a.user?.uid === archived.patient?.id ||
+            a.user?.uid === archived.id ||
+            (a.phone && isPhoneMatch(a.phone, cleanPhone))
+        );
+        if (matchingAcc) {
+          matchingAcc.password = hashPassword(password);
+          matchingAcc.passwordUpdatedAt = nowIso;
+          if (matchingAcc.user) {
+            matchingAcc.user.reactivationStatus = 'pending';
+            matchingAcc.user.reactivationRequestedAt = nowIso;
+          }
+          await saveCloudAccounts(allAccs);
+        }
+
+        return json(
+          {
+            success: true,
+            status: 'pending_reactivation',
+            adminWhatsApp: process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678',
+          },
+          200
+        );
+      }
+
       if (RESERVED_USERNAMES.has(cleanPhone.toLowerCase())) return conflict();
       const cleanName = str(data.fullName, 200) || cleanPhone;
       const profile = (data.profile && typeof data.profile === 'object' ? data.profile : undefined) as
