@@ -416,3 +416,85 @@ export function checkAndTriggerLocalNotifications(
   }
 }
 
+/**
+ * Checks if a string conforms to a raw 36-character hexadecimal UUID format
+ */
+export function isUuid(str?: string): boolean {
+  if (!str || typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+}
+
+/**
+ * Returns a clean, deduplicated patient display name.
+ * If Arabic and English names are identical or one is missing, returns only that name.
+ * If both exist and differ, returns `الاسم بالعربي (Name in English)` in RTL, or `Name (الاسم)` in LTR.
+ */
+export function formatPatientDisplayName(
+  patient: { fullName?: string; fullNameAr?: string },
+  isAr: boolean = true
+): string {
+  const en = (patient.fullName || '').trim();
+  const ar = (patient.fullNameAr || '').trim();
+
+  if (ar && en && ar.toLowerCase() !== en.toLowerCase()) {
+    return isAr ? `${ar} (${en})` : `${en} (${ar})`;
+  }
+
+  return ar || en || (isAr ? 'مريض غير محدد' : 'Unnamed Patient');
+}
+
+/**
+ * Returns a human-friendly clinical identifier (Phone, Medical Record #, or Short Badge)
+ * eliminating long, incomprehensible technical UUIDs from the UI.
+ */
+export function formatPatientFriendlyId(patient: {
+  id: string;
+  phone?: string;
+  username?: string;
+}): string {
+  // If clean phone number exists, display phone
+  if (patient.phone && !isUuid(patient.phone)) {
+    return patient.phone;
+  }
+  // If clean readable username exists, display username
+  if (patient.username && !isUuid(patient.username)) {
+    return patient.username;
+  }
+  // If legacy demo pattern patient-X, display clean file number (#1, #2)
+  if (patient.id.startsWith('patient-')) {
+    return `#${patient.id.replace('patient-', '')}`;
+  }
+  // If raw technical UUID, display a short clean 6-hex file code instead of 36 chars
+  if (isUuid(patient.id)) {
+    return `#${patient.id.slice(0, 6)}`;
+  }
+  return patient.id;
+}
+
+/**
+ * Formats a clean, readable label for patient selector dropdowns and cards
+ * e.g. "أحمد محمود (Ahmed Mahmoud) • هاتف: 01012345678 • السبت / الاثنين / الأربعاء"
+ */
+export function formatPatientOptionLabel(
+  patient: {
+    id: string;
+    fullName: string;
+    fullNameAr?: string;
+    phone?: string;
+    username?: string;
+    dialysisSchedule?: string;
+  },
+  isAr: boolean = true
+): string {
+  const name = formatPatientDisplayName(patient, isAr);
+  const friendlyId = formatPatientFriendlyId(patient);
+  const schedule = getDialysisScheduleLabel(patient.dialysisSchedule, isAr);
+
+  const idBadge = patient.phone && patient.phone === friendlyId
+    ? (isAr ? `هاتف: ${friendlyId}` : `Tel: ${friendlyId}`)
+    : (isAr ? `ملف: ${friendlyId}` : `File: ${friendlyId}`);
+
+  return `${name} • ${idBadge} • ${schedule}`;
+}
+
+

@@ -4,19 +4,34 @@ import type {
   Patient,
   UnifiedCloudDatabase,
 } from './types';
-import { DEFAULT_ADMIN_USER, DEFAULT_PATIENT_USER, DEFAULT_PATIENT2_USER, getAdminPassword } from './data-store';
+import {
+  DEFAULT_ADMIN_USER,
+  DEFAULT_PATIENT_USER,
+  DEFAULT_PATIENT2_USER,
+  DEFAULT_PATIENT3_USER,
+  DEFAULT_PATIENT4_USER,
+  DEFAULT_PATIENT5_USER,
+  DEFAULT_PATIENT6_USER,
+  DEFAULT_PATIENT7_USER,
+  INITIAL_DEMO_PATIENTS,
+  getAdminPassword,
+} from './data-store';
 
 export type { UnifiedCloudDatabase };
 
 const ACCOUNTS_BLOB_PATH = 'dialycare_cloud_accounts.json';
 const DATABASE_BLOB_PATH = 'dialycare_cloud_database_v1.json';
 
-
 // In-memory fallback for local dev / offline / CI test environments
 let memoryAccounts: StoredAccount[] = [
   { username: 'admin', password: getAdminPassword(), user: DEFAULT_ADMIN_USER },
   { username: 'patient1', phone: '01012345678', password: 'patient123', user: DEFAULT_PATIENT_USER },
   { username: 'patient2', phone: '01098765432', password: 'patient123', user: DEFAULT_PATIENT2_USER },
+  { username: 'patient3', phone: '01234567890', password: 'patient123', user: DEFAULT_PATIENT3_USER },
+  { username: 'patient4', phone: '01145678901', password: 'patient123', user: DEFAULT_PATIENT4_USER },
+  { username: 'patient5', phone: '01056789012', password: 'patient123', user: DEFAULT_PATIENT5_USER },
+  { username: 'patient6', phone: '01267890123', password: 'patient123', user: DEFAULT_PATIENT6_USER },
+  { username: 'patient7', phone: '01178901234', password: 'patient123', user: DEFAULT_PATIENT7_USER },
 ];
 
 let memoryDatabase: UnifiedCloudDatabase = {
@@ -78,6 +93,11 @@ export async function getCloudAccounts(): Promise<StoredAccount[]> {
       { username: 'admin', password: getAdminPassword(), user: DEFAULT_ADMIN_USER },
       { username: 'patient1', phone: '01012345678', password: 'patient123', user: DEFAULT_PATIENT_USER },
       { username: 'patient2', phone: '01098765432', password: 'patient123', user: DEFAULT_PATIENT2_USER },
+      { username: 'patient3', phone: '01234567890', password: 'patient123', user: DEFAULT_PATIENT3_USER },
+      { username: 'patient4', phone: '01145678901', password: 'patient123', user: DEFAULT_PATIENT4_USER },
+      { username: 'patient5', phone: '01056789012', password: 'patient123', user: DEFAULT_PATIENT5_USER },
+      { username: 'patient6', phone: '01267890123', password: 'patient123', user: DEFAULT_PATIENT6_USER },
+      { username: 'patient7', phone: '01178901234', password: 'patient123', user: DEFAULT_PATIENT7_USER },
     ];
     await saveCloudAccounts(initialAccounts);
     return initialAccounts;
@@ -132,13 +152,13 @@ export async function upsertCloudAccount(account: StoredAccount): Promise<Stored
 }
 
 /**
- * Merge an array of incoming accounts (e.g. from a client's local store)
- * into the cloud accounts store, reconciling by uid, phone, and username.
- * Ensures local in-clinic created patients on doctors' devices are never lost.
+ * Pure deterministic reconciliation of two account arrays by uid, username, and clean phone.
  */
-export async function mergeCloudAccounts(incomingAccounts: StoredAccount[]): Promise<StoredAccount[]> {
-  const currentAccounts = await getCloudAccounts();
-  const result = [...currentAccounts];
+export function reconcileAccounts(
+  baseAccounts: StoredAccount[],
+  incomingAccounts: StoredAccount[]
+): { merged: StoredAccount[]; hasChanges: boolean } {
+  const result = [...baseAccounts];
   let hasChanges = false;
 
   const isMatch = (a: StoredAccount, b: StoredAccount) => {
@@ -180,10 +200,22 @@ export async function mergeCloudAccounts(incomingAccounts: StoredAccount[]): Pro
     }
   }
 
+  return { merged: result, hasChanges };
+}
+
+/**
+ * Merge an array of incoming accounts (e.g. from a client's local store)
+ * into the cloud accounts store, reconciling by uid, phone, and username.
+ * Ensures local in-clinic created patients on doctors' devices are never lost.
+ */
+export async function mergeCloudAccounts(incomingAccounts: StoredAccount[]): Promise<StoredAccount[]> {
+  const currentAccounts = await getCloudAccounts();
+  const { merged, hasChanges } = reconcileAccounts(currentAccounts, incomingAccounts);
+
   if (hasChanges) {
-    await saveCloudAccounts(result);
+    await saveCloudAccounts(merged);
   }
-  return result;
+  return merged;
 }
 
 /**
@@ -227,6 +259,20 @@ export async function approveCloudAccount(
   }
 
   await saveCloudAccounts(accounts);
+
+  // Directly update in-memory and unified cloud database
+  try {
+    const patch: Partial<UnifiedCloudDatabase> = {
+      accounts: [target],
+    };
+    if (newPatient) {
+      patch.patients = [newPatient];
+    }
+    await mergeCloudDatabase(patch);
+  } catch (err) {
+    console.warn('[CloudStore] approveCloudAccount mergeCloudDatabase warning:', err);
+  }
+
   return { account: target, newPatient };
 }
 
@@ -248,6 +294,15 @@ export async function rejectCloudAccount(
   target.user.reviewedBy = reviewerName;
 
   await saveCloudAccounts(accounts);
+
+  try {
+    await mergeCloudDatabase({
+      accounts: [target],
+    });
+  } catch (err) {
+    console.warn('[CloudStore] rejectCloudAccount mergeCloudDatabase warning:', err);
+  }
+
   return target;
 }
 
@@ -263,6 +318,12 @@ export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
   memoryDatabase.accounts = fallbackAccounts;
 
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
+    for (const demoP of INITIAL_DEMO_PATIENTS) {
+      if (!memoryDatabase.patients.some((p) => p.id === demoP.id)) {
+        memoryDatabase.patients.push(demoP);
+      }
+    }
+    ensurePatientsFromAccounts(memoryDatabase.accounts, memoryDatabase.patients);
     return memoryDatabase;
   }
 
@@ -276,14 +337,23 @@ export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
       if (res.ok) {
         const raw = (await res.json()) as Partial<UnifiedCloudDatabase>;
         if (raw && typeof raw === 'object') {
-          // Normalize and merge accounts
-          const loadedAccounts = Array.isArray(raw.accounts) && raw.accounts.length > 0
-            ? raw.accounts.map(sanitizeAccount)
-            : fallbackAccounts;
+          // Reconcile accounts from both ACCOUNTS_BLOB_PATH and DATABASE_BLOB_PATH
+          const { merged: loadedAccounts } = reconcileAccounts(
+            fallbackAccounts,
+            Array.isArray(raw.accounts) ? raw.accounts.map(sanitizeAccount) : []
+          );
+
+          // Seed canonical demo patients if missing from raw.patients
+          const mergedPatients: Patient[] = Array.isArray(raw.patients) ? [...raw.patients] : [];
+          for (const demoP of INITIAL_DEMO_PATIENTS) {
+            if (!mergedPatients.some((p) => p.id === demoP.id)) {
+              mergedPatients.push(demoP);
+            }
+          }
 
           const completeDb: UnifiedCloudDatabase = {
             accounts: loadedAccounts,
-            patients: Array.isArray(raw.patients) ? raw.patients : [],
+            patients: mergedPatients,
             dialysisSessions: Array.isArray(raw.dialysisSessions) ? raw.dialysisSessions : [],
             labResults: Array.isArray(raw.labResults) ? raw.labResults : [],
             medications: Array.isArray(raw.medications) ? raw.medications : [],
@@ -309,7 +379,7 @@ export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
     // Seed database if not existing yet
     const initialDb: UnifiedCloudDatabase = {
       accounts: fallbackAccounts,
-      patients: [],
+      patients: [...INITIAL_DEMO_PATIENTS],
       dialysisSessions: [],
       labResults: [],
       medications: [],
@@ -327,6 +397,12 @@ export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
     return initialDb;
   } catch (error) {
     console.warn('[CloudStore] Vercel Blob getCloudDatabase failed, using memory fallback:', error);
+    for (const demoP of INITIAL_DEMO_PATIENTS) {
+      if (!memoryDatabase.patients.some((p) => p.id === demoP.id)) {
+        memoryDatabase.patients.push(demoP);
+      }
+    }
+    ensurePatientsFromAccounts(memoryDatabase.accounts, memoryDatabase.patients);
     return memoryDatabase;
   }
 }
@@ -410,6 +486,11 @@ export async function mergeCloudDatabase(
 
   // 2. Merge Patients
   const mergedPatients = [...current.patients];
+  for (const demoP of INITIAL_DEMO_PATIENTS) {
+    if (!mergedPatients.some((p) => p.id === demoP.id)) {
+      mergedPatients.push(demoP);
+    }
+  }
   if (incoming.patients && incoming.patients.length > 0) {
     for (const inc of incoming.patients) {
       const cleanIncPhone = (inc.phone || '').replace(/[\s\-\(\)\+]/g, '');

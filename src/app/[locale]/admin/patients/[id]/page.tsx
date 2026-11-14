@@ -25,7 +25,12 @@ import ProgressBar from '@/components/ui/ProgressBar';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 import type { Patient, PatientReminder, Notification, PatientLabRecord } from '@/lib/types';
-import { getDialysisScheduleLabel, getDialysisScheduleFullLabel } from '@/app/[locale]/patient/patient-utils';
+import {
+  getDialysisScheduleLabel,
+  getDialysisScheduleFullLabel,
+  formatPatientFriendlyId,
+  isUuid,
+} from '@/app/[locale]/patient/patient-utils';
 import { PatientMedicationManager } from '@/components/admin/PatientMedicationManager';
 import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
 import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
@@ -670,14 +675,19 @@ export default function PatientDetailPage() {
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                 <span>
-                  <strong>{isRtl ? 'اسم المستخدم:' : 'Username:'}</strong>{' '}
+                  <strong>{isRtl ? 'رقم الملف:' : 'File ID:'}</strong>{' '}
                   <span className="font-mono font-semibold text-slate-800">
-                    @{patientUsername || patient.id}
+                    {formatPatientFriendlyId(patient)}
                   </span>
                 </span>
-                <span>
-                  <strong>ID:</strong> {patient.id}
-                </span>
+                {patientUsername && !isUuid(patientUsername) && (
+                  <span>
+                    <strong>{isRtl ? 'اسم الحساب:' : 'Username:'}</strong>{' '}
+                    <span className="font-mono font-semibold text-slate-800">
+                      @{patientUsername}
+                    </span>
+                  </span>
+                )}
                 <span>
                   <strong>{isRtl ? 'الهاتف:' : 'Phone:'}</strong> {patient.phone || 'N/A'}
                 </span>
@@ -1410,7 +1420,9 @@ export default function PatientDetailPage() {
                 <strong>{isRtl ? 'المريض المستهدف:' : 'Target Patient:'}</strong> {patient.fullName}{' '}
                 {patient.fullNameAr ? `(${patient.fullNameAr})` : ''}
               </span>
-              <span className="font-mono text-[11px] text-blue-700 font-bold">ID: {patient.id}</span>
+              <span className="font-mono text-[11px] text-blue-700 font-bold">
+                {isRtl ? 'ملف:' : 'File:'} {formatPatientFriendlyId(patient)}
+              </span>
             </div>
 
             <Input

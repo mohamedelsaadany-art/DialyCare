@@ -126,7 +126,7 @@ function writeStorage<T>(key: string, value: T): void {
 }
 
 // Default initial demo patients (deterministic timestamp to prevent hydration mismatch)
-const INITIAL_DEMO_PATIENTS: Patient[] = [
+export const INITIAL_DEMO_PATIENTS: Patient[] = [
   {
     id: 'patient-1',
     fullName: 'Ahmed Mahmoud',
@@ -135,6 +135,7 @@ const INITIAL_DEMO_PATIENTS: Patient[] = [
     dialysisSchedule: 'SMW', // Saturday, Monday, Wednesday (السبت / الاثنين / الأربعاء)
     reminderSchedule: 'standard',
     dryWeightKg: 70,
+    accessType: 'AVF',
     gender: 'male',
     avatarId: 'male_mature_1',
     avatarStyle: 'classic',
@@ -149,9 +150,85 @@ const INITIAL_DEMO_PATIENTS: Patient[] = [
     dialysisSchedule: 'STT', // Sunday, Tuesday, Thursday (الأحد / الثلاثاء / الخميس)
     reminderSchedule: 'standard',
     dryWeightKg: 65,
+    accessType: 'AVF',
     gender: 'female',
     avatarId: 'female_mature_1',
     avatarStyle: 'classic',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'patient-3',
+    fullName: 'Mahmoud Hassan',
+    fullNameAr: 'محمود حسن',
+    phone: '01234567890',
+    dialysisSchedule: 'SMW',
+    reminderSchedule: 'standard',
+    dryWeightKg: 72,
+    accessType: 'AVF',
+    gender: 'male',
+    avatarId: 'male_mature_2',
+    avatarStyle: 'modern',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'patient-4',
+    fullName: 'Mariam Khalil',
+    fullNameAr: 'مريم خليل',
+    phone: '01145678901',
+    dialysisSchedule: 'STT',
+    reminderSchedule: 'standard',
+    dryWeightKg: 58,
+    accessType: 'AVG',
+    gender: 'female',
+    avatarId: 'female_young_1',
+    avatarStyle: 'modern',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'patient-5',
+    fullName: 'Khaled Abdel-Rahman',
+    fullNameAr: 'خالد عبد الرحمن',
+    phone: '01056789012',
+    dialysisSchedule: 'SMW',
+    reminderSchedule: 'standard',
+    dryWeightKg: 76,
+    accessType: 'AVF',
+    gender: 'male',
+    avatarId: 'male_young_1',
+    avatarStyle: 'classic',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'patient-6',
+    fullName: 'Mona Youssef',
+    fullNameAr: 'منى يوسف',
+    phone: '01267890123',
+    dialysisSchedule: 'STT',
+    reminderSchedule: 'standard',
+    dryWeightKg: 63,
+    accessType: 'Permcath',
+    gender: 'female',
+    avatarId: 'female_mature_2',
+    avatarStyle: 'classic',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'patient-7',
+    fullName: 'Tarek Mostafa',
+    fullNameAr: 'طارق مصطفى',
+    phone: '01178901234',
+    dialysisSchedule: 'SMW',
+    reminderSchedule: 'standard',
+    dryWeightKg: 81,
+    accessType: 'AVF',
+    gender: 'male',
+    avatarId: 'male_mature_1',
+    avatarStyle: 'modern',
     isActive: true,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
@@ -1441,6 +1518,61 @@ export const DEFAULT_PATIENT2_USER: User = {
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
+export const DEFAULT_PATIENT3_USER: User = {
+  uid: 'patient-3',
+  role: 'patient',
+  username: 'patient3',
+  displayName: 'Mahmoud Hassan (محمود حسن)',
+  phone: '01234567890',
+  language: 'ar',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_PATIENT4_USER: User = {
+  uid: 'patient-4',
+  role: 'patient',
+  username: 'patient4',
+  displayName: 'Mariam Khalil (مريم خليل)',
+  phone: '01145678901',
+  language: 'ar',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_PATIENT5_USER: User = {
+  uid: 'patient-5',
+  role: 'patient',
+  username: 'patient5',
+  displayName: 'Khaled Abdel-Rahman (خالد عبد الرحمن)',
+  phone: '01056789012',
+  language: 'ar',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_PATIENT6_USER: User = {
+  uid: 'patient-6',
+  role: 'patient',
+  username: 'patient6',
+  displayName: 'Mona Youssef (منى يوسف)',
+  phone: '01267890123',
+  language: 'ar',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_PATIENT7_USER: User = {
+  uid: 'patient-7',
+  role: 'patient',
+  username: 'patient7',
+  displayName: 'Tarek Mostafa (طارق مصطفى)',
+  phone: '01178901234',
+  language: 'ar',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
 /**
  * Auto-generates patient credentials:
  * - Username: Patient phone number
@@ -1494,6 +1626,11 @@ export function getAuthAccounts(): StoredAccount[] {
       { username: 'admin', password: getAdminPassword(), user: DEFAULT_ADMIN_USER },
       { username: 'patient1', phone: '01012345678', password: 'patient123', user: DEFAULT_PATIENT_USER },
       { username: 'patient2', phone: '01098765432', password: 'patient123', user: DEFAULT_PATIENT2_USER },
+      { username: 'patient3', phone: '01234567890', password: 'patient123', user: DEFAULT_PATIENT3_USER },
+      { username: 'patient4', phone: '01145678901', password: 'patient123', user: DEFAULT_PATIENT4_USER },
+      { username: 'patient5', phone: '01056789012', password: 'patient123', user: DEFAULT_PATIENT5_USER },
+      { username: 'patient6', phone: '01267890123', password: 'patient123', user: DEFAULT_PATIENT6_USER },
+      { username: 'patient7', phone: '01178901234', password: 'patient123', user: DEFAULT_PATIENT7_USER },
     ];
     writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, initialAccounts);
     return initialAccounts;
@@ -1605,7 +1742,44 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
       writeStorage(STORAGE_KEYS.AUTH_ACCOUNTS, cloudData.accounts);
     }
     if (Array.isArray(cloudData.patients) && cloudData.patients.length > 0) {
-      writeStorage(STORAGE_KEYS.PATIENTS, cloudData.patients);
+      const mergedPatients = [...cloudData.patients];
+      if (Array.isArray(cloudData.accounts)) {
+        for (const acc of cloudData.accounts) {
+          if (acc.user.role === 'patient' && (acc.user.status === 'active' || !acc.user.status)) {
+            const cleanPhone = (acc.phone || acc.user.phone || '').replace(/[\s\-\(\)\+]/g, '');
+            const exists = mergedPatients.some(
+              (p) =>
+                p.id === acc.user.uid ||
+                (p.username && p.username.toLowerCase() === acc.username.toLowerCase()) ||
+                (cleanPhone && p.phone && p.phone.replace(/[\s\-\(\)\+]/g, '') === cleanPhone)
+            );
+            if (!exists) {
+              const prof = acc.user.patientProfile;
+              mergedPatients.push({
+                id: acc.user.uid,
+                fullName: acc.user.displayName,
+                fullNameAr: acc.user.displayName,
+                phone: acc.phone || acc.user.phone || acc.username,
+                username: acc.username,
+                dialysisSchedule: prof?.dialysisSchedule || 'SMW',
+                dryWeightKg: prof?.dryWeightKg || 70,
+                accessType: prof?.accessType || 'AVF',
+                dialysisCenter: prof?.dialysisCenter,
+                centerName: prof?.dialysisCenter,
+                age: prof?.age,
+                reminderSchedule: 'standard',
+                isActive: true,
+                gender: prof?.gender || 'male',
+                avatarId: prof?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
+                viralMarkers: prof?.viralMarkers,
+                emergencyContact: prof?.emergencyContact,
+                createdAt: acc.user.registeredAt || acc.user.createdAt || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      }
+      writeStorage(STORAGE_KEYS.PATIENTS, mergedPatients);
     }
     if (Array.isArray(cloudData.dialysisSessions)) {
       writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, cloudData.dialysisSessions);

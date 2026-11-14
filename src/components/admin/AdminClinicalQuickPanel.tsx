@@ -18,7 +18,12 @@ import {
   getPatientMedications,
 } from '@/lib/data-store';
 import type { PatientLabRecord } from '@/lib/types';
-import { getDialysisScheduleLabel } from '@/app/[locale]/patient/patient-utils';
+import {
+  getDialysisScheduleLabel,
+  formatPatientDisplayName,
+  formatPatientFriendlyId,
+  formatPatientOptionLabel,
+} from '@/app/[locale]/patient/patient-utils';
 
 export interface AdminClinicalQuickPanelProps {
   /** Optional externally controlled patient ID */
@@ -199,15 +204,11 @@ export function AdminClinicalQuickPanel({
   const doctorRecorderName = user?.displayName || user?.username || 'doctor';
 
   const patientDisplayName = activePatient
-    ? isRtl
-      ? `${activePatient.fullNameAr || activePatient.fullName} (${activePatient.fullName})`
-      : `${activePatient.fullName}${activePatient.fullNameAr ? ` (${activePatient.fullNameAr})` : ''}`
+    ? formatPatientDisplayName(activePatient, isRtl)
     : '';
 
   const patientShortName = activePatient
-    ? isRtl
-      ? activePatient.fullNameAr || activePatient.fullName
-      : activePatient.fullName
+    ? (isRtl ? activePatient.fullNameAr || activePatient.fullName : activePatient.fullName)
     : '';
 
   return (
@@ -308,9 +309,7 @@ export function AdminClinicalQuickPanel({
                     ) : (
                       filteredPatients.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {isRtl
-                            ? `${p.fullNameAr || p.fullName} — ${p.fullName} | ${p.id} | ${getDialysisScheduleLabel(p.dialysisSchedule, isRtl)}`
-                            : `${p.fullName}${p.fullNameAr ? ` (${p.fullNameAr})` : ''} | ${p.id} | ${getDialysisScheduleLabel(p.dialysisSchedule, isRtl)}`}
+                          {formatPatientOptionLabel(p, isRtl)}
                         </option>
                       ))
                     )}
@@ -347,9 +346,14 @@ export function AdminClinicalQuickPanel({
                       {patientDisplayName}
                     </span>
                     <Badge variant="neutral" size="sm">
-                      ID: {activePatient.id}
+                      {isRtl ? 'ملف:' : 'File:'} {formatPatientFriendlyId(activePatient)}
                     </Badge>
-                    <Badge variant="info" size="sm">
+                    {activePatient.phone && (
+                      <Badge variant="info" size="sm">
+                        📞 {activePatient.phone}
+                      </Badge>
+                    )}
+                    <Badge variant="success" size="sm">
                       📅 {getDialysisScheduleLabel(activePatient.dialysisSchedule, isRtl)}
                     </Badge>
                   </div>

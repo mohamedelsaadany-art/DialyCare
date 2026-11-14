@@ -73,6 +73,12 @@ import { POST as approveRoute } from '../../app/api/auth/approve/route';
 import { POST as rejectRoute } from '../../app/api/auth/reject/route';
 import { GET as syncRouteGet, POST as syncRoutePost } from '../../app/api/sync/route';
 import type { User, StoredAccount, Patient, DialysisSession } from '../types';
+import {
+  isUuid,
+  formatPatientDisplayName,
+  formatPatientFriendlyId,
+  formatPatientOptionLabel,
+} from '../../app/[locale]/patient/patient-utils';
 
 const CURRENT_USER_KEY = 'dialycare_current_user';
 
@@ -801,6 +807,132 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     }
 
     console.log('  ✓ Full-spectrum bidirectional clinical synchronization engine verified!');
+
+    // =========================================================================
+    // 6. Testing Patient Label Deduplication, Friendly Identifiers & Multi-Patient Cloud Directory
+    // =========================================================================
+    console.log('\n--- 6. Testing Patient Label Deduplication, Friendly Identifiers & Multi-Patient Cloud Directory ---');
+
+    // 6.1 isUuid utility
+    assert.strictEqual(isUuid('e7dc15c3-563c-49b8-9d44-dc8b040b6d69'), true, 'Valid UUID recognized');
+    count();
+    assert.strictEqual(isUuid('64b729c9-570e-405f-a043-7148230389fa'), true, 'Valid UUID recognized');
+    count();
+    assert.strictEqual(isUuid('patient-1'), false, 'patient-1 is not a UUID');
+    count();
+    assert.strictEqual(isUuid('01012345678'), false, 'phone is not a UUID');
+    count();
+    assert.strictEqual(isUuid(''), false, 'empty is not a UUID');
+    count();
+
+    // 6.2 formatPatientDisplayName eliminates duplicate name repeats
+    const patIdentical = { fullName: 'Kw', fullNameAr: 'Kw' };
+    assert.strictEqual(formatPatientDisplayName(patIdentical, true), 'Kw', 'Kw does not repeat as Kw — Kw');
+    count();
+    const patArIdentical = { fullName: 'عيان جديد', fullNameAr: 'عيان جديد' };
+    assert.strictEqual(formatPatientDisplayName(patArIdentical, true), 'عيان جديد', 'عيان جديد does not repeat');
+    count();
+    const patDistinct = { fullName: 'Ahmed Mahmoud', fullNameAr: 'أحمد محمود' };
+    assert.strictEqual(formatPatientDisplayName(patDistinct, true), 'أحمد محمود (Ahmed Mahmoud)', 'Bilingual Arabic formatting');
+    count();
+    assert.strictEqual(formatPatientDisplayName(patDistinct, false), 'Ahmed Mahmoud (أحمد محمود)', 'Bilingual English formatting');
+    count();
+
+    // 6.3 formatPatientFriendlyId eliminates raw 36-char technical UUIDs
+    const uuidPatient = {
+      id: 'e7dc15c3-563c-49b8-9d44-dc8b040b6d69',
+      fullName: 'Kw',
+      phone: '01552885823',
+    };
+    assert.strictEqual(formatPatientFriendlyId(uuidPatient), '01552885823', 'Prefers human phone over UUID');
+    count();
+    const uuidPatientNoPhone = {
+      id: 'e7dc15c3-563c-49b8-9d44-dc8b040b6d69',
+      fullName: 'Kw',
+    };
+    assert.strictEqual(formatPatientFriendlyId(uuidPatientNoPhone), '#e7dc15', 'Short 6-hex code instead of 36-char UUID');
+    count();
+    const demoPatient1 = {
+      id: 'patient-1',
+      fullName: 'Ahmed Mahmoud',
+      phone: '01012345678',
+    };
+    assert.strictEqual(formatPatientFriendlyId(demoPatient1), '01012345678', 'Returns phone for demo patient');
+    count();
+
+    // 6.4 formatPatientOptionLabel creates clean, non-technical readable dropdown labels
+    const optionLabelKw = formatPatientOptionLabel(
+      {
+        id: 'e7dc15c3-563c-49b8-9d44-dc8b040b6d69',
+        fullName: 'Kw',
+        fullNameAr: 'Kw',
+        phone: '01122334455',
+        dialysisSchedule: 'SMW',
+      },
+      true
+    );
+    assert.ok(!optionLabelKw.includes('e7dc15c3-563c-49b8-9d44-dc8b040b6d69'), 'No raw UUID in option label');
+    count();
+    assert.ok(!optionLabelKw.includes('Kw — Kw'), 'No duplicate name concatenation in option label');
+    count();
+    assert.ok(optionLabelKw.includes('01122334455'), 'Contains phone number in option label');
+    count();
+    assert.ok(optionLabelKw.includes('السبت / الاثنين / الأربعاء'), 'Contains Arabic schedule label');
+    count();
+
+    // 6.5 Full Multi-Patient Clinical Directory (Canonical Demo Patients Seeded)
+    const cloudDb = await getCloudDatabase();
+    assert.ok(cloudDb.patients.length >= 7, `Expected at least 7 patients in cloud directory, got ${cloudDb.patients.length}`);
+    count();
+    assert.ok(cloudDb.patients.some((p) => p.id === 'patient-1'), 'patient-1 present');
+    count();
+    assert.ok(cloudDb.patients.some((p) => p.id === 'patient-2'), 'patient-2 present');
+    count();
+    assert.ok(cloudDb.patients.some((p) => p.id === 'patient-3'), 'patient-3 present');
+    count();
+    assert.ok(cloudDb.patients.some((p) => p.id === 'patient-4'), 'patient-4 present');
+    count();
+    assert.ok(cloudDb.patients.some((p) => p.id === 'patient-5'), 'patient-5 present');
+    count();
+    assert.ok(cloudDb.patients.some((p) => p.id === 'patient-6'), 'patient-6 present');
+    count();
+    assert.ok(cloudDb.patients.some((p) => p.id === 'patient-7'), 'patient-7 present');
+    count();
+
+    // 6.6 Direct Server-Side Patient Registration Route (/api/auth/register)
+    const newPatRegReq = new Request('http://localhost:3000/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'patient',
+        data: {
+          fullName: 'فاروق حسني',
+          fullNameAr: 'فاروق حسني',
+          phone: '01099887766',
+          password: 'patientPassword123',
+          profile: {
+            dialysisSchedule: 'SMW',
+            dryWeightKg: 68,
+            accessType: 'AVF',
+            dialysisCenter: 'وحدة وصلتي لغسيل الكلى',
+          },
+        },
+      }),
+    });
+    const regPatRes = await registerRoute(newPatRegReq);
+    assert.strictEqual(regPatRes.status, 200, 'Register patient returns 200');
+    count();
+    const regPatBody = await regPatRes.json();
+    assert.strictEqual(regPatBody.success, true, 'Register patient success is true');
+    count();
+    assert.ok(regPatBody.patient, 'Register patient returns complete Patient object');
+    count();
+    assert.strictEqual(regPatBody.patient.fullName, 'فاروق حسني', 'Patient name matches');
+    count();
+    assert.strictEqual(regPatBody.patient.phone, '01099887766', 'Patient phone matches');
+    count();
+
+    console.log('  ✓ Patient label deduplication, friendly identifiers & multi-patient cloud directory verified!');
 
     console.log('\n================================================================');
     console.log(`REGRESSION SUITE PASSED SUCCESSFULLY: ${assertions} assertions passed`);
