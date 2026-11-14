@@ -9,6 +9,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { PatientAvatarSvg } from '@/components/avatar/PatientAvatarPresets';
 import { getPatientAvatar, syncFullCloudData } from '@/lib/data-store';
+import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 
 interface PatientLayoutProps {
   children: React.ReactNode;
@@ -175,15 +176,15 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
       void runPatientSync();
     }, 0);
 
-    // Universal background auto-polling every 15 seconds
-    const interval = setInterval(runPatientSync, 15000);
+    // Background auto-polling every 15 seconds; slows down while the tab is hidden
+    const stopPolling = startVisibilityAwarePolling(() => void runPatientSync(), { intervalMs: 15000 });
     const onFocus = () => void runPatientSync();
     window.addEventListener('focus', onFocus);
 
     return () => {
       mounted = false;
       clearTimeout(timer);
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('focus', onFocus);
     };
   }, []);

@@ -36,6 +36,7 @@ import {
   DownloadIcon,
   CheckCircleIcon,
 } from '../admin-icons';
+import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 
 interface PatientRow extends Patient {
   username: string;
@@ -160,9 +161,9 @@ export default function PatientsListPage() {
     }, 0);
 
     // Regular cloud sync polling (every 12 seconds) so newly registered patients appear in real-time
-    const pollInterval = setInterval(() => {
+    const stopPolling = startVisibilityAwarePolling(() => {
       void handleCloudSync(false);
-    }, 12000);
+    }, { intervalMs: 12000 });
 
     const handleSync = () => {
       loadData();
@@ -190,7 +191,7 @@ export default function PatientsListPage() {
 
     return () => {
       clearTimeout(timer);
-      clearInterval(pollInterval);
+      stopPolling();
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
       }

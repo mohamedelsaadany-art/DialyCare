@@ -135,12 +135,8 @@ export default function AdminDashboardPage() {
       });
     }, 0);
 
-    // Regular full cloud sync polling so newly registered patients and clinical logs appear in real-time
-    const pollInterval = setInterval(() => {
-      void syncFullCloudData().then(() => {
-        loadDashboardData();
-      });
-    }, 12000);
+    // No polling here: the admin layout already runs the background cloud sync, and every
+    // completed sync fires 'dialycare_cloud_sync_completed' (handled below) to refresh this page.
 
     const handleSync = () => {
       loadDashboardData();
@@ -168,17 +164,18 @@ export default function AdminDashboardPage() {
     window.addEventListener('dialycare_labs_updated', handleSync);
     window.addEventListener('dialycare_medications_updated', handleSync);
     window.addEventListener('dialycare_notifications_updated', handleSync);
+    window.addEventListener('dialycare_cloud_sync_completed', handleSync);
     window.addEventListener('storage', handleStorage);
 
     return () => {
       clearTimeout(timer);
-      clearInterval(pollInterval);
       window.removeEventListener('dialycare_patient_updated', handleSync);
       window.removeEventListener('dialycare_users_updated', handleSync);
       window.removeEventListener('dialycare_sessions_updated', handleSync);
       window.removeEventListener('dialycare_labs_updated', handleSync);
       window.removeEventListener('dialycare_medications_updated', handleSync);
       window.removeEventListener('dialycare_notifications_updated', handleSync);
+      window.removeEventListener('dialycare_cloud_sync_completed', handleSync);
       window.removeEventListener('storage', handleStorage);
     };
   }, [loadDashboardData]);

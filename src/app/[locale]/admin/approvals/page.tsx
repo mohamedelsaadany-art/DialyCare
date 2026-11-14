@@ -17,6 +17,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 
 export default function RegistrationApprovalsPage() {
   const locale = useLocale();
@@ -65,9 +66,9 @@ export default function RegistrationApprovalsPage() {
     }, 0);
 
     // Auto-poll cloud every 15 seconds for new cross-device staff registrations
-    const pollInterval = setInterval(() => {
+    const stopPolling = startVisibilityAwarePolling(() => {
       void loadData(false);
-    }, 15000);
+    }, { intervalMs: 15000 });
 
     const handleFocus = () => void loadData(false);
     // Local updates read directly from local store without triggering network sync storms
@@ -85,7 +86,7 @@ export default function RegistrationApprovalsPage() {
     return () => {
       mounted = false;
       clearTimeout(timer);
-      clearInterval(pollInterval);
+      stopPolling();
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleLocalUpdate);
       window.removeEventListener('dialycare_approvals_updated', handleLocalUpdate);

@@ -22,6 +22,7 @@ import {
   DialyCareLogo,
 } from './admin-icons';
 import { getPendingApprovals, syncFullCloudData } from '@/lib/data-store';
+import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -72,10 +73,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       if (mounted) void runFullCloudSync();
     }, 0);
 
-    // Universal background auto-polling every 12 seconds
-    const interval = setInterval(() => {
+    // Background auto-polling every 12 seconds; slows down while the tab is hidden
+    const stopPolling = startVisibilityAwarePolling(() => {
       if (mounted) void runFullCloudSync();
-    }, 12000);
+    }, { intervalMs: 12000 });
 
     const handleFocus = () => {
       if (mounted) void runFullCloudSync();
@@ -88,7 +89,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return () => {
       mounted = false;
       clearTimeout(initTimer);
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', updateLocalCount);
       window.removeEventListener('dialycare_approvals_updated', updateLocalCount);
