@@ -423,6 +423,7 @@ export default function PatientProfilePage() {
             <Input
               id="fluid-limit-input"
               type="number"
+              inputMode="numeric"
               min="200"
               max="5000"
               step="50"

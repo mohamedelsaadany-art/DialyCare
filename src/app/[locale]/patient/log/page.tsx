@@ -781,6 +781,7 @@ function LogContent() {
                 <div className="flex-1">
                   <Input
                     type="number"
+                    inputMode="decimal"
                     min={fluidUnit === 'cups' ? '0.1' : '1'}
                     step={fluidUnit === 'cups' ? '0.1' : '1'}
                     value={customAmount}

@@ -404,6 +404,7 @@ Portal: https://waslity.vercel.app`;
               <Input
                 label={isRtl ? 'الوزن الجاف المستهدف (كجم)' : 'Target Dry Weight (kg)'}
                 type="number"
+                inputMode="decimal"
                 step="0.1"
                 value={dryWeightKg}
                 onChange={(e) => setDryWeightKg(e.target.value)}
@@ -434,6 +435,7 @@ Portal: https://waslity.vercel.app`;
               <Input
                 label={isRtl ? 'الحد الأقصى اليومي للسوائل (مليلتر - اختياري)' : 'Daily Fluid Allowance (mL - Optional)'}
                 type="number"
+                inputMode="numeric"
                 value={fluidLimit}
                 onChange={(e) => setFluidLimit(e.target.value)}
                 placeholder="1000"

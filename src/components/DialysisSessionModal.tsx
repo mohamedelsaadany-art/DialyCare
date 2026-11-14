@@ -544,7 +544,7 @@ export function DialysisSessionModal({
             role="alert"
             className="p-4 rounded-2xl bg-red-50 border-2 border-red-300 text-red-800 text-sm font-bold flex items-center gap-3"
           >
-            <span className="text-2xl">⚠️</span>
+            <span className="text-2xl" aria-hidden="true">⚠️</span>
             <span>{errorMsg}</span>
           </div>
         )}
@@ -680,6 +680,7 @@ export function DialysisSessionModal({
                   </span>
                   <input
                     type="number"
+                    inputMode="decimal"
                     step="0.1"
                     value={preWeightKg}
                     onChange={(e) => setPreWeightKg(e.target.value)}
@@ -694,6 +695,7 @@ export function DialysisSessionModal({
                   </span>
                   <input
                     type="number"
+                    inputMode="numeric"
                     step="50"
                     min="0"
                     max="950"
@@ -719,6 +721,7 @@ export function DialysisSessionModal({
                   </span>
                   <input
                     type="number"
+                    inputMode="decimal"
                     step="0.1"
                     value={postWeightKg}
                     onChange={(e) => setPostWeightKg(e.target.value)}
@@ -733,6 +736,7 @@ export function DialysisSessionModal({
                   </span>
                   <input
                     type="number"
+                    inputMode="numeric"
                     step="50"
                     min="0"
                     max="950"
@@ -786,6 +790,7 @@ export function DialysisSessionModal({
                     </span>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min="40"
                       max="280"
                       value={cur.systolic}
@@ -803,6 +808,7 @@ export function DialysisSessionModal({
                     </span>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min="20"
                       max="180"
                       value={cur.diastolic}
@@ -820,6 +826,7 @@ export function DialysisSessionModal({
                     </span>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min="25"
                       max="240"
                       value={cur.heartRate}
@@ -852,6 +859,7 @@ export function DialysisSessionModal({
               </label>
               <input
                 type="number"
+                inputMode="decimal"
                 step="0.1"
                 min="34"
                 max="43"
@@ -1011,6 +1019,7 @@ export function DialysisSessionModal({
               </label>
               <input
                 type="number"
+                inputMode="numeric"
                 step="50"
                 min="0"
                 max="6000"
@@ -1029,6 +1038,7 @@ export function DialysisSessionModal({
               </label>
               <input
                 type="number"
+                inputMode="numeric"
                 step="10"
                 min="100"
                 max="600"
@@ -1074,6 +1084,7 @@ export function DialysisSessionModal({
               </label>
               <input
                 type="number"
+                inputMode="numeric"
                 step="1"
                 min="120"
                 max="160"
