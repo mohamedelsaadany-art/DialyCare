@@ -1,120 +1,226 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { upsertCloudAccount, mergeCloudDatabase } from '@/lib/cloud-store';
+import {
+  addCloudAccountIfAbsent,
+  getCloudAccounts,
+  getCloudDatabase,
+  mergeCloudDatabase,
+} from '@/lib/cloud-store';
+import { normalizePhone } from '@/lib/data-store';
+import { isCrossOriginRequest, NO_STORE_HEADERS, passwordMatches } from '@/lib/server-auth';
 import type { User, StoredAccount, UserRole, Patient } from '@/lib/types';
 
+/**
+ * PUBLIC self-registration (B3/B4 hardened).
+ * - type must be doctor | nurse | staff | patient; for staff types data.role (if sent) must equal type.
+ *   Nobody can register as admin.
+ * - The username 'admin' (and similar) is reserved.
+ * - An existing uid / username / phone -> 409 and the existing account is left untouched.
+ *   Exception: an exact replay (same uid + same username + correct password) returns 200
+ *   with the existing user and writes nothing (old clients POST the same registration twice).
+ * - A client-supplied uid is used only if it is a v4-shaped UUID not used by any account
+ *   or patient record; otherwise the server generates one.
+ */
+const STAFF_TYPES = ['doctor', 'nurse', 'staff'] as const;
+const RESERVED_USERNAMES = new Set(['admin', 'administrator', 'root', 'superadmin', 'super_admin', 'system']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MIN_PASSWORD = 6;
+const MAX_PASSWORD = 200;
 
+function json(body: unknown, status: number): NextResponse {
+  return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
+}
+const conflict = () => json({ success: false, error: 'alreadyRegistered' }, 409);
+const invalid = (error = 'invalidRegistration') => json({ success: false, error }, 400);
+
+function str(v: unknown, max = 300): string {
+  return typeof v === 'string' ? v.trim().slice(0, max) : '';
+}
 
 export async function POST(request: Request) {
+  if (isCrossOriginRequest(request)) {
+    return json({ success: false, error: 'forbidden' }, 403);
+  }
+  let body: Record<string, unknown>;
   try {
-    const body = await request.json();
-    const { type, data } = body;
+    const raw = (await request.json()) as unknown;
+    if (!raw || typeof raw !== 'object') return invalid('missingTypeOrData');
+    body = raw as Record<string, unknown>;
+  } catch {
+    return invalid('invalidRequest');
+  }
+  const type = body.type;
+  const data = (body.data && typeof body.data === 'object' ? body.data : null) as Record<string, unknown> | null;
+  if (typeof type !== 'string' || !data) {
+    return invalid('missingTypeOrData');
+  }
+  const isStaffType = (STAFF_TYPES as readonly string[]).includes(type);
+  if (!isStaffType && type !== 'patient') {
+    return invalid('unknownRegistrationType');
+  }
+  if (isStaffType && data.role !== undefined && data.role !== type) {
+    return invalid('roleMismatch');
+  }
 
-    if (!type || !data) {
-      return NextResponse.json({ success: false, error: 'Missing type or data' }, { status: 400 });
-    }
+  const password = typeof data.password === 'string' ? data.password : '';
+  if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) {
+    return invalid('invalidPassword');
+  }
 
+  try {
     const now = new Date().toISOString();
-    const uid = data.uid || uuidv4();
+    const language = data.language === 'en' ? 'en' : 'ar';
+    let account: StoredAccount;
+    let newPatient: Patient | undefined;
 
-    if (type === 'doctor' || type === 'nurse' || type === 'staff') {
-      const cleanPhone = String(data.phone || '').trim();
-      const cleanUsername = String(data.username || cleanPhone).replace(/[\s\-\(\)\+]/g, '').trim();
-      const role: UserRole = (data.role as UserRole) || (type as UserRole) || 'doctor';
+    const requestedUid = str(data.uid, 100);
+
+    if (isStaffType) {
+      const role = type as UserRole;
+      const cleanPhone = str(data.phone, 40);
+      const cleanUsername = String(str(data.username, 100) || cleanPhone).replace(/[\s\-\(\)\+]/g, '').trim();
+      if (!cleanUsername) return invalid('missingUsername');
+      if (RESERVED_USERNAMES.has(cleanUsername.toLowerCase())) return conflict();
 
       const defaultSpecialty =
         role === 'nurse'
-          ? (data.language === 'en' ? 'Hemodialysis Registered Nurse' : 'تمريض غسيل كلوي متخصص')
+          ? (language === 'en' ? 'Hemodialysis Registered Nurse' : 'تمريض غسيل كلوي متخصص')
           : role === 'staff'
-          ? (data.language === 'en' ? 'Hemodialysis Unit Administrator' : 'إدارة وحدة الغسيل الكلوي')
-          : (data.language === 'en' ? 'Nephrologist / Dialysis Physician' : 'طبيب أمراض كلى وغسيل كلوي');
+          ? (language === 'en' ? 'Hemodialysis Unit Administrator' : 'إدارة وحدة الغسيل الكلوي')
+          : (language === 'en' ? 'Nephrologist / Dialysis Physician' : 'طبيب أمراض كلى وغسيل كلوي');
 
       const newUser: User = {
-        uid,
+        uid: requestedUid,
         role,
         status: 'pending',
         username: cleanUsername,
         phone: cleanPhone,
-        email: data.email?.trim(),
-        displayName: String(data.fullName || cleanUsername).trim(),
-        specialty: data.specialty?.trim() || defaultSpecialty,
-        hospital: data.hospital?.trim() || 'وحدة الغسيل الكلوي',
-        idCardDataUrl: data.idCardDataUrl,
-        language: data.language || 'ar',
+        email: str(data.email, 200) || undefined,
+        displayName: str(data.fullName, 200) || cleanUsername,
+        specialty: str(data.specialty, 200) || defaultSpecialty,
+        hospital: str(data.hospital, 200) || 'وحدة الغسيل الكلوي',
+        idCardDataUrl: typeof data.idCardDataUrl === 'string' ? data.idCardDataUrl : undefined,
+        language,
         registeredAt: now,
         createdAt: now,
       };
-
-      const account: StoredAccount = {
-        username: cleanUsername,
-        phone: cleanPhone,
-        password: data.password,
-        user: newUser,
-      };
-
-      await upsertCloudAccount(account);
-      await mergeCloudDatabase({
-        accounts: [account],
-      });
-      return NextResponse.json({ success: true, user: newUser });
-    }
-
-    if (type === 'patient') {
-      const cleanPhone = String(data.phone || '').replace(/[\s\-\(\)\+]/g, '').trim();
-      const cleanName = String(data.fullName || cleanPhone).trim();
+      account = { username: cleanUsername, phone: cleanPhone, password, user: newUser };
+    } else {
+      const cleanPhone = str(data.phone, 40).replace(/[\s\-\(\)\+]/g, '');
+      if (!cleanPhone) return invalid('missingPhone');
+      if (RESERVED_USERNAMES.has(cleanPhone.toLowerCase())) return conflict();
+      const cleanName = str(data.fullName, 200) || cleanPhone;
+      const profile = (data.profile && typeof data.profile === 'object' ? data.profile : undefined) as
+        | User['patientProfile']
+        | undefined;
       const newUser: User = {
-        uid,
+        uid: requestedUid,
         role: 'patient',
-        status: 'active', // Patients are pre-approved and active immediately!
+        status: 'active', // Patients are pre-approved and active immediately
         username: cleanPhone,
         phone: cleanPhone,
         displayName: cleanName,
-        language: data.language || 'ar',
-        patientProfile: data.profile,
+        language,
+        patientProfile: profile,
         registeredAt: now,
         createdAt: now,
       };
-
-      const account: StoredAccount = {
-        username: cleanPhone,
-        phone: cleanPhone,
-        password: data.password,
-        user: newUser,
-      };
-
-      const newPatient: Patient = {
-        id: uid,
+      account = { username: cleanPhone, phone: cleanPhone, password, user: newUser };
+      newPatient = {
+        id: requestedUid,
         fullName: cleanName,
-        fullNameAr: String(data.fullNameAr || cleanName).trim(),
+        fullNameAr: str(data.fullNameAr, 200) || cleanName,
         phone: cleanPhone,
         username: cleanPhone,
-        dialysisSchedule: data.profile?.dialysisSchedule || 'SMW',
-        dryWeightKg: data.profile?.dryWeightKg || 70,
-        accessType: data.profile?.accessType || 'AVF',
-        dialysisCenter: data.profile?.dialysisCenter || 'وحدة الغسيل الكلوي',
-        centerName: data.profile?.dialysisCenter || 'وحدة الغسيل الكلوي',
-        age: data.profile?.age ? Number(data.profile.age) : undefined,
+        dialysisSchedule: profile?.dialysisSchedule || 'SMW',
+        dryWeightKg: profile?.dryWeightKg || 70,
+        accessType: profile?.accessType || 'AVF',
+        dialysisCenter: profile?.dialysisCenter || 'وحدة الغسيل الكلوي',
+        centerName: profile?.dialysisCenter || 'وحدة الغسيل الكلوي',
+        age: profile?.age ? Number(profile.age) : undefined,
         reminderSchedule: 'standard',
         isActive: true,
-        gender: data.profile?.gender || 'male',
-        avatarId: data.profile?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
-        viralMarkers: data.profile?.viralMarkers,
-        emergencyContact: data.profile?.emergencyContact,
+        gender: profile?.gender || 'male',
+        avatarId: profile?.gender === 'female' ? 'female_mature_1' : 'male_mature_1',
+        viralMarkers: profile?.viralMarkers,
+        emergencyContact: profile?.emergencyContact,
         createdAt: now,
       };
-
-      await upsertCloudAccount(account);
-      await mergeCloudDatabase({
-        accounts: [account],
-        patients: [newPatient],
-      });
-      return NextResponse.json({ success: true, user: newUser, patient: newPatient });
     }
 
-    return NextResponse.json({ success: false, error: 'Unknown registration type' }, { status: 400 });
+    // Exact replay of an earlier successful registration: answer it, write nothing.
+    const accounts = await getCloudAccounts();
+    if (requestedUid) {
+      const sameUid = accounts.find((a) => a.user && a.user.uid === requestedUid);
+      if (sameUid) {
+        const replay =
+          (sameUid.username || '').trim().toLowerCase() === account.username.toLowerCase() &&
+          sameUid.user.role === account.user.role &&
+          passwordMatches(sameUid.password, password);
+        if (!replay) return conflict();
+        const db = await getCloudDatabase();
+        const existingPatient = db.patients.find((p) => p.id === sameUid.user.uid);
+        return json(
+          { success: true, user: { ...sameUid.user }, ...(existingPatient ? { patient: existingPatient } : {}) },
+          200
+        );
+      }
+    }
+
+    const db = await getCloudDatabase();
+    // A new patient must not collide with an existing patient RECORD either:
+    // the database merge matches patients by username/phone and would fold the
+    // new registration into (and re-id) someone else's clinical record.
+    // Exception (clinic flow): staff created the patient record with this exact
+    // v4 uid (addPatientAccount) and its sync landed before the register POST.
+    // If every clashing record IS that uid and no account owns it, link the new
+    // account to the existing record instead of failing forever. (After B1c
+    // only staff ever see patient uids, so a patient cannot claim another record.)
+    let linkExistingRecord = false;
+    if (newPatient) {
+      const phone = normalizePhone(newPatient.phone);
+      const uname = (newPatient.username || '').toLowerCase();
+      const clashes = db.patients.filter(
+        (p) =>
+          (phone && normalizePhone(p.phone) === phone) ||
+          (uname && (p.username || '').toLowerCase() === uname) ||
+          (requestedUid && p.id === requestedUid)
+      );
+      if (clashes.length > 0) {
+        const linkable =
+          UUID_RE.test(requestedUid) &&
+          clashes.every((p) => p.id === requestedUid) &&
+          !accounts.some((a) => a.user?.uid === requestedUid);
+        if (!linkable) return conflict();
+        linkExistingRecord = true;
+      }
+    }
+
+    // Choose the uid: the client's v4-shaped uuid if unused anywhere, else a fresh one.
+    let uid = uuidv4();
+    if (linkExistingRecord) {
+      uid = requestedUid;
+    } else if (UUID_RE.test(requestedUid)) {
+      const taken =
+        accounts.some((a) => a.user?.uid === requestedUid) || db.patients.some((p) => p.id === requestedUid);
+      if (!taken) uid = requestedUid;
+    }
+    account.user.uid = uid;
+    if (newPatient) newPatient.id = uid;
+
+    const result = await addCloudAccountIfAbsent(account);
+    if (result === 'conflict') return conflict();
+
+    if (linkExistingRecord) {
+      // Keep the clinic-entered record as it is (registration defaults must not overwrite it).
+      await mergeCloudDatabase({ accounts: [account] });
+      const linked = (await getCloudDatabase()).patients.find((p) => p.id === uid);
+      return json({ success: true, user: { ...account.user }, ...(linked ? { patient: linked } : {}) }, 200);
+    }
+    await mergeCloudDatabase(newPatient ? { accounts: [account], patients: [newPatient] } : { accounts: [account] });
+    return json({ success: true, user: { ...account.user }, ...(newPatient ? { patient: newPatient } : {}) }, 200);
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown registration error';
-    console.error('[API /api/auth/register] Error:', error);
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    console.error('[API /api/auth/register] Error:', error instanceof Error ? error.message : error);
+    return json({ success: false, error: 'registrationFailed' }, 500);
   }
 }

@@ -72,6 +72,7 @@ import { GET as accountsRoute } from '../../app/api/auth/accounts/route';
 import { POST as approveRoute } from '../../app/api/auth/approve/route';
 import { POST as rejectRoute } from '../../app/api/auth/reject/route';
 import { GET as syncRouteGet, POST as syncRoutePost } from '../../app/api/sync/route';
+import { createSessionToken } from '../server-auth';
 import type { User, StoredAccount, Patient, DialysisSession } from '../types';
 import {
   isUuid,
@@ -129,6 +130,14 @@ function simulateSyncSession(): User | null {
   }
 
   return { ...parsed, status: parsed.status || 'active' };
+}
+
+// B1c: the API routes require a session. Authenticate as the seeded super admin
+// (Authorization: Bearer, same token the HttpOnly cookie would carry).
+function adminAuthHeaders(): Record<string, string> {
+  const token = createSessionToken({ uid: DEFAULT_ADMIN_USER.uid, role: 'admin' });
+  if (!token) throw new Error('no session key available in tests');
+  return { Authorization: `Bearer ${token}` };
 }
 
 export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: number; passed: boolean }> {
@@ -402,7 +411,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     count();
 
     // Test 2.3: API Route /api/auth/accounts (GET Accounts list for Super Admin)
-    const accountsReq = new Request('http://localhost:3000/api/auth/accounts');
+    const accountsReq = new Request('http://localhost:3000/api/auth/accounts', { headers: adminAuthHeaders() });
     const accountsRes = await accountsRoute(accountsReq);
     assert.strictEqual(accountsRes.status, 200, 'Accounts API returns 200');
     count();
@@ -432,7 +441,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     // Test 2.4: API Route /api/auth/approve (Approving Nurse / Staff member)
     const approveReq = new Request('http://localhost:3000/api/auth/approve', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() },
       body: JSON.stringify({
         uid: cloudNurseUid,
         reviewerName: 'Super Admin Dr. Saadany',
@@ -446,7 +455,8 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     count();
     assert.strictEqual(approveData.user.status, 'active', 'Nurse transitioned to active');
     count();
-    assert.strictEqual(approveData.user.reviewedBy, 'Super Admin Dr. Saadany', 'Reviewer stamped');
+    // B1c: the reviewer is the signed-in admin (from the session), never a name sent in the body.
+    assert.strictEqual(approveData.user.reviewedBy, DEFAULT_ADMIN_USER.displayName, 'Reviewer stamped from session');
     count();
 
     // Verify cloud patient approval generates complete Patient entity
@@ -476,7 +486,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     const rejectionReason = 'صورة ترخيص مزاولة المهنة غير مقروءة وبحاجة لتحديث ختم نقابة الأطباء لعام 2026';
     const rejectReq = new Request('http://localhost:3000/api/auth/reject', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() },
       body: JSON.stringify({
         uid: cloudDocUid,
         reason: rejectionReason,
@@ -753,7 +763,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
     count();
 
     // 5.2 Test /api/sync route GET and POST directly
-    const getRes = await syncRouteGet();
+    const getRes = await syncRouteGet(new Request('http://localhost:3000/api/sync', { headers: adminAuthHeaders() }));
     const getJson = await getRes.json();
     assert.strictEqual(getJson.success, true, 'GET /api/sync returned success');
     count();
@@ -762,7 +772,7 @@ export async function runRefreshAndCloudSyncTests(): Promise<{ totalAssertions: 
 
     const postReq = new Request('http://localhost:3000/api/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() },
       body: JSON.stringify({
         patients: [{
           ...testPatient,

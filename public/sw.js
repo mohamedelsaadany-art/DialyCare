@@ -1,7 +1,7 @@
 // DialyCare Service Worker
 // Provides offline resilience, precaching, network-first strategy, and push notifications
 
-const CACHE_NAME = 'dialycare-v1';
+const CACHE_NAME = 'dialycare-v2-auth'; // bumped for the B1 server-side login release
 const PRECACHE_ASSETS = [
   '/',
   '/en/patient',

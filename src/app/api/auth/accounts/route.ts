@@ -1,42 +1,36 @@
 import { NextResponse } from 'next/server';
-import { getCloudAccounts, mergeCloudAccounts } from '@/lib/cloud-store';
-import type { StoredAccount } from '@/lib/types';
+import { getCloudAccounts } from '@/lib/cloud-store';
+import { isStaffRole, publicAccounts } from '@/lib/api-scope';
+import { getSession, NO_STORE_HEADERS, sessionErrorResponse } from '@/lib/server-auth';
 
-export async function GET(request?: Request) {
+/**
+ * GET/POST /api/auth/accounts — READ ONLY (B1c).
+ * staff: every account without passwords; patient: only their own account.
+ * POST is accepted for old clients but merges nothing: accounts change only
+ * through /api/auth/register, /approve and /reject. No session -> 401.
+ */
+async function respond(request: Request): Promise<NextResponse> {
+  const session = await getSession(request);
+  if (!session.ok) return sessionErrorResponse(session);
   try {
-    // Access searchParams if request is provided to ensure dynamic evaluation
-    if (request?.url) {
-      new URL(request.url).searchParams.get('t');
-    }
-    const accounts = await getCloudAccounts();
-    return NextResponse.json({
-      success: true,
-      accounts,
-      users: accounts.map((a) => a.user),
-    });
+    const all = await getCloudAccounts();
+    const visible = isStaffRole(session.user.role)
+      ? publicAccounts(all)
+      : publicAccounts(all.filter((a) => a.user?.uid === session.user.uid));
+    return NextResponse.json(
+      { success: true, accounts: visible, users: visible.map((a) => a.user) },
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (error: unknown) {
-    if ((error as { digest?: string })?.digest === 'NEXT_PRERENDER_INTERRUPTED') {
-      throw error;
-    }
-    const msg = error instanceof Error ? error.message : 'Failed to fetch accounts';
-    console.error('[API /api/auth/accounts GET] Error:', error);
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    console.error('[API /api/auth/accounts] Error:', error instanceof Error ? error.message : error);
+    return NextResponse.json({ success: false, error: 'accountsFailed' }, { status: 500, headers: NO_STORE_HEADERS });
   }
 }
 
+export async function GET(request: Request) {
+  return respond(request);
+}
+
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const incomingAccounts: StoredAccount[] = Array.isArray(body.accounts) ? body.accounts : [];
-    const accounts = await mergeCloudAccounts(incomingAccounts);
-    return NextResponse.json({
-      success: true,
-      accounts,
-      users: accounts.map((a) => a.user),
-    });
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Failed to merge cloud accounts';
-    console.error('[API /api/auth/accounts POST] Error:', error);
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
-  }
+  return respond(request);
 }

@@ -15,6 +15,7 @@ import {
   DEFAULT_PATIENT7_USER,
   INITIAL_DEMO_PATIENTS,
   getAdminPassword,
+  normalizePhone,
 } from './data-store';
 
 export type { UnifiedCloudDatabase };
@@ -50,8 +51,18 @@ let memoryDatabase: UnifiedCloudDatabase = {
   lastUpdated: new Date().toISOString(),
 };
 
+/**
+ * Normalise an account. Only the seeded super admin (uid 'admin-1' AND username
+ * 'admin') is forced to role admin / status active. Nothing a client can write
+ * (a role of 'admin', a username of 'admin' on another uid) promotes or
+ * activates an account any more (B3/B4).
+ */
+export function isSeededSuperAdmin(acc: StoredAccount): boolean {
+  return Boolean(acc && acc.user && acc.user.uid === 'admin-1' && (acc.username || '').trim().toLowerCase() === 'admin');
+}
+
 function sanitizeAccount(acc: StoredAccount): StoredAccount {
-  const isSuperAdmin = acc.username.toLowerCase() === 'admin' || acc.user.role === 'admin';
+  const isSuperAdmin = isSeededSuperAdmin(acc);
   return {
     ...acc,
     user: {
@@ -149,6 +160,34 @@ export async function upsertCloudAccount(account: StoredAccount): Promise<Stored
   filtered.push(sanitizeAccount(account));
   await saveCloudAccounts(filtered);
   return filtered;
+}
+
+/**
+ * Insert a NEW account only if no existing account shares its uid, username
+ * (case-insensitive) or normalised phone. Never replaces anything (B4).
+ * Re-reads the store immediately before writing to keep the race window small.
+ */
+export async function addCloudAccountIfAbsent(account: StoredAccount): Promise<'created' | 'conflict'> {
+  const accounts = await getCloudAccounts();
+  if (findConflictingAccount(accounts, account)) return 'conflict';
+  await saveCloudAccounts([...accounts, sanitizeAccount(account)]);
+  return 'created';
+}
+
+export function findConflictingAccount(accounts: StoredAccount[], candidate: StoredAccount): StoredAccount | undefined {
+  const uname = (candidate.username || '').trim().toLowerCase();
+  const phone = normalizePhone(candidate.phone || candidate.user?.phone);
+  return accounts.find((a) => {
+    if (!a || !a.user) return false;
+    if (candidate.user?.uid && a.user.uid === candidate.user.uid) return true;
+    const aUser = (a.username || '').trim().toLowerCase();
+    if (uname && aUser === uname) return true;
+    // a phone-shaped username also collides with an existing phone (and vice versa)
+    const aPhone = normalizePhone(a.phone || a.user.phone);
+    const aUserPhone = /^\+?[\d\s\-()]{6,}$/.test(a.username || '') ? normalizePhone(a.username) : '';
+    if (phone && (aPhone === phone || aUserPhone === phone)) return true;
+    return false;
+  });
 }
 
 /**
@@ -494,12 +533,16 @@ export async function mergeCloudDatabase(
   if (incoming.patients && incoming.patients.length > 0) {
     for (const inc of incoming.patients) {
       const cleanIncPhone = (inc.phone || '').replace(/[\s\-\(\)\+]/g, '');
-      const idx = mergedPatients.findIndex(
-        (p) =>
-          (p.id && inc.id && p.id === inc.id) ||
-          (p.username && inc.username && p.username.toLowerCase() === inc.username.toLowerCase()) ||
-          (cleanIncPhone && p.phone && p.phone.replace(/[\s\-\(\)\+]/g, '') === cleanIncPhone)
-      );
+      // An exact id match always wins, so a record can never be merged into a
+      // DIFFERENT patient that happens to share a username/phone.
+      let idx = inc.id ? mergedPatients.findIndex((p) => p.id === inc.id) : -1;
+      if (idx === -1) {
+        idx = mergedPatients.findIndex(
+          (p) =>
+            (p.username && inc.username && p.username.toLowerCase() === inc.username.toLowerCase()) ||
+            (cleanIncPhone && p.phone && p.phone.replace(/[\s\-\(\)\+]/g, '') === cleanIncPhone)
+        );
+      }
       if (idx === -1) {
         mergedPatients.push(inc);
       } else {
