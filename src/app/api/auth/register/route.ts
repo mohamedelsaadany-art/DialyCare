@@ -6,8 +6,8 @@ import {
   getCloudDatabase,
   mergeCloudDatabase,
 } from '@/lib/cloud-store';
-import { normalizePhone } from '@/lib/data-store';
-import { isCrossOriginRequest, NO_STORE_HEADERS, passwordMatches } from '@/lib/server-auth';
+import { normalizePhone, toAsciiDigits } from '@/lib/phone';
+import { hashPassword, isCrossOriginRequest, NO_STORE_HEADERS, passwordMatches } from '@/lib/server-auth';
 import type { User, StoredAccount, UserRole, Patient } from '@/lib/types';
 
 /**
@@ -18,6 +18,8 @@ import type { User, StoredAccount, UserRole, Patient } from '@/lib/types';
  * - An existing uid / username / phone -> 409 and the existing account is left untouched.
  *   Exception: an exact replay (same uid + same username + correct password) returns 200
  *   with the existing user and writes nothing (old clients POST the same registration twice).
+ * - The password is stored as a scrypt hash (B2); the replay check verifies against it.
+ * - Arabic-Indic digits in phone/username are converted to ASCII (B5).
  * - A client-supplied uid is used only if it is a v4-shaped UUID not used by any account
  *   or patient record; otherwise the server generates one.
  */
@@ -77,8 +79,8 @@ export async function POST(request: Request) {
 
     if (isStaffType) {
       const role = type as UserRole;
-      const cleanPhone = str(data.phone, 40);
-      const cleanUsername = String(str(data.username, 100) || cleanPhone).replace(/[\s\-\(\)\+]/g, '').trim();
+      const cleanPhone = toAsciiDigits(str(data.phone, 40));
+      const cleanUsername = toAsciiDigits(String(str(data.username, 100) || cleanPhone)).replace(/[\s\-\(\)\+]/g, '').trim();
       if (!cleanUsername) return invalid('missingUsername');
       if (RESERVED_USERNAMES.has(cleanUsername.toLowerCase())) return conflict();
 
@@ -104,9 +106,9 @@ export async function POST(request: Request) {
         registeredAt: now,
         createdAt: now,
       };
-      account = { username: cleanUsername, phone: cleanPhone, password, user: newUser };
+      account = { username: cleanUsername, phone: cleanPhone, password: hashPassword(password), user: newUser };
     } else {
-      const cleanPhone = str(data.phone, 40).replace(/[\s\-\(\)\+]/g, '');
+      const cleanPhone = toAsciiDigits(str(data.phone, 40)).replace(/[\s\-\(\)\+]/g, '');
       if (!cleanPhone) return invalid('missingPhone');
       if (RESERVED_USERNAMES.has(cleanPhone.toLowerCase())) return conflict();
       const cleanName = str(data.fullName, 200) || cleanPhone;
@@ -125,7 +127,7 @@ export async function POST(request: Request) {
         registeredAt: now,
         createdAt: now,
       };
-      account = { username: cleanPhone, phone: cleanPhone, password, user: newUser };
+      account = { username: cleanPhone, phone: cleanPhone, password: hashPassword(password), user: newUser };
       newPatient = {
         id: requestedUid,
         fullName: cleanName,

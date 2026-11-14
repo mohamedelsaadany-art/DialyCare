@@ -23,11 +23,11 @@
  *   3. else, ONLY outside production: a fixed dev secret + loud warning
  *   4. production with neither: null -> login refuses (503), every token fails.
  */
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { StoredAccount, User, UserRole } from './types';
-import { isPhoneMatch } from './data-store';
-import { getCloudAccounts } from './cloud-store';
+import { isPhoneMatch, toAsciiDigits } from './phone';
+import { getCloudAccounts, saveCloudAccounts } from './cloud-store';
 
 export const SESSION_COOKIE = 'waslity_session';
 export const SESSION_TTL_REMEMBER_SECONDS = 30 * 24 * 60 * 60; // 30 days
@@ -230,30 +230,188 @@ export function isCrossOriginRequest(request: Request): boolean {
 // Credentials
 // ---------------------------------------------------------------------------
 
+// ---- Password hashing (B2) ------------------------------------------------
+//
+// Stored format:  scrypt$1$<N>$<r>$<p>$<salt b64url>$<key b64url>
+// Random 16-byte salt per password, 32-byte derived key; verification re-derives
+// with the STORED parameters and compares with timingSafeEqual. Anything that
+// does not start with "scrypt$" is a legacy plaintext password (pre-B2 data):
+// it is still accepted (constant-time compare) and flagged for upgrade.
+// A value that starts with "scrypt$" but does not parse NEVER matches.
+// Sync scrypt (~50 ms) on purpose: login is rare and keeps call sites simple.
+
+const SCRYPT_PREFIX = 'scrypt$';
+export const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, keyLength: 32, saltLength: 16 } as const;
+const SCRYPT_MAXMEM = 64 * 1024 * 1024;
+const MAX_PASSWORD_INPUT = 1000;
+
+export function isPasswordHash(stored: unknown): boolean {
+  return typeof stored === 'string' && stored.startsWith(SCRYPT_PREFIX);
+}
+
+export function hashPassword(plain: string): string {
+  if (typeof plain !== 'string' || plain.length === 0 || plain.length > MAX_PASSWORD_INPUT) {
+    throw new Error('invalid password input');
+  }
+  const { N, r, p, keyLength, saltLength } = SCRYPT_PARAMS;
+  const salt = randomBytes(saltLength);
+  const key = scryptSync(plain, salt, keyLength, { N, r, p, maxmem: SCRYPT_MAXMEM });
+  return `scrypt$1$${N}$${r}$${p}$${salt.toString('base64url')}$${key.toString('base64url')}`;
+}
+
+interface ParsedHash {
+  N: number;
+  r: number;
+  p: number;
+  salt: Buffer;
+  key: Buffer;
+}
+
+function parseCanonicalB64url(part: string, min: number, max: number): Buffer | null {
+  if (!B64URL_RE.test(part)) return null;
+  const buf = Buffer.from(part, 'base64url');
+  if (buf.length < min || buf.length > max || buf.toString('base64url') !== part) return null;
+  return buf;
+}
+
+function parsePasswordHash(stored: string): ParsedHash | null {
+  const parts = stored.split('$');
+  if (parts.length !== 7 || parts[0] !== 'scrypt' || parts[1] !== '1') return null;
+  if (!/^\d{1,8}$/.test(parts[2]) || !/^\d{1,2}$/.test(parts[3]) || !/^\d{1,2}$/.test(parts[4])) return null;
+  const N = Number(parts[2]);
+  const r = Number(parts[3]);
+  const p = Number(parts[4]);
+  // N must be a power of two in [2^14, 2^20]; r/p bounded so a planted hash can't exhaust memory/CPU.
+  if (N < 16384 || N > 1048576 || (N & (N - 1)) !== 0) return null;
+  if (r < 1 || r > 16 || p < 1 || p > 4) return null;
+  if (128 * N * r > SCRYPT_MAXMEM / 2) return null;
+  const salt = parseCanonicalB64url(parts[5], 16, 64);
+  const key = parseCanonicalB64url(parts[6], 32, 64);
+  if (!salt || !key) return null;
+  return { N, r, p, salt, key };
+}
+
+let dummyParsed: ParsedHash | null = null;
+function dummyHashParsed(): ParsedHash {
+  if (!dummyParsed) dummyParsed = parsePasswordHash(hashPassword(randomBytes(18).toString('base64url')));
+  return dummyParsed!;
+}
+
+function derive(candidate: string, h: ParsedHash): Buffer {
+  return scryptSync(candidate, h.salt, h.key.length, { N: h.N, r: h.r, p: h.p, maxmem: SCRYPT_MAXMEM });
+}
+
+function legacyPlaintextEquals(stored: string, given: string): boolean {
+  const a = createHash('sha256').update(stored, 'utf8').digest();
+  const b = createHash('sha256').update(given, 'utf8').digest();
+  return timingSafeEqual(a, b);
+}
+
+export interface PasswordCheck {
+  ok: boolean;
+  /** true when the password matched a legacy plaintext (or weaker-parameter) value and should be re-hashed */
+  needsUpgrade: boolean;
+}
+
 /**
- * Constant-time password comparison (B1: stored passwords are still plaintext;
- * B2 replaces this with scrypt). Both sides are hashed first so the comparison
- * is over equal-length buffers regardless of input length.
+ * Verify a password against a stored value (scrypt hash or legacy plaintext).
+ * Always performs exactly one scrypt derivation so timing does not reveal
+ * whether an account exists or is still on a plaintext password.
  */
+export function verifyPassword(stored: unknown, given: unknown): PasswordCheck {
+  const fail: PasswordCheck = { ok: false, needsUpgrade: false };
+  const givenOk = typeof given === 'string' && given.length > 0 && given.length <= MAX_PASSWORD_INPUT;
+  const candidate = givenOk ? (given as string) : 'x';
+
+  if (typeof stored === 'string' && stored.startsWith(SCRYPT_PREFIX)) {
+    const parsed = parsePasswordHash(stored);
+    if (!parsed) {
+      derive(candidate, dummyHashParsed()); // keep timing uniform; garbled hashes never match
+      return fail;
+    }
+    const derived = derive(candidate, parsed);
+    const ok = givenOk && derived.length === parsed.key.length && timingSafeEqual(derived, parsed.key);
+    const weaker =
+      parsed.N < SCRYPT_PARAMS.N || parsed.r < SCRYPT_PARAMS.r || parsed.key.length < SCRYPT_PARAMS.keyLength;
+    return { ok, needsUpgrade: ok && weaker };
+  }
+
+  // Legacy plaintext (or missing): one dummy derivation for uniform timing.
+  derive(candidate, dummyHashParsed());
+  if (typeof stored !== 'string' || stored.length === 0 || !givenOk) return fail;
+  const ok = legacyPlaintextEquals(stored, candidate);
+  return { ok, needsUpgrade: ok };
+}
+
+/** Boolean form of verifyPassword (accepts scrypt hashes and legacy plaintext). */
 export function passwordMatches(stored: unknown, given: unknown): boolean {
-  const a = createHash('sha256').update(typeof stored === 'string' ? stored : '', 'utf8').digest();
-  const b = createHash('sha256').update(typeof given === 'string' ? given : '', 'utf8').digest();
-  const equal = timingSafeEqual(a, b);
-  return equal && typeof stored === 'string' && stored.length > 0 && typeof given === 'string';
+  return verifyPassword(stored, given).ok;
+}
+
+/**
+ * Persist a new stored password for one account. Writes the ACCOUNTS blob only:
+ * rewriting the clinical database blob here could race a staff sync and drop
+ * clinical rows. getCloudDatabase() reconciles database-blob accounts onto the
+ * accounts blob only when their review/registration timestamps are newer, and a
+ * password change does not touch those, so the hash wins; the next database
+ * save (any staff sync) then carries the hash into the database blob too.
+ * markChanged=true records passwordUpdatedAt, which ends sessions issued before it.
+ */
+export async function storeAccountPassword(uid: string, stored: string, markChanged: boolean): Promise<boolean> {
+  const accounts = await getCloudAccounts();
+  const idx = accounts.findIndex((a) => a.user && a.user.uid === uid);
+  if (idx === -1) return false;
+  const updated: StoredAccount = {
+    ...accounts[idx],
+    password: stored,
+    ...(markChanged ? { passwordUpdatedAt: new Date().toISOString() } : {}),
+  };
+  await saveCloudAccounts(accounts.map((a, i) => (i === idx ? updated : a)));
+  return true;
+}
+
+export const MIGRATION_CAP = 300;
+export const MIGRATION_BUDGET_MS = 2000;
+
+/**
+ * Hash remaining legacy plaintext passwords in ONE accounts-blob write, bounded
+ * by a count cap AND a time budget (sync scrypt is ~50 ms each, so the admin's
+ * login request never stalls near the function timeout). Whatever is left is
+ * finished on the next admin login. Returns how many were hashed.
+ */
+export async function migratePlaintextPasswords(
+  options: { cap?: number; budgetMs?: number; now?: () => number } = {}
+): Promise<number> {
+  const cap = options.cap ?? MIGRATION_CAP;
+  const budgetMs = options.budgetMs ?? MIGRATION_BUDGET_MS;
+  const now = options.now ?? Date.now;
+  const started = now();
+  const accounts = await getCloudAccounts();
+  let count = 0;
+  const next = accounts.map((a) => {
+    if (count >= cap || now() - started >= budgetMs) return a;
+    if (typeof a.password === 'string' && a.password.length > 0 && !isPasswordHash(a.password)) {
+      count++;
+      return { ...a, password: hashPassword(a.password) };
+    }
+    return a;
+  });
+  if (count > 0) await saveCloudAccounts(next);
+  return count;
 }
 
 export type PublicAccount = Omit<StoredAccount, 'password'>;
 
-/** Strip the password. Use for EVERY account that leaves the server. */
+/** Strip the password (hash or legacy) and password metadata. Use for EVERY account that leaves the server. */
 export function toPublicAccount(acc: StoredAccount): PublicAccount {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password, ...rest } = acc as StoredAccount & Record<string, unknown>;
+  const { password, passwordUpdatedAt, ...rest } = acc as StoredAccount & Record<string, unknown>;
   return { ...rest, user: { ...acc.user } } as PublicAccount;
 }
 
 function accountMatchesIdentifier(acc: StoredAccount, identifier: string): boolean {
   if (!acc || !acc.user) return false;
-  const id = identifier.trim();
+  const id = toAsciiDigits(identifier.trim()); // B5: Arabic-Indic digits typed on Arabic keyboards
   if (!id) return false;
   const idLower = id.toLowerCase();
   if (acc.username && acc.username.trim().toLowerCase() === idLower) return true;
@@ -268,7 +426,7 @@ function accountMatchesIdentifier(acc: StoredAccount, identifier: string): boole
 }
 
 export type AuthenticateResult =
-  | { kind: 'ok'; account: StoredAccount }
+  | { kind: 'ok'; account: StoredAccount; needsUpgrade: boolean }
   | { kind: 'pending'; account: StoredAccount }
   | { kind: 'rejected'; account: StoredAccount }
   | { kind: 'invalid' };
@@ -282,19 +440,20 @@ export function authenticate(accounts: StoredAccount[], identifier: unknown, pas
   if (typeof identifier !== 'string' || typeof password !== 'string') return { kind: 'invalid' };
   const candidates = accounts.filter((a) => accountMatchesIdentifier(a, identifier));
   if (candidates.length === 0) {
-    passwordMatches('dummy-password-for-timing', password);
+    verifyPassword(undefined, password); // same cost as a real check
     return { kind: 'invalid' };
   }
   // Check every candidate (no early exit) so timing does not depend on position.
-  const verified = candidates.filter((a) => passwordMatches(a.password, password));
+  const checks = candidates.map((a) => ({ account: a, check: verifyPassword(a.password, password) }));
+  const verified = checks.filter((c) => c.check.ok);
   if (verified.length === 0) return { kind: 'invalid' };
 
-  const active = verified.find((a) => (a.user.status || 'active') === 'active');
+  const active = verified.find((c) => (c.account.user.status || 'active') === 'active');
   const chosen = active || verified[0];
-  const status = chosen.user.status || 'active';
-  if (status === 'pending') return { kind: 'pending', account: chosen };
-  if (status === 'rejected') return { kind: 'rejected', account: chosen };
-  return { kind: 'ok', account: chosen };
+  const status = chosen.account.user.status || 'active';
+  if (status === 'pending') return { kind: 'pending', account: chosen.account };
+  if (status === 'rejected') return { kind: 'rejected', account: chosen.account };
+  return { kind: 'ok', account: chosen.account, needsUpgrade: chosen.check.needsUpgrade };
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +482,13 @@ export async function getSession(
   if (!account) return { ok: false, status: 401, error: 'unauthorized', hadToken: true };
   const status = account.user.status || 'active';
   if (status !== 'active') return { ok: false, status: 401, error: 'unauthorized', hadToken: true };
+  // A password change ends every session issued before it (B2).
+  if (account.passwordUpdatedAt) {
+    const changedMs = Date.parse(account.passwordUpdatedAt);
+    if (Number.isFinite(changedMs) && payload.iat < Math.floor(changedMs / 1000)) {
+      return { ok: false, status: 401, error: 'unauthorized', hadToken: true };
+    }
+  }
 
   if (options.roles && !options.roles.includes(account.user.role)) {
     return { ok: false, status: 403, error: 'forbidden', hadToken: true };

@@ -18,7 +18,7 @@ import {
   exportAllDataAsJson,
   type AdminSettings,
 } from '../admin-store';
-import { getAdminPassword, setAdminPassword } from '@/lib/data-store';
+import { changePasswordOnServer, changePasswordErrorText } from '@/lib/password-client';
 import { useAuth } from '@/lib/auth-context';
 import {
   SettingsIcon,
@@ -130,16 +130,11 @@ export default function AdminSettingsPage() {
     }, 3000);
   };
 
-  const handleUpdateAdminPassword = (e: React.FormEvent) => {
+  const handleUpdateAdminPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminPassError('');
     setAdminPassSuccess(false);
 
-    const actualCurrent = getAdminPassword();
-    if (currentAdminPass !== actualCurrent) {
-      setAdminPassError(tSettings('incorrectCurrentPassword') || (isRtl ? 'كلمة المرور الحالية غير صحيحة' : 'Current password is incorrect'));
-      return;
-    }
     if (newAdminPass.length < 6) {
       setAdminPassError(tSettings('passwordMinLength') || (isRtl ? 'يجب ألا تقل كلمة المرور عن 6 أحرف' : 'Password must be at least 6 characters'));
       return;
@@ -149,7 +144,12 @@ export default function AdminSettingsPage() {
       return;
     }
 
-    setAdminPassword(newAdminPass);
+    // The server verifies the current password and stores the new one (hashed)
+    const res = await changePasswordOnServer(currentAdminPass, newAdminPass);
+    if (!res.ok) {
+      setAdminPassError(changePasswordErrorText(res.error, isRtl));
+      return;
+    }
     setCurrentAdminPass('');
     setNewAdminPass('');
     setConfirmAdminPass('');

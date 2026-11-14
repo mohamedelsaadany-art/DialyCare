@@ -5,7 +5,10 @@ import {
   buildSessionCookie,
   createSessionToken,
   getSessionKey,
+  hashPassword,
   isCrossOriginRequest,
+  migratePlaintextPasswords,
+  storeAccountPassword,
   NO_STORE_HEADERS,
   SESSION_TTL_REMEMBER_SECONDS,
   SESSION_TTL_SHORT_SECONDS,
@@ -67,6 +70,25 @@ export async function POST(request: Request) {
         { success: false, status: 'rejected', user, rejectionReason: user.rejectionReason },
         403
       );
+    }
+
+    // B2: transparently re-hash a legacy plaintext password, and on an admin
+    // login hash every remaining plaintext password (one accounts-blob write).
+    // Failures are logged and never block the login.
+    if (result.needsUpgrade) {
+      try {
+        await storeAccountPassword(user.uid, hashPassword(password), false);
+      } catch (err) {
+        console.warn('[API /api/auth/login] password upgrade failed:', err instanceof Error ? err.message : err);
+      }
+    }
+    if (user.role === 'admin') {
+      try {
+        const n = await migratePlaintextPasswords();
+        if (n > 0) console.warn(`[API /api/auth/login] hashed ${n} legacy plaintext password(s)`);
+      } catch (err) {
+        console.warn('[API /api/auth/login] bulk password migration failed:', err instanceof Error ? err.message : err);
+      }
     }
 
     const ttl = rememberMe ? SESSION_TTL_REMEMBER_SECONDS : SESSION_TTL_SHORT_SECONDS;

@@ -59,6 +59,8 @@ export interface StoredAccount {
   username: string;
   phone?: string;
   password: string;
+  /** set by a server-side password change (B2); sessions issued before it are rejected */
+  passwordUpdatedAt?: string;
   user: User;
 }
 
