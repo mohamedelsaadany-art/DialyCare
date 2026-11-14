@@ -40,7 +40,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const current = await getCloudDatabase();
+    // Fresh read (never a possibly stale cache): ownership checks + the merge are a read-modify-write.
+    const current = await getCloudDatabase({ forWrite: true });
     const { patch, dropped } = filterIncomingForAccount(body, session.account, current);
     if (dropped > 0) {
       console.warn(`[API /api/sync POST] dropped ${dropped} row(s) not writable by role ${session.user.role}`);

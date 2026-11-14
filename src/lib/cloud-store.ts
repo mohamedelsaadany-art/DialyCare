@@ -73,49 +73,118 @@ function sanitizeAccount(acc: StoredAccount): StoredAccount {
   };
 }
 
+export type BlobReadDecision = 'use' | 'seed' | 'cached' | 'throw';
+
 /**
- * Retrieve all registered accounts from the cloud store (Vercel Blob)
- * with robust in-memory fallback.
+ * B9 hardening: what to do with the result of reading a blob.
+ *  - 'use'    the blob exists and holds valid data
+ *  - 'seed'   list() succeeded and the blob is ABSENT (first run only)
+ *  - 'cached' the read failed / was invalid, but this instance already loaded the
+ *             real data from the blob earlier: serve that copy
+ *  - 'throw'  the read failed / was invalid and nothing real is cached. Callers
+ *             get an error (500) instead of seed/stale data that the next write
+ *             would persist over the real store.
+ * Never seeds when the blob exists.
  */
-export async function getCloudAccounts(): Promise<StoredAccount[]> {
+export function decideBlobRead(input: {
+  failed: boolean;
+  found: boolean;
+  ok: boolean;
+  parsed: unknown;
+  loadedBefore: boolean;
+  expect: 'nonEmptyArray' | 'object';
+  /** read-modify-write callers: a possibly stale cache must never be written back */
+  forWrite?: boolean;
+  /** production never seeds: an absent blob there means a transient listing problem */
+  production?: boolean;
+}): BlobReadDecision {
+  const p = input.parsed;
+  const valid =
+    input.expect === 'nonEmptyArray'
+      ? Array.isArray(p) && p.length > 0
+      : Boolean(p) && typeof p === 'object' && !Array.isArray(p);
+  if (!input.failed && input.found && input.ok && valid) return 'use';
+  if (!input.failed && !input.found) return input.production ? 'throw' : 'seed';
+  return input.loadedBefore && !input.forWrite ? 'cached' : 'throw';
+}
+
+function isProductionStore(): boolean {
+  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+}
+
+/** Options for store reads. forWrite: the caller will write the result back (fresh data only). */
+export interface StoreReadOptions {
+  forWrite?: boolean;
+}
+
+let accountsLoadedFromBlob = false;
+let databaseLoadedFromBlob = false;
+
+/**
+ * Retrieve all registered accounts from the cloud store (Vercel Blob).
+ * In blob mode a failed or invalid read never falls back to the demo seeds
+ * (see decideBlobRead); it throws unless this instance already holds the real list.
+ */
+export async function getCloudAccounts(options: StoreReadOptions = {}): Promise<StoredAccount[]> {
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
     return memoryAccounts.map(sanitizeAccount);
   }
+  let failed = false;
+  let found = false;
+  let ok = false;
+  let parsed: unknown = undefined;
   try {
     const { blobs } = await list({ prefix: ACCOUNTS_BLOB_PATH });
-    const found = blobs.find((b) => b.pathname === ACCOUNTS_BLOB_PATH);
-    const targetUrl = found ? found.url : null;
-
-    if (targetUrl) {
+    const hit = blobs.find((b) => b.pathname === ACCOUNTS_BLOB_PATH);
+    found = Boolean(hit);
+    if (hit) {
       // Append cache buster to always fetch the freshest copy
-      const res = await fetch(`${targetUrl}?t=${Date.now()}`, { cache: 'no-store' });
-      if (res.ok) {
-        const raw = await res.json();
-        if (Array.isArray(raw) && raw.length > 0) {
-          const sanitized = raw.map(sanitizeAccount);
-          memoryAccounts = sanitized;
-          return sanitized;
-        }
-      }
+      const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
+      ok = res.ok;
+      if (res.ok) parsed = await res.json();
     }
-
-    // If blob not found yet, seed it with initial accounts
-    const initialAccounts: StoredAccount[] = [
-      { username: 'admin', password: getAdminPassword(), user: DEFAULT_ADMIN_USER },
-      { username: 'patient1', phone: '01012345678', password: 'patient123', user: DEFAULT_PATIENT_USER },
-      { username: 'patient2', phone: '01098765432', password: 'patient123', user: DEFAULT_PATIENT2_USER },
-      { username: 'patient3', phone: '01234567890', password: 'patient123', user: DEFAULT_PATIENT3_USER },
-      { username: 'patient4', phone: '01145678901', password: 'patient123', user: DEFAULT_PATIENT4_USER },
-      { username: 'patient5', phone: '01056789012', password: 'patient123', user: DEFAULT_PATIENT5_USER },
-      { username: 'patient6', phone: '01267890123', password: 'patient123', user: DEFAULT_PATIENT6_USER },
-      { username: 'patient7', phone: '01178901234', password: 'patient123', user: DEFAULT_PATIENT7_USER },
-    ];
-    await saveCloudAccounts(initialAccounts);
-    return initialAccounts;
   } catch (error) {
-    console.warn('[CloudStore] Vercel Blob fetch failed, using fallback memory accounts:', error);
+    failed = true;
+    console.warn('[CloudStore] Vercel Blob accounts read failed:', error instanceof Error ? error.message : error);
+  }
+
+  const decision = decideBlobRead({
+    failed,
+    found,
+    ok,
+    parsed,
+    loadedBefore: accountsLoadedFromBlob,
+    expect: 'nonEmptyArray',
+    forWrite: options.forWrite,
+    production: isProductionStore(),
+  });
+  if (decision === 'use') {
+    const sanitized = (parsed as StoredAccount[]).map(sanitizeAccount);
+    memoryAccounts = sanitized;
+    accountsLoadedFromBlob = true;
+    return sanitized;
+  }
+  if (decision === 'cached') {
     return memoryAccounts.map(sanitizeAccount);
   }
+  if (decision === 'throw') {
+    throw new Error('[CloudStore] accounts store temporarily unavailable');
+  }
+
+  // 'seed': the accounts blob does not exist yet (first run)
+  const initialAccounts: StoredAccount[] = [
+    { username: 'admin', password: getAdminPassword(), user: DEFAULT_ADMIN_USER },
+    { username: 'patient1', phone: '01012345678', password: 'patient123', user: DEFAULT_PATIENT_USER },
+    { username: 'patient2', phone: '01098765432', password: 'patient123', user: DEFAULT_PATIENT2_USER },
+    { username: 'patient3', phone: '01234567890', password: 'patient123', user: DEFAULT_PATIENT3_USER },
+    { username: 'patient4', phone: '01145678901', password: 'patient123', user: DEFAULT_PATIENT4_USER },
+    { username: 'patient5', phone: '01056789012', password: 'patient123', user: DEFAULT_PATIENT5_USER },
+    { username: 'patient6', phone: '01267890123', password: 'patient123', user: DEFAULT_PATIENT6_USER },
+    { username: 'patient7', phone: '01178901234', password: 'patient123', user: DEFAULT_PATIENT7_USER },
+  ];
+  await saveCloudAccounts(initialAccounts);
+  accountsLoadedFromBlob = true;
+  return initialAccounts;
 }
 
 /**
@@ -144,7 +213,7 @@ export async function saveCloudAccounts(accounts: StoredAccount[]): Promise<void
  * Add or update an account in the cloud store
  */
 export async function upsertCloudAccount(account: StoredAccount): Promise<StoredAccount[]> {
-  const accounts = await getCloudAccounts();
+  const accounts = await getCloudAccounts({ forWrite: true });
   const cleanUsername = account.username.trim().toLowerCase();
   const cleanPhone = account.phone?.replace(/[\s\-\(\)\+]/g, '') || '';
 
@@ -168,7 +237,7 @@ export async function upsertCloudAccount(account: StoredAccount): Promise<Stored
  * Re-reads the store immediately before writing to keep the race window small.
  */
 export async function addCloudAccountIfAbsent(account: StoredAccount): Promise<'created' | 'conflict'> {
-  const accounts = await getCloudAccounts();
+  const accounts = await getCloudAccounts({ forWrite: true });
   if (findConflictingAccount(accounts, account)) return 'conflict';
   await saveCloudAccounts([...accounts, sanitizeAccount(account)]);
   return 'created';
@@ -225,7 +294,12 @@ export function reconcileAccounts(
         incTime > existTime ||
         (!existing.user.patientProfile && inc.user.patientProfile)
       ) {
-        result[idx] = sanitizeAccount({
+        // B2.1: credentials are never taken from a reconciled copy. Passwords change
+        // only through storeAccountPassword / addCloudAccountIfAbsent, so whenever the
+        // base account has a password, it (and passwordUpdatedAt) wins over whatever
+        // the other copy carries (e.g. an older plaintext still in the database blob).
+        const keepCredentials = typeof existing.password === 'string' && existing.password.length > 0;
+        const merged: StoredAccount = {
           ...existing,
           ...inc,
           user: {
@@ -233,7 +307,13 @@ export function reconcileAccounts(
             ...inc.user,
             patientProfile: inc.user.patientProfile || existing.user.patientProfile,
           },
-        });
+        };
+        if (keepCredentials) {
+          merged.password = existing.password;
+          if (existing.passwordUpdatedAt) merged.passwordUpdatedAt = existing.passwordUpdatedAt;
+          else delete merged.passwordUpdatedAt;
+        }
+        result[idx] = sanitizeAccount(merged);
         hasChanges = true;
       }
     }
@@ -248,7 +328,7 @@ export function reconcileAccounts(
  * Ensures local in-clinic created patients on doctors' devices are never lost.
  */
 export async function mergeCloudAccounts(incomingAccounts: StoredAccount[]): Promise<StoredAccount[]> {
-  const currentAccounts = await getCloudAccounts();
+  const currentAccounts = await getCloudAccounts({ forWrite: true });
   const { merged, hasChanges } = reconcileAccounts(currentAccounts, incomingAccounts);
 
   if (hasChanges) {
@@ -264,7 +344,7 @@ export async function approveCloudAccount(
   uid: string,
   reviewerName: string = 'Super Admin'
 ): Promise<{ account: StoredAccount | null; newPatient?: Patient }> {
-  const accounts = await getCloudAccounts();
+  const accounts = await getCloudAccounts({ forWrite: true });
   const target = accounts.find((a) => a.user.uid === uid);
   if (!target) return { account: null };
 
@@ -323,7 +403,7 @@ export async function rejectCloudAccount(
   reason: string,
   reviewerName: string = 'Super Admin'
 ): Promise<StoredAccount | null> {
-  const accounts = await getCloudAccounts();
+  const accounts = await getCloudAccounts({ forWrite: true });
   const target = accounts.find((a) => a.user.uid === uid);
   if (!target) return null;
 
@@ -352,8 +432,8 @@ export async function rejectCloudAccount(
 /**
  * Retrieve the complete unified clinical database from Vercel Blob
  */
-export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
-  const fallbackAccounts = await getCloudAccounts();
+export async function getCloudDatabase(options: StoreReadOptions = {}): Promise<UnifiedCloudDatabase> {
+  const fallbackAccounts = await getCloudAccounts(options);
   memoryDatabase.accounts = fallbackAccounts;
 
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
@@ -366,16 +446,46 @@ export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
     return memoryDatabase;
   }
 
+  let failed = false;
+  let found = false;
+  let ok = false;
+  let parsed: unknown = undefined;
   try {
     const { blobs } = await list({ prefix: DATABASE_BLOB_PATH });
-    const found = blobs.find((b) => b.pathname === DATABASE_BLOB_PATH);
-    const targetUrl = found ? found.url : null;
+    const hit = blobs.find((b) => b.pathname === DATABASE_BLOB_PATH);
+    found = Boolean(hit);
+    if (hit) {
+      const res = await fetch(`${hit.url}?t=${Date.now()}`, { cache: 'no-store' });
+      ok = res.ok;
+      if (res.ok) parsed = await res.json();
+    }
+  } catch (error) {
+    failed = true;
+    console.warn('[CloudStore] Vercel Blob database read failed:', error instanceof Error ? error.message : error);
+  }
 
-    if (targetUrl) {
-      const res = await fetch(`${targetUrl}?t=${Date.now()}`, { cache: 'no-store' });
-      if (res.ok) {
-        const raw = (await res.json()) as Partial<UnifiedCloudDatabase>;
-        if (raw && typeof raw === 'object') {
+  const decision = decideBlobRead({
+    failed,
+    found,
+    ok,
+    parsed,
+    loadedBefore: databaseLoadedFromBlob,
+    expect: 'object',
+    forWrite: options.forWrite,
+    production: isProductionStore(),
+  });
+  if (decision === 'throw') {
+    throw new Error('[CloudStore] database store temporarily unavailable');
+  }
+  if (decision === 'cached') {
+    memoryDatabase.accounts = fallbackAccounts;
+    return memoryDatabase;
+  }
+  {
+    if (decision === 'use') {
+      {
+        const raw = parsed as Partial<UnifiedCloudDatabase>;
+        {
           // Reconcile accounts from both ACCOUNTS_BLOB_PATH and DATABASE_BLOB_PATH
           const { merged: loadedAccounts } = reconcileAccounts(
             fallbackAccounts,
@@ -410,12 +520,13 @@ export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
           ensurePatientsFromAccounts(completeDb.accounts, completeDb.patients);
 
           memoryDatabase = completeDb;
+          databaseLoadedFromBlob = true;
           return completeDb;
         }
       }
     }
 
-    // Seed database if not existing yet
+    // 'seed': the database blob does not exist yet (first run)
     const initialDb: UnifiedCloudDatabase = {
       accounts: fallbackAccounts,
       patients: [...INITIAL_DEMO_PATIENTS],
@@ -433,22 +544,35 @@ export async function getCloudDatabase(): Promise<UnifiedCloudDatabase> {
     };
     ensurePatientsFromAccounts(initialDb.accounts, initialDb.patients);
     await saveCloudDatabase(initialDb);
+    databaseLoadedFromBlob = true;
     return initialDb;
-  } catch (error) {
-    console.warn('[CloudStore] Vercel Blob getCloudDatabase failed, using memory fallback:', error);
-    for (const demoP of INITIAL_DEMO_PATIENTS) {
-      if (!memoryDatabase.patients.some((p) => p.id === demoP.id)) {
-        memoryDatabase.patients.push(demoP);
-      }
-    }
-    ensurePatientsFromAccounts(memoryDatabase.accounts, memoryDatabase.patients);
-    return memoryDatabase;
   }
 }
 
 /**
  * Save complete unified clinical database to Vercel Blob
  */
+/**
+ * B9: the database blob is a SECOND copy of the accounts. It is only used to
+ * reconcile review status onto the accounts blob (getCloudDatabase), never for
+ * credentials, so it must never contain a password (plaintext or hash) or
+ * password metadata. Every database-blob write goes through this, so the first
+ * write by anyone scrubs the legacy copies. (A missing `password` key keeps the
+ * accounts-blob value during reconcile: `{...existing, ...incoming}`.)
+ */
+const ACCOUNT_SECRET_KEYS = ['password', 'passwordHash', 'passwordUpdatedAt'] as const;
+
+export function stripAccountSecrets(acc: StoredAccount): StoredAccount {
+  const copy = { ...acc } as StoredAccount & Record<string, unknown>;
+  for (const k of ACCOUNT_SECRET_KEYS) delete copy[k];
+  return copy as StoredAccount;
+}
+
+export function serializeDatabaseForBlob(db: UnifiedCloudDatabase): string {
+  const accounts = Array.isArray(db.accounts) ? db.accounts.map(stripAccountSecrets) : [];
+  return JSON.stringify({ ...db, accounts }, null, 2);
+}
+
 export async function saveCloudDatabase(db: UnifiedCloudDatabase): Promise<void> {
   memoryDatabase = db;
   // Also keep accounts blob updated for backward-compatibility
@@ -459,7 +583,7 @@ export async function saveCloudDatabase(db: UnifiedCloudDatabase): Promise<void>
   }
 
   try {
-    await put(DATABASE_BLOB_PATH, JSON.stringify(db, null, 2), {
+    await put(DATABASE_BLOB_PATH, serializeDatabaseForBlob(db), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,
@@ -516,7 +640,7 @@ function ensurePatientsFromAccounts(accounts: StoredAccount[], patients: Patient
 export async function mergeCloudDatabase(
   incoming: Partial<UnifiedCloudDatabase>
 ): Promise<UnifiedCloudDatabase> {
-  const current = await getCloudDatabase();
+  const current = await getCloudDatabase({ forWrite: true });
 
   // 1. Merge Accounts
   const mergedAccounts = incoming.accounts && incoming.accounts.length > 0

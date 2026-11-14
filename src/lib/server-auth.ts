@@ -358,7 +358,7 @@ export function passwordMatches(stored: unknown, given: unknown): boolean {
  * markChanged=true records passwordUpdatedAt, which ends sessions issued before it.
  */
 export async function storeAccountPassword(uid: string, stored: string, markChanged: boolean): Promise<boolean> {
-  const accounts = await getCloudAccounts();
+  const accounts = await getCloudAccounts({ forWrite: true });
   const idx = accounts.findIndex((a) => a.user && a.user.uid === uid);
   if (idx === -1) return false;
   const updated: StoredAccount = {
@@ -386,7 +386,7 @@ export async function migratePlaintextPasswords(
   const budgetMs = options.budgetMs ?? MIGRATION_BUDGET_MS;
   const now = options.now ?? Date.now;
   const started = now();
-  const accounts = await getCloudAccounts();
+  const accounts = await getCloudAccounts({ forWrite: true });
   let count = 0;
   const next = accounts.map((a) => {
     if (count >= cap || now() - started >= budgetMs) return a;

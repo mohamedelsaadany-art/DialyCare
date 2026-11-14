@@ -299,9 +299,9 @@ async function run(): Promise<void> {
   eq(merged.find((a) => a.username === 'patient1')!.password, 'patient123', 'server password kept for patient1 after legacy merge');
   eq(merged.find((a) => a.username === 'doc')!.password, 'docPass1', 'server password kept for doc after legacy merge');
   eq(merged.find((a) => a.username === 'patient1')!.user.reviewedAt, later, 'non-password fields still merge as before');
-  // Contrast: the blanking variant would have destroyed the credential.
+  // Before B2.1 the blanking variant destroyed the credential; reconcile now never takes credentials from the other copy.
   const blanked = local.map((a) => (a.user.role === 'admin' ? a : { ...a, password: '' }));
-  eq(reconcileAccounts(server as never, blanked as never).merged.find((a) => a.username === 'patient1')!.password, '', "(control) setting '' WOULD wipe the server password");
+  eq(reconcileAccounts(server as never, blanked as never).merged.find((a) => a.username === 'patient1')!.password, 'patient123', "(B2.1) even a blanked '' copy can no longer overwrite the server password");
 }
 
 run()
