@@ -30,9 +30,11 @@ export function Card({
               </h3>
             )}
             {subtitle && (
-              <p className="text-sm text-slate-500 font-normal">
+              // div, not p: callers pass block content (e.g. radio groups), and <div> inside <p>
+              // is invalid HTML that causes a React hydration error.
+              <div className="text-sm text-slate-500 font-normal">
                 {subtitle}
-              </p>
+              </div>
             )}
           </div>
           {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}

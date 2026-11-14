@@ -17,3 +17,4 @@ Deadline 14:00 Africa/Cairo. Nothing is pushed or deployed; every change is a lo
 | 08:20 | Release 0: pushed + deployed 2971a5d to production (main) | main | ✅ prod smoke without login OK; /api/auth/session 401 |
 | 08:23 | U5a: inputMode on the admin settings threshold, tip order and lab value inputs, plus a label/for link on the threshold. Attributes only. | updater | ✅ test 0, tsc 0, lint 0; SAFE build + mobile browser check (debugger) |
 | 08:23 | U5b: inputMode on all clinical number inputs (dialysis modal, new patient, fluid log, profile limit); decorative warning icon aria-hidden. Attributes only. | updater | ✅ test 0, tsc 0, lint 0; SAFE build + browser check (debugger) |
+| 08:23 | B7: Card subtitle wrapper <p> → <div>, which fixes the React hydration error on the admin patient-detail page. | updater | ✅ test 0, tsc 0, lint 0; browser: no console errors (debugger) |
