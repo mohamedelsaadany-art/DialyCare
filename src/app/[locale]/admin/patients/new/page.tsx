@@ -11,6 +11,7 @@ import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import { addPatientAccount } from '@/lib/auth-context';
 import { generatePatientCredentials, syncFullCloudData } from '@/lib/data-store';
+import { CLINICAL_RANGES, isInRange } from '@/lib/clinical-validation';
 import type { Patient, DialysisAccessType, User } from '@/lib/types';
 import {
   getReminderTemplates,
@@ -115,12 +116,19 @@ export default function NewPatientPage() {
       errs.password = isRtl ? 'كلمة المرور يجب ألا تقل عن 6 أحرف' : 'Password must be at least 6 characters';
     }
 
-    if (fluidLimit && (isNaN(Number(fluidLimit)) || Number(fluidLimit) <= 0)) {
-      errs.fluidLimit = isRtl ? 'يرجى إدخال كمية صحيحة بالمليلتر' : 'Please enter a valid fluid volume in mL';
+    // Typo-catching ranges shared with the dialysis session form (clinical-validation.ts)
+    const { fluidLimitMl, weightKg } = CLINICAL_RANGES;
+
+    if (fluidLimit && (isNaN(Number(fluidLimit)) || !isInRange(Number(fluidLimit), fluidLimitMl))) {
+      errs.fluidLimit = isRtl
+        ? `يرجى إدخال كمية صحيحة بين ${fluidLimitMl.min} و ${fluidLimitMl.max} مليلتر`
+        : `Please enter a fluid volume between ${fluidLimitMl.min} and ${fluidLimitMl.max} mL`;
     }
 
-    if (dryWeightKg && (isNaN(Number(dryWeightKg)) || Number(dryWeightKg) <= 0)) {
-      errs.dryWeightKg = isRtl ? 'يرجى إدخال وزن جاف صحيح' : 'Please enter valid dry weight';
+    if (dryWeightKg && (isNaN(Number(dryWeightKg)) || !isInRange(Number(dryWeightKg), weightKg))) {
+      errs.dryWeightKg = isRtl
+        ? `يرجى إدخال وزن جاف صحيح بين ${weightKg.min} و ${weightKg.max} كجم`
+        : `Please enter a dry weight between ${weightKg.min} and ${weightKg.max} kg`;
     }
 
     setErrors(errs);

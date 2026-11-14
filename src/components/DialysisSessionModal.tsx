@@ -14,6 +14,11 @@ import type {
   SessionDurationHours,
 } from '@/lib/types';
 import { addDialysisSession, updateDialysisSession } from '@/lib/data-store';
+import {
+  CLINICAL_RANGES,
+  isOutOfRangeEntry,
+  isBloodPressurePairValid,
+} from '@/lib/clinical-validation';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -246,20 +251,30 @@ export function DialysisSessionModal({
     const bloodFlow = parseOptionalFloat(bloodFlowRateMlMin);
     const sodium = parseOptionalFloat(machineSodiumMeqL);
 
-    if (preKg !== undefined && (isNaN(preKg) || preKg <= 0)) {
+    // Typo-catching ranges apply to newly entered values only: an unchanged stored
+    // value of the session being edited is always accepted (see clinical-validation.ts).
+    const { weightKg, ultrafiltrationMl, bloodFlowMlMin } = CLINICAL_RANGES;
+
+    if (
+      preKg !== undefined &&
+      (isNaN(preKg) || preKg <= 0 || isOutOfRangeEntry(preKg, weightKg, initialSession?.preWeightKg))
+    ) {
       showValidationError(
         isAr
-          ? 'يرجى إدخال وزن صحيح قبل الجلسة بالكيلوجرام.'
-          : 'Please enter a valid pre-dialysis weight in kilograms.'
+          ? `يرجى إدخال وزن صحيح قبل الجلسة بين ${weightKg.min} و ${weightKg.max} كجم.`
+          : `Please enter a valid pre-dialysis weight between ${weightKg.min} and ${weightKg.max} kg.`
       );
       return;
     }
 
-    if (postKg !== undefined && (isNaN(postKg) || postKg <= 0)) {
+    if (
+      postKg !== undefined &&
+      (isNaN(postKg) || postKg <= 0 || isOutOfRangeEntry(postKg, weightKg, initialSession?.postWeightKg))
+    ) {
       showValidationError(
         isAr
-          ? 'يرجى إدخال وزن صحيح بعد الجلسة بالكيلوجرام.'
-          : 'Please enter a valid post-dialysis weight in kilograms.'
+          ? `يرجى إدخال وزن صحيح بعد الجلسة بين ${weightKg.min} و ${weightKg.max} كجم.`
+          : `Please enter a valid post-dialysis weight between ${weightKg.min} and ${weightKg.max} kg.`
       );
       return;
     }
@@ -316,6 +331,16 @@ export function DialysisSessionModal({
         return;
       }
 
+      const storedTp = initialSession?.vitals?.[key];
+      if (!isBloodPressurePairValid(sys, dia, storedTp?.systolic, storedTp?.diastolic)) {
+        showValidationError(
+          isAr
+            ? 'يجب أن يكون الضغط الانقباضي (الأعلى) أكبر من الضغط الانبساطي (الأدنى).'
+            : 'Systolic (upper) blood pressure must be higher than diastolic (lower).'
+        );
+        return;
+      }
+
       const tpValue: VitalsTimepoint = {};
       if (sys !== undefined) tpValue.systolic = sys;
       if (dia !== undefined) tpValue.diastolic = dia;
@@ -333,20 +358,30 @@ export function DialysisSessionModal({
       return;
     }
 
-    if (ufVol !== undefined && (isNaN(ufVol) || ufVol < 0)) {
+    if (
+      ufVol !== undefined &&
+      (isNaN(ufVol) ||
+        ufVol < 0 ||
+        isOutOfRangeEntry(ufVol, ultrafiltrationMl, initialSession?.ultrafiltrationVolumeMl))
+    ) {
       showValidationError(
         isAr
-          ? 'يرجى إدخال حجم سحب الماء الفائق (UF Volume) بشكل صحيح.'
-          : 'Please enter a valid ultrafiltration volume (mL).'
+          ? `يرجى إدخال حجم سحب الماء الفائق (UF Volume) بين ${ultrafiltrationMl.min} و ${ultrafiltrationMl.max} مل.`
+          : `Please enter a valid ultrafiltration volume between ${ultrafiltrationMl.min} and ${ultrafiltrationMl.max} mL.`
       );
       return;
     }
 
-    if (bloodFlow !== undefined && (isNaN(bloodFlow) || bloodFlow <= 0)) {
+    if (
+      bloodFlow !== undefined &&
+      (isNaN(bloodFlow) ||
+        bloodFlow <= 0 ||
+        isOutOfRangeEntry(bloodFlow, bloodFlowMlMin, initialSession?.bloodFlowRateMlMin))
+    ) {
       showValidationError(
         isAr
-          ? 'يرجى إدخال معدل تدفق الدم (Blood Flow Rate) بشكل صحيح.'
-          : 'Please enter a valid blood flow rate (mL/min).'
+          ? `يرجى إدخال معدل تدفق الدم (Blood Flow Rate) بين ${bloodFlowMlMin.min} و ${bloodFlowMlMin.max} مل/دقيقة.`
+          : `Please enter a valid blood flow rate between ${bloodFlowMlMin.min} and ${bloodFlowMlMin.max} mL/min.`
       );
       return;
     }
