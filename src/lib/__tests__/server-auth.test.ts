@@ -316,7 +316,7 @@ async function run(): Promise<void> {
   const shortCookie = shortRes.headers.get('set-cookie') || '';
   check(!/Max-Age/.test(shortCookie), 'rememberMe:false -> session cookie');
   const shortPayload = verifySessionToken(cookieFrom(shortRes))!;
-  eq(shortPayload.exp - shortPayload.iat, 12 * 3600, 'rememberMe:false -> 12h token');
+  eq(shortPayload.exp - shortPayload.iat, 30 * 24 * 3600, 'B14: token lasts 30 days for every login (rememberMe:false only makes the cookie a browser-session cookie)');
 
   const wrongRes = await loginRoute(loginRequest({ identifier: 'admin', password: 'nope' }));
   const unknownRes = await loginRoute(loginRequest({ identifier: 'ghost', password: 'nope' }));

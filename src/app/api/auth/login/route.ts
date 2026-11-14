@@ -11,7 +11,6 @@ import {
   storeAccountPassword,
   NO_STORE_HEADERS,
   SESSION_TTL_REMEMBER_SECONDS,
-  SESSION_TTL_SHORT_SECONDS,
 } from '@/lib/server-auth';
 
 const MAX_IDENTIFIER_LENGTH = 200;
@@ -91,7 +90,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const ttl = rememberMe ? SESSION_TTL_REMEMBER_SECONDS : SESSION_TTL_SHORT_SECONDS;
+    // B14: 30-day sessions for every role (low/no-internet clinics). rememberMe only decides
+    // whether the cookie survives closing the browser (session cookie vs Max-Age).
+    const ttl = SESSION_TTL_REMEMBER_SECONDS;
     const token = createSessionToken({ uid: user.uid, role: user.role }, { ttlSeconds: ttl });
     if (!token) {
       return json({ success: false, error: 'sessionUnavailable' }, 503);
