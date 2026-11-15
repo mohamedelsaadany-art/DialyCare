@@ -23,6 +23,7 @@ import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import ProgressBar from '@/components/ui/ProgressBar';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import TemporaryPasswordModal from '@/components/admin/TemporaryPasswordModal';
 
 import type { Patient, PatientReminder, Notification, PatientLabRecord } from '@/lib/types';
 import {
@@ -152,6 +153,8 @@ export default function PatientDetailPage() {
   const [communications, setCommunications] = useState<Notification[]>([]);
   const [useCustomSchedule, setUseCustomSchedule] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [tempPasswordModal, setTempPasswordModal] = useState<{ name: string; password: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notifCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -566,6 +569,49 @@ export default function PatientDetailPage() {
     }, 4500);
   };
 
+  const handleResetPassword = async () => {
+    if (!patient) return;
+    const confirmMsg = isRtl
+      ? 'إصدار كلمة مرور مؤقتة جديدة لهذا المريض؟ ستتوقف كلمة المرور الحالية عن العمل.'
+      : 'Issue a new temporary password for this patient? Their current password will stop working.';
+    if (!window.confirm(confirmMsg)) return;
+
+    setResettingPassword(true);
+    try {
+      const res = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: patient.id }),
+      });
+      const data = (await res.json().catch(() => null)) as { success?: boolean; temporaryPassword?: string } | null;
+      if (res.ok && data?.success && data?.temporaryPassword) {
+        const patientDisplayName = isRtl ? (patient.fullNameAr || patient.fullName) : patient.fullName;
+        setTempPasswordModal({
+          name: patientDisplayName,
+          password: data.temporaryPassword,
+        });
+      } else {
+        const errorMsg = isRtl ? 'تعذر إعادة تعيين كلمة المرور.' : 'Could not reset the password.';
+        setToastMessage(errorMsg);
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+          setToastMessage(null);
+          toastTimerRef.current = null;
+        }, 3500);
+      }
+    } catch {
+      const errorMsg = isRtl ? 'تعذر إعادة تعيين كلمة المرور.' : 'Could not reset the password.';
+      setToastMessage(errorMsg);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => {
+        setToastMessage(null);
+        toastTimerRef.current = null;
+      }, 3500);
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -688,6 +734,15 @@ export default function PatientDetailPage() {
                     </span>
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  disabled={resettingPassword}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded transition disabled:opacity-50"
+                  title={isRtl ? 'إعادة تعيين كلمة المرور' : 'Reset password'}
+                >
+                  {isRtl ? 'إعادة تعيين كلمة المرور' : 'Reset password'}
+                </button>
                 <span>
                   <strong>{isRtl ? 'الهاتف:' : 'Phone:'}</strong> {patient.phone || 'N/A'}
                 </span>
@@ -1531,6 +1586,16 @@ export default function PatientDetailPage() {
           }, 3500);
         }}
       />
+
+      {tempPasswordModal && (
+        <TemporaryPasswordModal
+          open={Boolean(tempPasswordModal)}
+          patientName={tempPasswordModal.name}
+          password={tempPasswordModal.password}
+          isRtl={isRtl}
+          onClose={() => setTempPasswordModal(null)}
+        />
+      )}
     </div>
   );
 }
