@@ -88,7 +88,7 @@ export async function checkServerSession(
 export interface ServerLoginResult {
   success: boolean;
   status?: AccountStatus | 'pending_reactivation';
-  error?: 'invalidCredentials' | 'loginError' | 'accountArchivedOnHold' | string;
+  error?: 'invalidCredentials' | 'loginError' | 'accountArchivedOnHold' | 'tooManyAttempts' | string;
   user?: User;
   rejectionReason?: string;
   adminWhatsApp?: string;
@@ -142,6 +142,7 @@ export async function loginWithServer(
     };
   }
   if (res.status === 401) return { success: false, error: 'invalidCredentials' };
+  if (res.status === 429) return { success: false, error: 'tooManyAttempts' };
   return { success: false, error: 'loginError' };
 }
 
