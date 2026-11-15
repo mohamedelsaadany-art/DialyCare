@@ -388,10 +388,18 @@ test('T2.1: All 12 clinical lab tests present in type model', () => {
   resetEnv();
   dataStore.initDataStore();
 
-  const demoLabs = dataStore.getPatientLabResults('patient-1');
-  verify(demoLabs.length >= 1, 'At least 1 demo lab result seeded');
+  verify(dataStore.getPatientLabResults('patient-1').length === 0, 'No demo lab results are seeded');
+  const fullValues = Object.fromEntries(REQUIRED_LAB_TESTS.map((k, i) => [k, i + 1]));
+  const saved = dataStore.addPatientLabResult({
+    patientId: 'patient-1',
+    testDate: '2026-11-15',
+    recordedBy: 'dr-nephro',
+    values: fullValues,
+  });
+  const labs = dataStore.getPatientLabResults('patient-1');
+  verify(labs.length === 1 && labs[0].id === saved.id, 'Full panel saved and read back');
 
-  const values = demoLabs[0].values;
+  const values = labs[0].values;
   for (const testKey of REQUIRED_LAB_TESTS) {
     verify(testKey in values, `Lab test '${testKey}' must be present in LabTestValues`);
     verify(typeof (values as Record<string, unknown>)[testKey] === 'number', `${testKey} is numeric`);

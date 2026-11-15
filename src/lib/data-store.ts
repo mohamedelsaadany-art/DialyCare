@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { isRetiredDemoLab } from './retired-demo-ids';
 import type {
   Patient,
   AdherenceLog,
@@ -375,32 +376,6 @@ export const INITIAL_DEMO_SESSIONS: DialysisSession[] = [
   },
 ];
 
-// Initial demo lab results for patient-1 covering all 12 tests
-export const INITIAL_DEMO_LAB_RESULTS: PatientLabRecord[] = [
-  {
-    id: 'demo-lab-1',
-    patientId: 'patient-1',
-    testDate: '2026-02-28',
-    recordedBy: 'admin-1',
-    recordedAt: '2026-02-28T09:00:00.000Z',
-    values: {
-      hemoglobin: 11.2,
-      wbc: 6.8,
-      platelets: 245,
-      calcium: 9.1,
-      phosphorus: 4.8,
-      pth: 210,
-      creatinine: 8.9,
-      urea: 78,
-      serumIron: 85,
-      tibc: 290,
-      ferritin: 320,
-      albumin: 4.1,
-    },
-    notes: 'Monthly routine renal panel. Hemoglobin and bone mineral markers within target range.',
-  },
-];
-
 // Default initial demo notifications (deterministic timestamps to avoid hydration mismatch)
 export const INITIAL_DEMO_NOTIFICATIONS: Notification[] = [
   {
@@ -676,9 +651,14 @@ export function initDataStore(): void {
     writeStorage(STORAGE_KEYS.DIALYSIS_SESSIONS, INITIAL_DEMO_SESSIONS);
   }
 
-  // Demo lab results
+  // Lab results start empty; purge the demo panel older builds seeded.
   if (!window.localStorage.getItem(STORAGE_KEYS.LAB_RESULTS)) {
-    writeStorage(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+    writeStorage(STORAGE_KEYS.LAB_RESULTS, []);
+  } else {
+    const labs = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, []);
+    if (labs.some(isRetiredDemoLab)) {
+      writeStorage(STORAGE_KEYS.LAB_RESULTS, labs.filter((l) => !isRetiredDemoLab(l)));
+    }
   }
 
   // Treatment Adherence Surveys
@@ -1503,9 +1483,16 @@ export function resetSyncETag(): void {
   cachedCloudData = null;
 }
 
+// Set when a local change happens while a sync is in flight, so another sync
+// runs right after it and pushes that change instead of it being skipped.
+let resyncRequested = false;
+
 export function triggerBackgroundCloudSync(): void {
   if (typeof window === 'undefined') return;
-  if (isSyncingFullCloud) return;
+  if (isSyncingFullCloud) {
+    resyncRequested = true;
+    return;
+  }
   if (bgCloudSyncTimer) clearTimeout(bgCloudSyncTimer);
   bgCloudSyncTimer = setTimeout(() => {
     void syncFullCloudData();
@@ -1664,7 +1651,7 @@ export type NewPatientLabRecord = Omit<PatientLabRecord, 'id' | 'recordedAt'> & 
 export function getPatientLabResults(patientId?: string): PatientLabRecord[] {
   if (patientId === '') return [];
   initDataStore();
-  let results = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  let results = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, []);
   if (patientId) {
     results = results.filter((r) => r.patientId === patientId);
   }
@@ -1680,7 +1667,7 @@ export function addPatientLabResult(
   record: NewPatientLabRecord | PatientLabRecord
 ): PatientLabRecord {
   initDataStore();
-  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, []);
   const newRecord: PatientLabRecord = {
     ...record,
     id: ('id' in record && record.id) ? record.id : uuidv4(),
@@ -1697,7 +1684,7 @@ export function updatePatientLabResult(
   data: Partial<PatientLabRecord>
 ): PatientLabRecord | null {
   initDataStore();
-  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, []);
   const index = allResults.findIndex((r) => r.id === id);
   if (index === -1) return null;
   const updated: PatientLabRecord = { ...allResults[index], ...data };
@@ -1709,7 +1696,7 @@ export function updatePatientLabResult(
 
 export function deletePatientLabResult(id: string): boolean {
   initDataStore();
-  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, INITIAL_DEMO_LAB_RESULTS);
+  const allResults = readStorage<PatientLabRecord[]>(STORAGE_KEYS.LAB_RESULTS, []);
   const filtered = allResults.filter((r) => r.id !== id);
   if (filtered.length === allResults.length) return false;
   writeStorage(STORAGE_KEYS.LAB_RESULTS, filtered);
@@ -2178,6 +2165,75 @@ export function handleSessionExpired(): boolean {
   }
 }
 
+const SYNC_ROW_COLLECTIONS = [
+  'patients',
+  'dialysisSessions',
+  'labResults',
+  'medications',
+  'notifications',
+  'adherenceLogs',
+  'fluidLogs',
+  'dietLogs',
+  'adherenceSurveys',
+  'reminders',
+  'coachingTips',
+] as const;
+type SyncRowCollection = (typeof SYNC_ROW_COLLECTIONS)[number];
+type SyncRow = { id?: string };
+
+function gatherLocalSyncCollections(): Pick<UnifiedCloudDatabase, SyncRowCollection> {
+  return {
+    patients: getPatients(),
+    dialysisSessions: getDialysisSessions(),
+    labResults: getPatientLabResults(),
+    medications: getPatientMedications(),
+    notifications: getNotifications(),
+    adherenceLogs: getAdherenceLogs(),
+    fluidLogs: readStorage<FluidLog[]>(STORAGE_KEYS.FLUID_LOGS, []),
+    dietLogs: readStorage<DietLog[]>(STORAGE_KEYS.DIET_LOGS, []),
+    adherenceSurveys: getAdherenceSurveys(),
+    reminders: getReminders(),
+    coachingTips: getCoachingTips(),
+  };
+}
+
+/**
+ * 3-way merge of one collection after a sync round trip.
+ * snapshot = what we sent, local = storage now, cloud = the server's answer.
+ * Local changes made after the snapshot win; everything else comes from the cloud.
+ */
+export function mergeInFlightLocalChanges<T extends SyncRow>(
+  snapshot: T[],
+  local: T[],
+  cloud: T[]
+): { rows: T[]; changed: boolean } {
+  const snap = new Map<string, string>();
+  for (const r of snapshot) if (r && r.id) snap.set(r.id, JSON.stringify(r));
+  const localIds = new Set<string>();
+  const added: T[] = [];
+  const edited = new Map<string, T>();
+  for (const r of local) {
+    if (!r || !r.id) continue;
+    localIds.add(r.id);
+    const before = snap.get(r.id);
+    if (before === undefined) added.push(r);
+    else if (before !== JSON.stringify(r)) edited.set(r.id, r);
+  }
+  const deleted = new Set<string>();
+  for (const id of snap.keys()) if (!localIds.has(id)) deleted.add(id);
+  if (added.length === 0 && edited.size === 0 && deleted.size === 0) {
+    return { rows: cloud, changed: false };
+  }
+  const addedIds = new Set(added.map((r) => r.id as string));
+  const rows: T[] = [...added];
+  for (const r of cloud) {
+    const id = r && r.id;
+    if (id && (deleted.has(id) || addedIds.has(id))) continue;
+    rows.push(id && edited.has(id) ? (edited.get(id) as T) : r);
+  }
+  return { rows, changed: true };
+}
+
 /**
  * Universal Bidirectional Cloud Synchronization Engine.
  * Collects all 12 local data entities from the browser, posts them to /api/sync,
@@ -2195,17 +2251,7 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
     // 1. Gather all local entities from browser storage
     const localPayload: Partial<UnifiedCloudDatabase> = {
       accounts: getAuthAccounts(),
-      patients: getPatients(),
-      dialysisSessions: getDialysisSessions(),
-      labResults: getPatientLabResults(),
-      medications: getPatientMedications(),
-      notifications: getNotifications(),
-      adherenceLogs: getAdherenceLogs(),
-      fluidLogs: readStorage<FluidLog[]>(STORAGE_KEYS.FLUID_LOGS, []),
-      dietLogs: readStorage<DietLog[]>(STORAGE_KEYS.DIET_LOGS, []),
-      adherenceSurveys: getAdherenceSurveys(),
-      reminders: getReminders(),
-      coachingTips: getCoachingTips(),
+      ...gatherLocalSyncCollections(),
       archivedPatients: getArchivedPatientRecordsLocal(),
     };
 
@@ -2286,6 +2332,23 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
     }
 
     const cloudData: UnifiedCloudDatabase = body.data;
+
+    // Rows added, edited or deleted locally WHILE this request was in flight are
+    // not in the server's answer. Keep them (3-way merge against the snapshot we
+    // sent) instead of overwriting them, and push them with another sync.
+    const localNow = gatherLocalSyncCollections();
+    for (const key of SYNC_ROW_COLLECTIONS) {
+      if (!Array.isArray(cloudData[key])) continue;
+      const { rows, changed } = mergeInFlightLocalChanges(
+        (localPayload[key] || []) as SyncRow[],
+        (localNow[key] || []) as SyncRow[],
+        cloudData[key] as SyncRow[]
+      );
+      if (changed) {
+        (cloudData as unknown as Record<string, unknown>)[key] = rows;
+        resyncRequested = true;
+      }
+    }
     cachedCloudData = cloudData;
 
     // 3. Atomically update local storage collections with merged server data
@@ -2428,6 +2491,10 @@ export async function syncFullCloudData(): Promise<UnifiedCloudDatabase | null> 
     return null;
   } finally {
     isSyncingFullCloud = false;
+    if (resyncRequested) {
+      resyncRequested = false;
+      triggerBackgroundCloudSync();
+    }
   }
 }
 

@@ -1,4 +1,5 @@
 import { put, getObjectJson, isCloudStorageConfigured } from './r2-client';
+import { isRetiredDemoLab } from './retired-demo-ids';
 import type {
   StoredAccount,
   Patient,
@@ -993,9 +994,10 @@ export async function mergeCloudDatabase(
   }
 
   // 5. Merge Lab Results (divert archived to archive record)
-  const mergedLabs = current.labResults.filter((l) => !isPatientArchived(l.patientId));
+  const mergedLabs = current.labResults.filter((l) => !isPatientArchived(l.patientId) && !isRetiredDemoLab(l));
   if (incoming.labResults && incoming.labResults.length > 0) {
     for (const inc of incoming.labResults) {
+      if (isRetiredDemoLab(inc)) continue;
       if (isPatientArchived(inc.patientId)) {
         const arch = getArchivedRecordForPatient(inc.patientId);
         if (arch) {

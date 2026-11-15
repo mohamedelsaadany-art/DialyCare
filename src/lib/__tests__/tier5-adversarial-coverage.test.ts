@@ -154,7 +154,7 @@ registerTest('1.1: Storage Corruption Recovery: Invalid JSON in storage keys gra
 
   const labs = getPatientLabResults('patient-1');
   assert.ok(Array.isArray(labs), 'Labs should fall back to array default');
-  assert.ok(labs.length > 0, 'Should fall back to initial demo lab results');
+  assert.strictEqual(labs.length, 0, 'Corrupt labs fall back to an empty list (no demo labs)');
 });
 
 registerTest('1.2: LocalStorage QuotaExceededError simulation during writes does not crash the application', () => {
@@ -239,8 +239,14 @@ registerTest('1.4: Deep Immutability: Mutating nested vitals or fluidStatus of r
 
 registerTest('1.5: Deep Immutability: Mutating lab values map in getPatientLabResults does not contaminate store', () => {
   resetEnvironment();
+  dataStore.addPatientLabResult({
+    patientId: 'patient-1',
+    testDate: '2026-11-15',
+    recordedBy: 'dr-nephro',
+    values: { hemoglobin: 11.2 },
+  });
   const labs = getPatientLabResults('patient-1');
-  assert.ok(labs.length > 0, 'Expected seeded lab records');
+  assert.ok(labs.length > 0, 'Expected the saved lab record');
 
   const originalHemoglobin = labs[0].values.hemoglobin;
   // Mutate values map directly

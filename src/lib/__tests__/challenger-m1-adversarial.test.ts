@@ -456,25 +456,10 @@ console.log('\n>>> SUITE 3: LAB RESULTS CRUD & BOUNDARY TESTING');
 
 resetHarness();
 
-runChallengerTest('LAB-1: Seeded demo lab results contain 12 renal panel tests', () => {
+runChallengerTest('LAB-1: No demo lab panel is seeded (labs start empty)', () => {
   const labs = dataStore.getPatientLabResults('patient-1');
-  assertTrue(labs.length >= 1, 'Expected at least 1 seeded lab panel for patient-1');
-  const l1 = labs[0];
-  const v = l1.values;
-
-  // Verify all 12 tests
-  assertEq(typeof v.hemoglobin, 'number');
-  assertEq(typeof v.wbc, 'number');
-  assertEq(typeof v.platelets, 'number');
-  assertEq(typeof v.calcium, 'number');
-  assertEq(typeof v.phosphorus, 'number');
-  assertEq(typeof v.pth, 'number');
-  assertEq(typeof v.creatinine, 'number');
-  assertEq(typeof v.urea, 'number');
-  assertEq(typeof v.serumIron, 'number');
-  assertEq(typeof v.tibc, 'number');
-  assertEq(typeof v.ferritin, 'number');
-  assertEq(typeof v.albumin, 'number');
+  assertEq(labs.length, 0, 'No seeded demo lab results for patient-1');
+  assertTrue(!dataStore.getPatientLabResults().some((l) => l.id === 'demo-lab-1'), 'demo-lab-1 never seeded');
 });
 
 runChallengerTest('LAB-2: Add lab result for patient-2 and verify persistence', () => {
