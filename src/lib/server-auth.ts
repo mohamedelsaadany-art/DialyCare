@@ -23,7 +23,7 @@
  *   3. else, ONLY outside production: a fixed dev secret + loud warning
  *   4. production with neither: null -> login refuses (503), every token fails.
  */
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { StoredAccount, User, UserRole } from './types';
 import { isPhoneMatch, toAsciiDigits } from './phone';
@@ -257,6 +257,16 @@ export function hashPassword(plain: string): string {
   const salt = randomBytes(saltLength);
   const key = scryptSync(plain, salt, keyLength, { N, r, p, maxmem: SCRYPT_MAXMEM });
   return `scrypt$1$${N}$${r}$${p}$${salt.toString('base64url')}$${key.toString('base64url')}`;
+}
+
+const TEMPORARY_PASSWORD_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+export function generateTemporaryPassword(): string {
+  let result = '';
+  for (let i = 0; i < 10; i++) {
+    result += TEMPORARY_PASSWORD_ALPHABET[randomInt(TEMPORARY_PASSWORD_ALPHABET.length)];
+  }
+  return result;
 }
 
 interface ParsedHash {

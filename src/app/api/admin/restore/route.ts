@@ -1,6 +1,23 @@
 import { NextResponse } from 'next/server';
-import { getCloudAccounts, getCloudDatabase, mergeCloudDatabase, saveCloudAccounts, restoreArchivedPatient } from '@/lib/cloud-store';
-import { getSession, isCrossOriginRequest, NO_STORE_HEADERS, sessionErrorResponse } from '@/lib/server-auth';
+import {
+  addCloudAccountIfAbsent,
+  changePasswordInCloud,
+  getCloudAccounts,
+  getCloudDatabase,
+  mergeCloudDatabase,
+  saveCloudAccounts,
+  restoreArchivedPatient,
+} from '@/lib/cloud-store';
+import {
+  generateTemporaryPassword,
+  getSession,
+  hashPassword,
+  isCrossOriginRequest,
+  NO_STORE_HEADERS,
+  sessionErrorResponse,
+} from '@/lib/server-auth';
+import { toAsciiDigits } from '@/lib/phone';
+import type { Patient, StoredAccount, User } from '@/lib/types';
 
 /**
  * POST /api/admin/restore — ADMIN ONLY.
@@ -37,13 +54,17 @@ export async function POST(request: Request) {
     }
 
     const adminName = session.user.displayName || session.user.username || 'Super Admin';
-    let restoredPatient: any = undefined;
-    let restoredUser: any = undefined;
+    let restoredPatient: Patient | undefined = undefined;
+    let restoredUser: User | undefined = undefined;
+    const actuallyRestoredIds = new Set<string>();
+    const restoredPatientsMap = new Map<string, Patient>();
 
     // Restore from archivedPatients collection
     for (const id of targetIds) {
       const res = await restoreArchivedPatient(id, adminName);
       if (res.success && res.patient) {
+        actuallyRestoredIds.add(id);
+        restoredPatientsMap.set(id, res.patient);
         restoredPatient = res.patient;
         if (res.account?.user) {
           restoredUser = res.account.user;
@@ -55,6 +76,7 @@ export async function POST(request: Request) {
     const db = await getCloudDatabase();
     const updatedPatients = db.patients.map((p) => {
       if (targetIds.includes(p.id)) {
+        actuallyRestoredIds.add(p.id);
         restoredPatient = {
           ...p,
           isArchived: false,
@@ -65,6 +87,7 @@ export async function POST(request: Request) {
           reactivationRequestedAt: undefined,
           isActive: true,
         };
+        restoredPatientsMap.set(p.id, restoredPatient);
         return restoredPatient;
       }
       return p;
@@ -107,6 +130,51 @@ export async function POST(request: Request) {
       );
     }
 
+    // 3. Issue fresh temporary passwords for restored accounts
+    const temporaryPasswords: Record<string, string> = {};
+    const conflicts: string[] = [];
+
+    for (const id of targetIds) {
+      if (!actuallyRestoredIds.has(id)) continue;
+      const temp = generateTemporaryPassword();
+      const freshAccounts = await getCloudAccounts({ forWrite: true });
+      const existingAcc = freshAccounts.find((a) => a.user?.uid === id);
+
+      if (existingAcc) {
+        await changePasswordInCloud(id, hashPassword(temp), true);
+        temporaryPasswords[id] = temp;
+      } else {
+        const patient = restoredPatientsMap.get(id) || restoredPatient;
+        const rawPhone = patient?.phone || patient?.username || '';
+        const cleanPhone = toAsciiDigits(String(rawPhone)).replace(/[\s\-\(\)\+]/g, '');
+        const username = cleanPhone;
+        const nowIso = new Date().toISOString();
+        const acc: StoredAccount = {
+          username,
+          phone: cleanPhone,
+          password: hashPassword(temp),
+          passwordUpdatedAt: nowIso,
+          user: {
+            uid: id,
+            role: 'patient',
+            status: 'active',
+            username,
+            phone: cleanPhone,
+            displayName: patient?.fullName || cleanPhone,
+            language: 'ar',
+            createdAt: nowIso,
+          },
+        };
+        const addResult = await addCloudAccountIfAbsent(acc);
+        if (addResult === 'conflict') {
+          conflicts.push(id);
+          continue;
+        }
+        await mergeCloudDatabase({ accounts: [acc] });
+        temporaryPasswords[id] = temp;
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -114,6 +182,9 @@ export async function POST(request: Request) {
         restoredIds: targetIds,
         patient: restoredPatient,
         user: restoredUser,
+        temporaryPasswords,
+        temporaryPassword: temporaryPasswords[targetIds[0]],
+        conflicts,
       },
       { headers: NO_STORE_HEADERS }
     );

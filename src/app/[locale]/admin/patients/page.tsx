@@ -16,6 +16,7 @@ import { PatientMedicationManager } from '@/components/admin/PatientMedicationMa
 import { AdminClinicalQuickPanel } from '@/components/admin/AdminClinicalQuickPanel';
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { PatientLabResultsModal } from '@/components/admin/PatientLabResultsModal';
+import TemporaryPasswordModal from '@/components/admin/TemporaryPasswordModal';
 import type { Patient, Notification, PatientLabRecord } from '@/lib/types';
 import { getDialysisScheduleLabel } from '@/app/[locale]/patient/patient-utils';
 import { STORAGE_KEYS, syncFullCloudData } from '@/lib/data-store';
@@ -83,6 +84,10 @@ export default function PatientsListPage() {
   const [rowLabPatient, setRowLabPatient] = useState<PatientRow | null>(null);
   const [rowLabExistingRecord, setRowLabExistingRecord] = useState<PatientLabRecord | null>(null);
   const [clinicalToast, setClinicalToast] = useState<string | null>(null);
+  const [tempPasswordModal, setTempPasswordModal] = useState<{
+    name: string;
+    password: string;
+  } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -453,11 +458,15 @@ export default function PatientsListPage() {
     setIsRestoringId(cleanId);
     try {
       // 1. Call /api/admin/restore
-      await fetch('/api/admin/restore', {
+      const res = await fetch('/api/admin/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ patientId: cleanId, uid: cleanId }),
-      }).catch((err) => console.warn('Restore API fetch failed:', err));
+      }).catch((err) => {
+        console.warn('Restore API fetch failed:', err);
+        return null;
+      });
+      const body = res ? await res.json().catch(() => null) : null;
 
       // 2. Local fallback & update
       restorePatient(cleanId);
@@ -467,13 +476,34 @@ export default function PatientsListPage() {
       await loadArchived();
 
       // 4. Toast
-      setClinicalToast(
-        isRtl
-          ? 'تمت استعادة المريض بنجاح وإعادته إلى قائمة المرضى النشطين ✓'
-          : 'Patient successfully restored to active roster ✓'
-      );
+      if (body?.conflicts?.length) {
+        setClinicalToast(
+          isRtl
+            ? 'تمت الاستعادة، لكن لم يتم إنشاء حساب دخول: رقم الهاتف مستخدم لحساب آخر.'
+            : 'Restored, but no login was created: the phone number is used by another account.'
+        );
+      } else {
+        setClinicalToast(
+          isRtl
+            ? 'تمت استعادة المريض بنجاح وإعادته إلى قائمة المرضى النشطين ✓'
+            : 'Patient successfully restored to active roster ✓'
+        );
+      }
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       toastTimerRef.current = setTimeout(() => setClinicalToast(null), 4000);
+
+      // 5. Temporary password modal
+      if (body?.temporaryPassword) {
+        const pObj = archivedPatients.find((p) => p.id === cleanId);
+        const name =
+          (isRtl ? pObj?.fullNameAr || pObj?.fullName : pObj?.fullName) ||
+          body?.patient?.fullName ||
+          cleanId;
+        setTempPasswordModal({
+          name,
+          password: body.temporaryPassword,
+        });
+      }
     } catch (err) {
       console.error('Failed to restore patient:', err);
     } finally {
@@ -1667,6 +1697,16 @@ export default function PatientsListPage() {
               toastTimerRef.current = null;
             }, 4500);
           }}
+        />
+      )}
+
+      {tempPasswordModal && (
+        <TemporaryPasswordModal
+          open={Boolean(tempPasswordModal)}
+          patientName={tempPasswordModal.name}
+          password={tempPasswordModal.password}
+          isRtl={isRtl}
+          onClose={() => setTempPasswordModal(null)}
         />
       )}
     </div>

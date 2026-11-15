@@ -21,6 +21,7 @@ import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
+import TemporaryPasswordModal from '@/components/admin/TemporaryPasswordModal';
 
 export default function RegistrationApprovalsPage() {
   const locale = useLocale();
@@ -45,6 +46,10 @@ export default function RegistrationApprovalsPage() {
   const [isRestoringPatientId, setIsRestoringPatientId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [tempPasswordModal, setTempPasswordModal] = useState<{
+    name: string;
+    password: string;
+  } | null>(null);
 
   const loadData = useCallback(async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
@@ -161,27 +166,48 @@ export default function RegistrationApprovalsPage() {
   };
 
   const handleApproveReactivation = async (patient: Patient) => {
-    const targetId = patient.id || (patient as any).patientId || (patient as any).patient?.id;
+    const raw = patient as unknown as { patientId?: string; patient?: { id?: string } };
+    const targetId = patient.id || raw.patientId || raw.patient?.id;
     if (!targetId) return;
     setIsRestoringPatientId(targetId);
     try {
       // 1. Call /api/admin/restore
-      await fetch('/api/admin/restore', {
+      const res = await fetch('/api/admin/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ patientId: targetId, uid: targetId }),
-      }).catch((err) => console.warn('API restore failed:', err));
+      }).catch((err) => {
+        console.warn('API restore failed:', err);
+        return null;
+      });
+      const body = res ? await res.json().catch(() => null) : null;
 
       // 2. Local fallback update
       restorePatient(targetId);
 
       // 3. Feedback & reload
       const patientName = isAr ? patient.fullNameAr || patient.fullName : patient.fullName;
-      showFeedback(
-        isAr
-          ? `تم اعتماد واستعادة الملف الطبي للمريض ${patientName} بنجاح ✓`
-          : `Successfully approved and restored medical record for ${patient.fullName} ✓`
-      );
+      if (body?.conflicts?.length) {
+        showFeedback(
+          isAr
+            ? 'تمت الاستعادة، لكن لم يتم إنشاء حساب دخول: رقم الهاتف مستخدم لحساب آخر.'
+            : 'Restored, but no login was created: the phone number is used by another account.'
+        );
+      } else {
+        showFeedback(
+          isAr
+            ? `تم اعتماد واستعادة الملف الطبي للمريض ${patientName} بنجاح ✓`
+            : `Successfully approved and restored medical record for ${patient.fullName} ✓`
+        );
+      }
+
+      if (body?.temporaryPassword) {
+        setTempPasswordModal({
+          name: patientName,
+          password: body.temporaryPassword,
+        });
+      }
+
       void syncFullCloudData();
       await loadData();
     } catch (err) {
@@ -820,6 +846,16 @@ export default function RegistrationApprovalsPage() {
             />
           </div>
         </Modal>
+      )}
+
+      {tempPasswordModal && (
+        <TemporaryPasswordModal
+          open={Boolean(tempPasswordModal)}
+          patientName={tempPasswordModal.name}
+          password={tempPasswordModal.password}
+          isRtl={isAr}
+          onClose={() => setTempPasswordModal(null)}
+        />
       )}
     </div>
   );

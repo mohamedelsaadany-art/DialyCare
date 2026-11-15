@@ -150,32 +150,9 @@ export async function POST(request: Request) {
           archived.patient.reactivationStatus = 'pending';
           archived.patient.reactivationRequestedAt = nowIso;
         }
-        if (!archived.account) {
-          archived.account = {
-            username: cleanPhone,
-            phone: cleanPhone,
-            password: hashPassword(password),
-            passwordUpdatedAt: nowIso,
-            user: {
-              uid: archived.patient?.id || archived.id || requestedUid,
-              role: 'patient',
-              status: 'active',
-              username: cleanPhone,
-              phone: cleanPhone,
-              displayName: archived.patient?.fullName || cleanPhone,
-              language,
-              reactivationStatus: 'pending',
-              reactivationRequestedAt: nowIso,
-              createdAt: nowIso,
-            },
-          };
-        } else {
-          archived.account.password = hashPassword(password);
-          archived.account.passwordUpdatedAt = nowIso;
-          if (archived.account.user) {
-            archived.account.user.reactivationStatus = 'pending';
-            archived.account.user.reactivationRequestedAt = nowIso;
-          }
+        if (archived.account && archived.account.user) {
+          archived.account.user.reactivationStatus = 'pending';
+          archived.account.user.reactivationRequestedAt = nowIso;
         }
         await updateArchivedPatient(archived);
 
@@ -188,8 +165,6 @@ export async function POST(request: Request) {
             (a.phone && isPhoneMatch(a.phone, cleanPhone))
         );
         if (matchingAcc) {
-          matchingAcc.password = hashPassword(password);
-          matchingAcc.passwordUpdatedAt = nowIso;
           if (matchingAcc.user) {
             matchingAcc.user.reactivationStatus = 'pending';
             matchingAcc.user.reactivationRequestedAt = nowIso;

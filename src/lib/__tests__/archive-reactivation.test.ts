@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Comprehensive verification for:
  * 1. GET & POST /api/admin/archive
@@ -23,8 +24,6 @@ import {
   getCloudDatabase,
   saveCloudAccounts,
   saveCloudDatabase,
-  archivePatients,
-  restorePatient,
 } from '../cloud-store';
 import { GET as archiveGet, POST as archivePost } from '../../app/api/admin/archive/route';
 import { POST as restoreRoute } from '../../app/api/admin/restore/route';
@@ -184,6 +183,12 @@ async function run(): Promise<void> {
   );
 
   console.log('--- 4. Patient Registration with Archived Phone (Pending Reactivation) ---');
+  // Before register call, save current archived account password string
+  const archivedBeforeReg = await getArchivedPatients();
+  const targetArchivedBefore = archivedBeforeReg.find((a) => a.patient.id === testPatientId || a.id === testPatientId);
+  const savedPasswordString = targetArchivedBefore?.account?.password;
+  check(Boolean(savedPasswordString), 'archived account has saved password before registration');
+
   // Attempt registration with the same phone and a new password
   const newPassword = 'newPassword456';
   const regRes = await registerRoute(
@@ -211,26 +216,23 @@ async function run(): Promise<void> {
   eq(targetArchived?.reactivationStatus, 'pending', 'reactivationStatus is pending');
   check(Boolean(targetArchived?.reactivationRequestedAt), 'reactivationRequestedAt timestamp set');
 
-  // Verify that the archived account password was updated with scrypt hash of new password
-  check(Boolean(targetArchived?.account?.password), 'archived account has password');
-  check(targetArchived!.account!.password.startsWith('scrypt$'), 'password is an scrypt hash');
+  // Verify that the archived account password was NOT updated (remains exact saved string)
+  eq(targetArchived?.account?.password, savedPasswordString, 'archived account password is unchanged');
   const pwVerified = verifyPassword(targetArchived!.account!.password, newPassword);
-  check(pwVerified.ok, 'archived account password verifies with newPassword');
+  eq(pwVerified.ok, false, 'verifyPassword with newPassword returns false');
 
   console.log('--- 5. Login Flow for Archived Account ---');
-  // Login with correct new password for archived account -> 403 with accountArchivedOnHold
+  // Login with new password for archived account -> 401 invalidCredentials because password was never changed
   const loginRes = await loginRoute(
     req('/api/auth/login', 'POST', {}, {
       identifier: testPhone,
       password: newPassword,
     })
   );
-  eq(loginRes.status, 403, 'login for archived account returns 403');
+  eq(loginRes.status, 401, 'login with new password returns 401');
   const loginBody = (await loginRes.json()) as any;
   eq(loginBody.success, false, 'login returns success: false');
-  eq(loginBody.error, 'accountArchivedOnHold', 'login returns error: accountArchivedOnHold');
-  eq(loginBody.status, 'pending_reactivation', 'login returns status: pending_reactivation');
-  check(Boolean(loginBody.adminWhatsApp), 'login returns adminWhatsApp');
+  eq(loginBody.error, 'invalidCredentials', 'login returns error: invalidCredentials');
 
   // Login with wrong password for archived account -> 401 invalidCredentials
   const wrongPwRes = await loginRoute(
@@ -244,32 +246,7 @@ async function run(): Promise<void> {
   eq(wrongPwBody.success, false, 'wrong password returns success: false');
   eq(wrongPwBody.error, 'invalidCredentials', 'wrong password returns error: invalidCredentials');
 
-  console.log('--- 6. Restore Flow via POST /api/admin/restore ---');
-  const restoreRes = await restoreRoute(
-    req('/api/admin/restore', 'POST', ADMIN(), { patientId: testPatientId })
-  );
-  eq(restoreRes.status, 200, 'admin restore returns 200');
-  const restoreBody = (await restoreRes.json()) as any;
-  check(restoreBody.success === true, 'restore returns success: true');
-
-  // Now patient is restored to active patients
-  const dbAfterRestore = await getCloudDatabase();
-  const restoredP = dbAfterRestore.patients.find((p) => p.id === testPatientId);
-  check(Boolean(restoredP), 'patient found in db.patients');
-  eq(restoredP?.isActive, true, 'restored patient isActive is true');
-
-  // Now logging in with the restored account succeeds!
-  const loginAfterRestore = await loginRoute(
-    req('/api/auth/login', 'POST', {}, {
-      identifier: testPhone,
-      password: newPassword,
-    })
-  );
-  eq(loginAfterRestore.status, 200, 'login after restore succeeds with 200');
-  const restoreLoginBody = (await loginAfterRestore.json()) as any;
-  eq(restoreLoginBody.success, true, 'login after restore returns success: true');
-
-  console.log('--- 7. Translation Keys Verification ---');
+  console.log('--- 6. Translation Keys Verification ---');
   const arJson = JSON.parse(readFileSync(join(process.cwd(), 'src/messages/ar.json'), 'utf8'));
   const enJson = JSON.parse(readFileSync(join(process.cwd(), 'src/messages/en.json'), 'utf8'));
 
@@ -288,12 +265,12 @@ async function run(): Promise<void> {
   // Exact strings required by task
   eq(
     arJson.auth.archiveReactivationNotice,
-    'تم العثور على ملفك الطبي السابق وهو معلق في الأرشيف المؤقت. لاستعادة بياناتك السريرية وتفعيل حسابك، يرجى مراسلة إدارة المركز عبر واتساب.',
+    'ملفك الطبي معلّق حالياً في الأرشيف. راسل الإدارة عبر واتساب، وبعد الموافقة سترسل لك الإدارة كلمة مرور مؤقتة لتسجيل الدخول.',
     'ar.json archiveReactivationNotice matches exact text'
   );
   eq(
     enJson.auth.archiveReactivationNotice,
-    'Your medical record is currently on hold in the archive. To restore your data and reactivate your account, please message the Admin on WhatsApp.',
+    'Your medical record is currently on hold in the archive. Message the Admin on WhatsApp. After approval, the Admin will send you a temporary password to sign in.',
     'en.json archiveReactivationNotice matches exact text'
   );
 
@@ -366,24 +343,102 @@ async function run(): Promise<void> {
   const freshRegBody = (await freshReg.json()) as any;
   eq(freshRegBody.status, 'pending_reactivation', 'fresh registration status is pending_reactivation');
 
-  // Verify archived account was created with hashed password
+  // Verify that no account was created for archived record or live accounts
   const verifyDb = await getArchivedPatients();
   const createdRecord = verifyDb.find((a) => a.patient.id === noAccountPatientId || a.id === noAccountPatientId);
-  check(Boolean(createdRecord?.account), 'account was created for archived record');
-  check(Boolean(createdRecord?.account?.password.startsWith('scrypt$')), 'new password was scrypt-hashed');
+  eq(createdRecord?.account, undefined, 'createdRecord.account is undefined');
+  const liveAccounts = await getCloudAccounts();
+  check(!liveAccounts.some((a) => a.user?.uid === noAccountPatientId), 'no live account has user.uid === noAccountPatientId');
 
-  // Attempt login with fresh password -> 403 accountArchivedOnHold with patientName & phone
+  // Attempt login with fresh password -> 401 invalidCredentials
   const freshLogin = await loginRoute(
     req('/api/auth/login', 'POST', {}, {
       identifier: noAccountPhone,
       password: freshPassword,
     })
   );
-  eq(freshLogin.status, 403, 'login returns 403 accountArchivedOnHold');
+  eq(freshLogin.status, 401, 'login returns 401 invalidCredentials');
   const freshLoginBody = (await freshLogin.json()) as any;
-  eq(freshLoginBody.error, 'accountArchivedOnHold', 'login error is accountArchivedOnHold');
-  check(Boolean(freshLoginBody.patientName), 'login response provides patientName');
-  check(Boolean(freshLoginBody.phone), 'login response provides phone');
+  eq(freshLoginBody.success, false, 'login success is false');
+  eq(freshLoginBody.error, 'invalidCredentials', 'login error is invalidCredentials');
+
+  console.log('--- 10. Restore Issues a Temporary Password ---');
+  // Restore account-less patient through the restore route as admin
+  const restoreAccountlessRes = await restoreRoute(
+    req('/api/admin/restore', 'POST', ADMIN(), { patientId: noAccountPatientId })
+  );
+  eq(restoreAccountlessRes.status, 200, 'admin restore account-less returns 200');
+  const restoreAccountlessBody = (await restoreAccountlessRes.json()) as any;
+  check(restoreAccountlessBody.success === true, 'restore returns success: true');
+  const accountlessTemp = restoreAccountlessBody.temporaryPassword;
+  check(
+    typeof accountlessTemp === 'string' && /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{10}$/.test(accountlessTemp),
+    'temporaryPassword is a 10-character string matching allowed alphabet'
+  );
+  eq(
+    restoreAccountlessBody.temporaryPasswords?.[noAccountPatientId],
+    accountlessTemp,
+    'temporaryPasswords[noAccountPatientId] equals temporaryPassword'
+  );
+
+  // Logging in with noAccountPhone and temporary password returns 200
+  const loginWithTempPw = await loginRoute(
+    req('/api/auth/login', 'POST', {}, {
+      identifier: noAccountPhone,
+      password: accountlessTemp,
+    })
+  );
+  eq(loginWithTempPw.status, 200, 'login with temporary password returns 200');
+  const loginWithTempBody = (await loginWithTempPw.json()) as any;
+  eq(loginWithTempBody.success, true, 'login with temporary password returns success: true');
+
+  // Logging in with freshPassword returns 401
+  const loginWithFreshPw = await loginRoute(
+    req('/api/auth/login', 'POST', {}, {
+      identifier: noAccountPhone,
+      password: freshPassword,
+    })
+  );
+  eq(loginWithFreshPw.status, 401, 'login with freshPassword returns 401');
+  const loginWithFreshBody = (await loginWithFreshPw.json()) as any;
+  eq(loginWithFreshBody.success, false, 'login with freshPassword returns success: false');
+  eq(loginWithFreshBody.error, 'invalidCredentials', 'login with freshPassword returns error: invalidCredentials');
+
+  // Restore section-4 patient too
+  const restoreSection4Res = await restoreRoute(
+    req('/api/admin/restore', 'POST', ADMIN(), { patientId: testPatientId })
+  );
+  eq(restoreSection4Res.status, 200, 'admin restore section-4 patient returns 200');
+  const restoreSection4Body = (await restoreSection4Res.json()) as any;
+  check(restoreSection4Body.success === true, 'restore section-4 patient returns success: true');
+  const section4Temp = restoreSection4Body.temporaryPassword;
+  check(
+    typeof section4Temp === 'string' && /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{10}$/.test(section4Temp),
+    'section-4 temporaryPassword is a 10-character string matching allowed alphabet'
+  );
+
+  // Logging in with section 4 temporary password returns 200
+  const loginSection4Temp = await loginRoute(
+    req('/api/auth/login', 'POST', {}, {
+      identifier: testPhone,
+      password: section4Temp,
+    })
+  );
+  eq(loginSection4Temp.status, 200, 'login with section-4 temporary password returns 200');
+  const loginSection4TempBody = (await loginSection4Temp.json()) as any;
+  eq(loginSection4TempBody.success, true, 'login section 4 temp returns success: true');
+
+  // Logging in with newPassword returns 401
+  const loginSection4NewPw = await loginRoute(
+    req('/api/auth/login', 'POST', {}, {
+      identifier: testPhone,
+      password: newPassword,
+    })
+  );
+  eq(loginSection4NewPw.status, 401, 'login section-4 with newPassword returns 401');
+  const loginSection4NewBody = (await loginSection4NewPw.json()) as any;
+  eq(loginSection4NewBody.success, false, 'login section 4 with newPassword returns success: false');
+  eq(loginSection4NewBody.error, 'invalidCredentials', 'login section 4 with newPassword returns error: invalidCredentials');
 
   console.log(`\nALL ARCHIVE & REACTIVATION TESTS PASSED: ${assertions} assertions.\n`);
 }
