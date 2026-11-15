@@ -11,6 +11,7 @@ import {
   storeAccountPassword,
   verifyPassword,
 } from '@/lib/server-auth';
+import { checkRateLimit, tooManyResponse } from '@/lib/rate-limit';
 
 const MIN_PASSWORD = 6;
 const MAX_PASSWORD = 200;
@@ -31,6 +32,11 @@ export async function POST(request: Request) {
   if (isCrossOriginRequest(request)) return json({ success: false, error: 'forbidden' }, 403);
   const session = await getSession(request);
   if (!session.ok) return sessionErrorResponse(session);
+
+  const limit = checkRateLimit(`chpw:${session.user.uid}`, 10, 15 * 60 * 1000);
+  if (!limit.ok) {
+    return tooManyResponse(limit.retryAfterSeconds);
+  }
 
   let body: Record<string, unknown> | null = null;
   try {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCloudAccounts } from '@/lib/cloud-store';
 import { isCrossOriginRequest, NO_STORE_HEADERS } from '@/lib/server-auth';
+import { checkRateLimit, getClientIp, tooManyResponse } from '@/lib/rate-limit';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,6 +21,11 @@ function json(body: unknown, status: number): NextResponse {
 export async function POST(request: Request) {
   if (isCrossOriginRequest(request)) {
     return json({ success: false, error: 'forbidden' }, 403);
+  }
+  const ip = getClientIp(request);
+  const ipLimit = checkRateLimit(`status-ip:${ip}`, 120, 15 * 60 * 1000);
+  if (!ipLimit.ok) {
+    return tooManyResponse(ipLimit.retryAfterSeconds);
   }
   let uid = '';
   try {

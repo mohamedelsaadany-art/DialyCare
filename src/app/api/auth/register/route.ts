@@ -12,6 +12,7 @@ import {
 import { normalizePhone, toAsciiDigits, isPhoneMatch } from '@/lib/phone';
 import { hashPassword, isCrossOriginRequest, NO_STORE_HEADERS, passwordMatches } from '@/lib/server-auth';
 import { isR2Configured, put, getPublicUrl } from '@/lib/r2-client';
+import { checkRateLimit, getClientIp, tooManyResponse } from '@/lib/rate-limit';
 import type { User, StoredAccount, UserRole, Patient } from '@/lib/types';
 
 /**
@@ -46,6 +47,11 @@ function str(v: unknown, max = 300): string {
 export async function POST(request: Request) {
   if (isCrossOriginRequest(request)) {
     return json({ success: false, error: 'forbidden' }, 403);
+  }
+  const ip = getClientIp(request);
+  const ipLimit = checkRateLimit(`register-ip:${ip}`, 10, 60 * 60 * 1000);
+  if (!ipLimit.ok) {
+    return tooManyResponse(ipLimit.retryAfterSeconds);
   }
   let body: Record<string, unknown>;
   try {

@@ -196,6 +196,8 @@ export default function LoginPage() {
         setPendingAccount(res.user);
       } else if (res.status === 'rejected' && res.user) {
         setRejectedAccount({ user: res.user, reason: res.rejectionReason });
+      } else if (res.error === 'tooManyAttempts' || (res as unknown as { httpStatus?: number }).httpStatus === 429) {
+        setSignInError(tAuth('tooManyAttempts'));
       } else if (res.error === 'loginError') {
         setSignInError(
           isRtl

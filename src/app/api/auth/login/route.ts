@@ -15,6 +15,13 @@ import {
   NO_STORE_HEADERS,
   SESSION_TTL_REMEMBER_SECONDS,
 } from '@/lib/server-auth';
+import {
+  checkRateLimit,
+  getClientIp,
+  peekRateLimit,
+  resetRateLimit,
+  tooManyResponse,
+} from '@/lib/rate-limit';
 
 const MAX_IDENTIFIER_LENGTH = 200;
 const MAX_PASSWORD_LENGTH = 500;
@@ -34,6 +41,11 @@ function json(body: unknown, status: number): NextResponse {
 export async function POST(request: Request) {
   if (isCrossOriginRequest(request)) {
     return json({ success: false, error: 'forbidden' }, 403);
+  }
+  const ip = getClientIp(request);
+  const ipLimit = checkRateLimit(`login-ip:${ip}`, 30, 15 * 60 * 1000);
+  if (!ipLimit.ok) {
+    return tooManyResponse(ipLimit.retryAfterSeconds);
   }
   let body: unknown;
   try {
@@ -57,6 +69,12 @@ export async function POST(request: Request) {
   }
 
   try {
+    const idKey = `login-id:${identifier.toLowerCase()}`;
+    if (peekRateLimit(idKey, 10)) {
+      const limitCheck = checkRateLimit(idKey, 10, 15 * 60 * 1000);
+      return tooManyResponse(limitCheck.retryAfterSeconds);
+    }
+
     const accounts = await getCloudAccounts();
     const result = authenticate(accounts, identifier, password);
 
@@ -110,6 +128,7 @@ export async function POST(request: Request) {
         }
       }
 
+      checkRateLimit(idKey, 10, 15 * 60 * 1000);
       return json({ success: false, error: 'invalidCredentials' }, 401);
     }
     const user = { ...result.account.user };
@@ -165,6 +184,7 @@ export async function POST(request: Request) {
     if (!token) {
       return json({ success: false, error: 'sessionUnavailable' }, 503);
     }
+    resetRateLimit(idKey);
     const res = json({ success: true, status: 'active', user: { ...user, status: user.status || 'active' } }, 200);
     res.headers.append('Set-Cookie', buildSessionCookie(token, rememberMe ? ttl : undefined));
     return res;

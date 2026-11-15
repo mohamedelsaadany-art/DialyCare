@@ -100,6 +100,7 @@
     "accountPendingTitle": "Account Under Clinical Review",
     "accountPendingDesc": "Your registration was received and is currently under review by Medical Administration. You can contact administration directly via WhatsApp to expedite approval.",
     "accountArchivedOnHold": "Your medical record is currently on hold in the archive.",
+    "tooManyAttempts": "Too many attempts. Please wait 15 minutes and try again.",
     "archiveReactivationNotice": "Your medical record is currently on hold in the archive. Message the Admin on WhatsApp. After approval, the Admin will send you a temporary password to sign in.",
     "contactAdminWhatsApp": "Message Admin on WhatsApp",
     "reactivationRequested": "Reactivation requested. Message the Admin on WhatsApp. After approval you will receive a temporary password; the password you just entered will not be used.",
