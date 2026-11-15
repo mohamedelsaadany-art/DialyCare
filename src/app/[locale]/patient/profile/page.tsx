@@ -27,12 +27,14 @@ import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { PatientAvatarSvg } from '@/components/avatar/PatientAvatarPresets';
 import { AvatarStyleSelectorModal } from '@/components/avatar/AvatarStyleSelectorModal';
 import { PatientAdherenceSurveySection } from '@/components/patient/PatientAdherenceSurveySection';
+import { changePasswordOnServer, changePasswordErrorText } from '@/lib/password-client';
 
 export default function PatientProfilePage() {
   const { user, logout } = useAuth();
   const locale = useLocale();
   const router = useRouter();
   const isAr = locale === 'ar';
+  const isRtl = isAr;
 
   const tSettings = useTranslations('settings');
   const tCommon = useTranslations('common');
@@ -57,6 +59,14 @@ export default function PatientProfilePage() {
     fluidRate: number;
     dietRate: number;
   }>({ medRate: 85, fluidRate: 80, dietRate: 75 });
+
+  // Change password state
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [passError, setPassError] = useState<string | null>(null);
+  const [passSuccess, setPassSuccess] = useState<string | null>(null);
+  const [passSubmitting, setPassSubmitting] = useState(false);
 
   const activePatientId = patientRecord?.id || patientId;
   const activeFluidLimitKey = `DIALYCARE_FLUID_LIMIT_${activePatientId}`;
@@ -193,6 +203,46 @@ export default function PatientProfilePage() {
 
     if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
     notifTimerRef.current = setTimeout(() => setNotifFeedback(null), 4000);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError(null);
+    setPassSuccess(null);
+
+    if (newPass.length < 6 || newPass.length > 200) {
+      setPassError(
+        isRtl
+          ? 'يجب أن تكون كلمة المرور 6 أحرف على الأقل.'
+          : 'Password must be at least 6 characters.'
+      );
+      return;
+    }
+    if (newPass !== confirmPass) {
+      setPassError(
+        isRtl
+          ? 'كلمتا المرور غير متطابقتين.'
+          : 'Passwords do not match.'
+      );
+      return;
+    }
+
+    setPassSubmitting(true);
+    try {
+      const res = await changePasswordOnServer(currentPass, newPass);
+      if (!res.ok) {
+        setPassError(changePasswordErrorText(res.error, isRtl));
+        return;
+      }
+      setCurrentPass('');
+      setNewPass('');
+      setConfirmPass('');
+      setPassSuccess(isRtl ? 'تم تغيير كلمة المرور.' : 'Password changed.');
+    } catch {
+      setPassError(changePasswordErrorText('server', isRtl));
+    } finally {
+      setPassSubmitting(false);
+    }
   };
 
   const handleLogout = () => {
@@ -452,6 +502,66 @@ export default function PatientProfilePage() {
               {fluidLimitError}
             </p>
           )}
+        </form>
+      </Card>
+
+      {/* Change Password Card */}
+      <Card title={isRtl ? 'تغيير كلمة المرور' : 'Change password'}>
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          {passSuccess && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs sm:text-sm font-semibold flex items-center gap-2">
+              <span>{passSuccess}</span>
+            </div>
+          )}
+
+          {passError && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-semibold flex items-center gap-2" role="alert">
+              <span>{passError}</span>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <Input
+              type="password"
+              label={isRtl ? 'كلمة المرور الحالية' : 'Current password'}
+              value={currentPass}
+              onChange={(e) => setCurrentPass(e.target.value)}
+              placeholder="••••••••"
+              disabled={passSubmitting}
+              required
+            />
+
+            <Input
+              type="password"
+              label={isRtl ? 'كلمة المرور الجديدة' : 'New password'}
+              value={newPass}
+              onChange={(e) => setNewPass(e.target.value)}
+              placeholder="••••••••"
+              disabled={passSubmitting}
+              required
+            />
+
+            <Input
+              type="password"
+              label={isRtl ? 'تأكيد كلمة المرور الجديدة' : 'Confirm new password'}
+              value={confirmPass}
+              onChange={(e) => setConfirmPass(e.target.value)}
+              placeholder="••••••••"
+              disabled={passSubmitting}
+              required
+            />
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={passSubmitting}
+              className="font-bold text-sm min-h-[44px]"
+            >
+              {isRtl ? 'تغيير كلمة المرور' : 'Change password'}
+            </Button>
+          </div>
         </form>
       </Card>
 
