@@ -78,6 +78,9 @@ export async function POST(request: Request) {
     const language = data.language === 'en' ? 'en' : 'ar';
     let account: StoredAccount;
     let newPatient: Patient | undefined;
+    let idCardBuffer: Buffer | undefined;
+    let idCardExt: string | undefined;
+    let idCardMime: string | undefined;
 
     const requestedUid = str(data.uid, 100);
 
@@ -95,29 +98,22 @@ export async function POST(request: Request) {
           ? (language === 'en' ? 'Hemodialysis Unit Administrator' : 'إدارة وحدة الغسيل الكلوي')
           : (language === 'en' ? 'Nephrologist / Dialysis Physician' : 'طبيب أمراض كلى وغسيل كلوي');
 
-      let savedIdCardUrl: string | undefined = undefined;
-      if (typeof data.idCardDataUrl === 'string' && data.idCardDataUrl.startsWith('data:image/') && isR2Configured()) {
-        try {
-          const match = data.idCardDataUrl.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
-          if (match) {
-            const rawExt = match[1].toLowerCase();
-            const ext = rawExt === 'jpeg' ? 'jpg' : rawExt;
-            const buffer = Buffer.from(match[2], 'base64');
-            const key = `id-cards/${requestedUid}.${ext}`;
-            await put(key, buffer, {
-              contentType: `image/${rawExt}`,
-              allowOverwrite: true,
-            });
-            savedIdCardUrl = getPublicUrl(key);
-          } else {
-            savedIdCardUrl = data.idCardDataUrl;
-          }
-        } catch (err) {
-          console.warn('[Register] Failed to upload ID card image to R2:', err);
-          savedIdCardUrl = data.idCardDataUrl;
+      if (data.idCardDataUrl !== undefined && data.idCardDataUrl !== null && data.idCardDataUrl !== '') {
+        if (typeof data.idCardDataUrl !== 'string') {
+          return invalid('invalidIdCard');
         }
-      } else if (typeof data.idCardDataUrl === 'string') {
-        savedIdCardUrl = data.idCardDataUrl;
+        const match = data.idCardDataUrl.match(/^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+        if (!match) {
+          return invalid('invalidIdCard');
+        }
+        const decoded = Buffer.from(match[2], 'base64');
+        if (decoded.length > 2 * 1024 * 1024) {
+          return invalid('idCardTooLarge');
+        }
+        idCardBuffer = decoded;
+        const rawSubtype = match[1].toLowerCase();
+        idCardExt = rawSubtype === 'jpg' || rawSubtype === 'jpeg' ? 'jpg' : rawSubtype;
+        idCardMime = rawSubtype === 'jpg' || rawSubtype === 'jpeg' ? 'image/jpeg' : `image/${rawSubtype}`;
       }
 
       const newUser: User = {
@@ -130,7 +126,7 @@ export async function POST(request: Request) {
         displayName: str(data.fullName, 200) || cleanUsername,
         specialty: str(data.specialty, 200) || defaultSpecialty,
         hospital: str(data.hospital, 200) || 'وحدة الغسيل الكلوي',
-        idCardDataUrl: savedIdCardUrl,
+        idCardDataUrl: undefined,
         language,
         registeredAt: now,
         createdAt: now,
@@ -281,6 +277,21 @@ export async function POST(request: Request) {
     }
     account.user.uid = uid;
     if (newPatient) newPatient.id = uid;
+
+    if (idCardBuffer && idCardExt && idCardMime) {
+      if (isR2Configured()) {
+        try {
+          const key = `id-cards/${uid}.${idCardExt}`;
+          await put(key, idCardBuffer, { contentType: idCardMime });
+          account.user.idCardDataUrl = getPublicUrl(key);
+        } catch {
+          console.warn('[Register] ID card upload failed');
+          account.user.idCardDataUrl = `data:${idCardMime};base64,${idCardBuffer.toString('base64')}`;
+        }
+      } else {
+        account.user.idCardDataUrl = `data:${idCardMime};base64,${idCardBuffer.toString('base64')}`;
+      }
+    }
 
     const result = await addCloudAccountIfAbsent(account);
     if (result === 'conflict') return conflict();
