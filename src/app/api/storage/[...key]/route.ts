@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getObjectBuffer, isR2Configured } from '@/lib/r2-client';
+import { getSession, sessionErrorResponse } from '@/lib/server-auth';
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ key: string[] }> }
 ) {
   try {
+    const session = await getSession(request, { roles: ['admin'] });
+    if (!session.ok) return sessionErrorResponse(session);
+
     const { key } = await context.params;
     if (!key || key.length === 0) {
       return new NextResponse('Bad Request: Missing key', { status: 400 });
@@ -18,6 +22,11 @@ export async function GET(
       return new NextResponse('Bad Request: Invalid key format', { status: 400 });
     }
 
+    // Allowlist: only staff ID card images in id-cards/<name>.(png|jpg|jpeg|webp)
+    if (!/^id-cards\/[A-Za-z0-9._-]+\.(png|jpe?g|webp)$/i.test(objectKey)) {
+      return new NextResponse('File Not Found', { status: 404 });
+    }
+
     if (!isR2Configured()) {
       return new NextResponse('Storage service not configured', { status: 503 });
     }
@@ -27,21 +36,25 @@ export async function GET(
       return new NextResponse('File Not Found', { status: 404 });
     }
 
-    const contentType = obj.contentType || 'application/octet-stream';
-    const isImage = contentType.startsWith('image/');
-    const isPdf = contentType === 'application/pdf';
+    const isAllowedInlineImage =
+      obj.contentType === 'image/png' ||
+      obj.contentType === 'image/jpeg' ||
+      obj.contentType === 'image/webp';
 
-    // Cache control: long cache for immutable assets
-    const cacheControl = isImage || isPdf
-      ? 'public, max-age=31536000, immutable'
-      : 'no-cache, no-store, must-revalidate';
+    const contentType: string =
+      isAllowedInlineImage && obj.contentType ? obj.contentType : 'application/octet-stream';
+    const contentDisposition = isAllowedInlineImage
+      ? 'inline'
+      : `attachment; filename="${key[key.length - 1]}"`;
 
     return new NextResponse(new Uint8Array(obj.data), {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': cacheControl,
-        'Content-Disposition': isImage ? 'inline' : `inline; filename="${key[key.length - 1]}"`,
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'Content-Disposition': contentDisposition,
       },
     });
   } catch (error) {

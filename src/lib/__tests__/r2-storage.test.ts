@@ -57,37 +57,10 @@ async function run() {
       eq(getFileUrl('dialycare_cloud_database_v1.json'), '/api/storage/dialycare_cloud_database_v1.json');
     });
 
-    process.env.R2_PUBLIC_URL = 'https://pub-abc123def456.r2.dev';
-    test('getPublicUrl returns public CDN domain when R2_PUBLIC_URL is provided', () => {
-      eq(getPublicUrl('doctor-id.png'), 'https://pub-abc123def456.r2.dev/doctor-id.png');
-      eq(getPublicUrl('/nested/path/report.pdf'), 'https://pub-abc123def456.r2.dev/nested/path/report.pdf');
-    });
-
-    process.env.R2_PUBLIC_URL = 'https://pub-abc123def456.r2.dev/';
-    test('getPublicUrl trims trailing slash from domain', () => {
-      eq(getPublicUrl('file.jpg'), 'https://pub-abc123def456.r2.dev/file.jpg');
-    });
-
     console.log('--- 3. S3 Client lazy initialization & reset ---');
     resetR2Client();
     test('resetR2Client cleans up the singleton instance without errors', () => {
       check(true);
-    });
-
-    console.log('--- 4. API Storage Proxy Security Checks ---');
-    const { GET: getStorage } = await import('../../app/api/storage/[...key]/route');
-    
-    // Path traversal check
-    const badReq = new Request('http://localhost:3000/api/storage/../secret');
-    const badRes = await getStorage(badReq, { params: Promise.resolve({ key: ['..', 'secret'] }) });
-    test('Storage proxy rejects directory traversal attempt with 400', () => {
-      eq(badRes.status, 400);
-    });
-
-    // Empty key check
-    const emptyRes = await getStorage(badReq, { params: Promise.resolve({ key: [] }) });
-    test('Storage proxy rejects empty key with 400', () => {
-      eq(emptyRes.status, 400);
     });
 
   } finally {

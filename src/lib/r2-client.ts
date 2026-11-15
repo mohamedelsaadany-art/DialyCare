@@ -63,17 +63,12 @@ export function resetR2Client(): void {
 }
 
 /**
- * Resolve public or accessible URL for an object key.
- * If R2_PUBLIC_URL is configured (e.g. https://pub-xxx.r2.dev or custom CDN domain),
- * it returns that direct URL. Otherwise, it returns the Next.js API storage proxy URL (/api/storage/<key>),
- * ensuring image/file displays work even if public bucket access is disabled on Cloudflare.
+ * Resolve accessible URL for an object key.
+ * Always returns the Next.js API storage proxy URL (/api/storage/<cleanKey>),
+ * ensuring every file goes through the authenticated storage proxy.
  */
 export function getPublicUrl(key: string): string {
   const cleanKey = key.replace(/^\/+/, '');
-  const publicDomain = (process.env.R2_PUBLIC_URL || '').trim().replace(/\/+$/, '');
-  if (publicDomain) {
-    return `${publicDomain}/${cleanKey}`;
-  }
   return `/api/storage/${cleanKey}`;
 }
 

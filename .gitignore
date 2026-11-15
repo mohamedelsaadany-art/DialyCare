@@ -45,3 +45,6 @@ next-env.d.ts
 .env*
 
 .agents/
+
+# Claude <-> Antigravity task handoff (contains security details)
+JOINT_FIXES.md
