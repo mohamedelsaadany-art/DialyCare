@@ -3,8 +3,54 @@
 import React, { useState, useEffect } from 'react';
 import { getNotifications } from '@/lib/data-store';
 import { showLocalNotification, testNotificationTrigger } from '@/lib/notifications';
+import { CURRENT_USER_KEY } from '@/lib/session-client';
+import type { Notification, User } from '@/lib/types';
 
-const UPDATE_DISMISS_KEY = 'WASLITY_UPDATE_BANNER_DISMISSED';
+const UPDATE_SEEN_PREFIX = 'WASLITY_UPDATE_SEEN_';
+const SW_UPDATE_ID = 'sw-update';
+
+/** The signed-in user cached by auth-context, or null for visitors. */
+function getSignedInUser(): User | null {
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    try {
+      const raw = storage?.getItem(CURRENT_USER_KEY);
+      if (!raw) continue;
+      const u = JSON.parse(raw) as User | null;
+      if (u && typeof u.uid === 'string' && u.uid) return u;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+function hasSeenUpdate(id: string): boolean {
+  try {
+    return window.localStorage.getItem(UPDATE_SEEN_PREFIX + id) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markUpdateSeen(id: string): void {
+  try {
+    window.localStorage.setItem(UPDATE_SEEN_PREFIX + id, '1');
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Only users who were already signed up before the update was announced need
+ * the notice; anyone who joined later is already on the new release.
+ */
+export function shouldShowUpdateNotice(user: User | null, notif: Pick<Notification, 'id' | 'sentAt'>, seen: boolean): boolean {
+  if (!user || seen) return false;
+  const joined = new Date(user.registeredAt || user.createdAt || '').getTime();
+  const announced = new Date(notif.sentAt || '').getTime();
+  if (Number.isFinite(joined) && Number.isFinite(announced) && joined >= announced) return false;
+  return true;
+}
 
 export function WaslityUpdateBanner() {
   const [showBanner, setShowBanner] = useState<boolean>(false);
@@ -14,21 +60,19 @@ export function WaslityUpdateBanner() {
     return !window.location.pathname.startsWith('/en');
   });
   const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [noticeId, setNoticeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Check if dismissed recently (within 12 hours)
-    const dismissedAt = window.localStorage.getItem(UPDATE_DISMISS_KEY);
-    if (dismissedAt) {
-      const elapsed = Date.now() - parseInt(dismissedAt, 10);
-      if (elapsed < 12 * 60 * 60 * 1000) {
-        return;
-      }
-    }
-
     const checkForUpdateNotice = () => {
       try {
+        const user = getSignedInUser();
+        if (!user) {
+          // Visitors and signed-out users never see the update notice.
+          setShowBanner(false);
+          return;
+        }
         const notifs = getNotifications();
         const updateNotif = notifs.find(
           (n) =>
@@ -38,7 +82,8 @@ export function WaslityUpdateBanner() {
               n.titleAr?.includes('تحديث') ||
               n.titleEn?.toLowerCase().includes('update'))
         );
-        if (updateNotif) {
+        if (updateNotif && shouldShowUpdateNotice(user, updateNotif, hasSeenUpdate(updateNotif.id))) {
+          setNoticeId(updateNotif.id);
           setShowBanner(true);
 
           // Trigger native device notification if permissions granted and not alerted yet
@@ -62,16 +107,20 @@ export function WaslityUpdateBanner() {
 
     checkForUpdateNotice();
 
-    // Listen for service worker new update event
+    // A new service worker is a real new deploy: tell signed-in users once.
     const handleSwUpdate = () => {
+      if (!getSignedInUser()) return;
+      setNoticeId(SW_UPDATE_ID);
       setShowBanner(true);
     };
 
     window.addEventListener('dialycare:sw-updated', handleSwUpdate);
     window.addEventListener('dialycare_notifications_updated', checkForUpdateNotice);
     window.addEventListener('dialycare_cloud_sync_completed', checkForUpdateNotice);
+    window.addEventListener('dialycare_users_updated', checkForUpdateNotice);
 
     return () => {
+      window.removeEventListener('dialycare_users_updated', checkForUpdateNotice);
       window.removeEventListener('dialycare:sw-updated', handleSwUpdate);
       window.removeEventListener('dialycare_notifications_updated', checkForUpdateNotice);
       window.removeEventListener('dialycare_cloud_sync_completed', checkForUpdateNotice);
@@ -80,6 +129,7 @@ export function WaslityUpdateBanner() {
 
   const handleApplyUpdate = async () => {
     setIsUpdating(true);
+    if (noticeId && noticeId !== SW_UPDATE_ID) markUpdateSeen(noticeId);
     try {
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
@@ -98,18 +148,13 @@ export function WaslityUpdateBanner() {
     } catch {
       // ignore
     } finally {
-      window.localStorage.removeItem(UPDATE_DISMISS_KEY);
       window.location.reload();
     }
   };
 
   const handleDismiss = () => {
     setShowBanner(false);
-    try {
-      window.localStorage.setItem(UPDATE_DISMISS_KEY, Date.now().toString());
-    } catch {
-      // ignore
-    }
+    if (noticeId && noticeId !== SW_UPDATE_ID) markUpdateSeen(noticeId);
   };
 
   const handleTestNotification = async () => {
