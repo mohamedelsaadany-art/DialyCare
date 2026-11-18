@@ -124,6 +124,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       label: tNav('patients') || (isRtl ? 'المرضى' : 'Patients'),
       icon: PatientsIcon,
     },
+    {
+      href: `/${locale}/admin/team`,
+      exact: false,
+      label: isRtl ? 'الفريق الطبي' : 'Medical team',
+      icon: PatientsIcon,
+    },
     ...(isAdmin ? [{
       href: `/${locale}/admin/approvals`,
       exact: false,
