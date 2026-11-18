@@ -140,17 +140,17 @@ async function run(): Promise<void> {
   eq(d({ found: false, ok: false, parsed: undefined, production: true }), 'throw', 'production + absent blob -> throw, never seed');
   eq(d({ found: false, ok: false, parsed: undefined, production: true, expect: 'object' }), 'throw', 'production + absent database blob -> throw');
   eq(d({ production: true }), 'use', 'production + valid read -> use');
-  const csrc = readFileSync(join(__dirname, '..', 'cloud-store.ts'), 'utf8');
-  const ssrc = readFileSync(join(__dirname, '..', 'server-auth.ts'), 'utf8');
-  const syncSrc = readFileSync(join(__dirname, '..', '..', 'app', 'api', 'sync', 'route.ts'), 'utf8');
+  const csrc = readFileSync(join(__dirname, '..', 'cloud-store.ts'), 'utf8').replace(/\r\n/g, '\n');
+  const ssrc = readFileSync(join(__dirname, '..', 'server-auth.ts'), 'utf8').replace(/\r\n/g, '\n');
+  const syncSrc = readFileSync(join(__dirname, '..', '..', 'app', 'api', 'sync', 'route.ts'), 'utf8').replace(/\r\n/g, '\n');
   // every read-modify-write path asks for a fresh read
-  for (const fn of ['upsertCloudAccount', 'addCloudAccountIfAbsent', 'mergeCloudAccounts', 'approveCloudAccount', 'rejectCloudAccount', 'mergeCloudDatabase']) {
-    const body = csrc.slice(csrc.indexOf(`export async function ${fn}(`), csrc.indexOf(String.fromCharCode(10)+'}'+String.fromCharCode(10), csrc.indexOf(`export async function ${fn}(`)));
+  for (const fn of ['upsertCloudAccount', 'addCloudAccountIfAbsent', 'mergeCloudAccounts', 'approveCloudAccount', 'rejectCloudAccount', 'mergeCloudDatabase', 'changePasswordInCloud']) {
+    const body = csrc.slice(csrc.indexOf(`export async function ${fn}(`), csrc.indexOf('\n}\n', csrc.indexOf(`export async function ${fn}(`)));
     check(/getCloud(Accounts|Database)\(\{ forWrite: true \}\)/.test(body), `${fn} reads with forWrite`);
   }
   for (const fn of ['storeAccountPassword', 'migratePlaintextPasswords']) {
-    const body = ssrc.slice(ssrc.indexOf(`export async function ${fn}(`), ssrc.indexOf(String.fromCharCode(10)+'}'+String.fromCharCode(10), ssrc.indexOf(`export async function ${fn}(`)));
-    check(/getCloudAccounts\(\{ forWrite: true \}\)/.test(body), `${fn} reads with forWrite`);
+    const body = ssrc.slice(ssrc.indexOf(`export async function ${fn}(`), ssrc.indexOf('\n}\n', ssrc.indexOf(`export async function ${fn}(`)));
+    check(/getCloudAccounts\(\{ forWrite: true \}\)|changePasswordInCloud/.test(body), `${fn} reads with forWrite`);
   }
   check(/getCloudDatabase\(\{ forWrite: true \}\)/.test(syncSrc), 'POST /api/sync reads with forWrite');
   check(!/using fallback memory accounts|using memory fallback/.test(csrc), 'the old silent memory fallbacks are gone');

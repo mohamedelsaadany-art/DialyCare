@@ -368,6 +368,7 @@ export function passwordMatches(stored: unknown, given: unknown): boolean {
  * markChanged=true records passwordUpdatedAt, which ends sessions issued before it.
  */
 export async function storeAccountPassword(uid: string, stored: string, markChanged: boolean): Promise<boolean> {
+  // Delegates to changePasswordInCloud which calls getCloudAccounts({ forWrite: true }) and invalidates the cache
   return changePasswordInCloud(uid, stored, markChanged);
 }
 
