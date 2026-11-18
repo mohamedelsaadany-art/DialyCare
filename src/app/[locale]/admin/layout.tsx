@@ -52,11 +52,26 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     try {
       const synced = await syncFullCloudData();
       if (synced) {
-        const pending = synced.accounts.map((a) => a.user).filter((u) => u.status === 'pending' && u.role !== 'patient');
-        setPendingApprovalsCount(pending.length);
+        if (!isAdmin) {
+          const pending = synced.accounts.map((a) => a.user).filter((u) => u.status === 'pending' && u.role !== 'patient');
+          setPendingApprovalsCount(pending.length);
+        }
         if (user?.uid) {
           const notifs = getNotifications();
           checkAndTriggerLocalNotifications(user.uid, notifs, isRtl);
+        }
+      }
+      if (isAdmin) {
+        try {
+          const appRes = await fetch('/api/admin/approvals');
+          if (appRes.ok) {
+            const data = await appRes.json();
+            if (data.success && Array.isArray(data.pending)) {
+              setPendingApprovalsCount(data.pending.length);
+            }
+          }
+        } catch {
+          // ignore
         }
       }
     } catch {
@@ -65,7 +80,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       syncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [user, isRtl]);
+  }, [user, isAdmin, isRtl]);
 
   useEffect(() => {
     let mounted = true;

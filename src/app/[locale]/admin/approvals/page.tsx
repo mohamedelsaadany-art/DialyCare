@@ -5,7 +5,6 @@ import { useLocale } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import {
   getAuthAccounts,
-  syncCloudAccounts,
   syncFullCloudData,
   approveUserRegistration,
   rejectUserRegistration,
@@ -23,14 +22,17 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
 import TemporaryPasswordModal from '@/components/admin/TemporaryPasswordModal';
 
+type PendingStaffUser = User & { hasIdCard?: boolean };
+
 export default function RegistrationApprovalsPage() {
   const locale = useLocale();
   const isAr = locale === 'ar';
   const { user, isAdmin } = useAuth();
 
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<PendingStaffUser[]>([]);
   const [reactivationRequests, setReactivationRequests] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingIdUid, setLoadingIdUid] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'doctors' | 'nurses' | 'staff'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -62,9 +64,32 @@ export default function RegistrationApprovalsPage() {
       const localReactivations = getPendingReactivations();
       setReactivationRequests(localReactivations);
 
-      // 2. Fetch latest registrations from Cloud Store (Next.js backend)
-      const syncedAccs = await syncCloudAccounts();
-      setUsers(syncedAccs.map((a) => a.user));
+      // 2. Fetch latest registrations from /api/admin/approvals
+      try {
+        const approvalsRes = await fetch('/api/admin/approvals').catch(() => null);
+        if (approvalsRes && approvalsRes.ok) {
+          const data = await approvalsRes.json().catch(() => null);
+          if (data && Array.isArray(data.pending)) {
+            const remotePending: PendingStaffUser[] = data.pending.map((p: Record<string, unknown>) => ({
+              uid: (p.uid as string) || '',
+              displayName: (p.displayName as string) || '',
+              role: (p.role as User['role']) || 'doctor',
+              status: 'pending' as const,
+              username: (p.phone as string) || (p.uid as string) || '',
+              specialty: (p.specialty as string) || '',
+              hospital: (p.hospital as string) || '',
+              phone: (p.phone as string) || '',
+              language: ((p.language as string) || 'ar') as 'ar' | 'en',
+              createdAt: (p.registeredAt as string) || '',
+              registeredAt: (p.registeredAt as string) || '',
+              hasIdCard: Boolean(p.hasIdCard),
+            }));
+            setUsers(remotePending);
+          }
+        }
+      } catch {
+        // network / offline fallback
+      }
 
       // 3. Fetch latest archive & reactivation requests from /api/admin/archive
       try {
@@ -111,12 +136,18 @@ export default function RegistrationApprovalsPage() {
       if (mounted) void loadData();
     }, 0);
 
-    // Auto-poll cloud every 15 seconds for new cross-device staff registrations
+    // Auto-poll cloud every 60 seconds for new cross-device staff registrations
     const stopPolling = startVisibilityAwarePolling(() => {
       void loadData(false);
-    }, { intervalMs: 15000 });
+    }, { intervalMs: 60000 });
 
-    const handleFocus = () => void loadData(false);
+    let lastFocusTime = 0;
+    const handleFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusTime < 30000) return; // 30-second throttle
+      lastFocusTime = now;
+      if (mounted) void loadData(false);
+    };
     // Local updates read directly from local store without triggering network sync storms
     const handleLocalUpdate = () => {
       if (!mounted) return;
@@ -242,6 +273,29 @@ export default function RegistrationApprovalsPage() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleViewIdCard = async (st: PendingStaffUser) => {
+    if (st.idCardDataUrl) {
+      setPreviewIdUrl(st.idCardDataUrl);
+      setPreviewDoctorName(st.displayName);
+      return;
+    }
+    setLoadingIdUid(st.uid);
+    try {
+      const res = await fetch(`/api/admin/approvals/id-card?uid=${encodeURIComponent(st.uid)}`);
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.success && data?.idCardDataUrl) {
+          setPreviewIdUrl(data.idCardDataUrl);
+          setPreviewDoctorName(st.displayName);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load ID card:', err);
+    } finally {
+      setLoadingIdUid(null);
     }
   };
 
@@ -706,18 +760,25 @@ export default function RegistrationApprovalsPage() {
                 {/* Right: ID Preview & Decision Action Buttons */}
                 <div className="flex items-center gap-3 shrink-0 flex-wrap">
                   {/* Medical / Professional ID Card Preview */}
-                  {st.idCardDataUrl ? (
+                  {st.hasIdCard || st.idCardDataUrl ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        setPreviewIdUrl(st.idCardDataUrl || null);
-                        setPreviewDoctorName(st.displayName);
-                      }}
+                      onClick={() => void handleViewIdCard(st)}
+                      disabled={loadingIdUid === st.uid}
                       data-testid={`view-id-card-btn-${st.uid}`}
-                      className="min-h-[48px] px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer shadow-xs"
+                      className="min-h-[48px] px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer shadow-xs disabled:opacity-60"
                     >
-                      <span className="text-base">🪪</span>
-                      <span>{isAr ? 'معاينة كارنيه النقابة / الهوية' : 'View ID Card'}</span>
+                      {loadingIdUid === st.uid ? (
+                        <>
+                          <LoadingSpinner size="sm" />
+                          <span>{isAr ? 'جاري التحميل...' : 'Loading...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-base">🪪</span>
+                          <span>{isAr ? 'معاينة كارنيه النقابة / الهوية' : 'View ID Card'}</span>
+                        </>
+                      )}
                     </button>
                   ) : (
                     <span className="text-xs text-slate-400 italic px-2">
