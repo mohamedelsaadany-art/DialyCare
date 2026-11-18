@@ -33,7 +33,7 @@ import {
   decideBlobRead,
 } from '../cloud-store';
 import { createSessionToken } from '../server-auth';
-import { GET as syncGet, POST as syncPost, isIfNoneMatch } from '../../app/api/sync/route';
+import { GET as syncGet, POST as syncPost } from '../../app/api/sync/route';
 import type { StoredAccount } from '../types';
 
 let assertions = 0;

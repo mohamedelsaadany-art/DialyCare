@@ -351,11 +351,12 @@ export default function LoginPage() {
         },
       });
 
-      if (newUser.reactivationStatus === 'pending' || (newUser as any).status === 'pending_reactivation') {
+      const newUserRecord = newUser as unknown as Record<string, unknown>;
+      if (newUser.reactivationStatus === 'pending' || newUserRecord.status === 'pending_reactivation') {
         setReactivationNotice({
           name: patFullName.trim(),
           phone: patPhone.trim(),
-          adminWhatsApp: (newUser as any).adminWhatsApp || process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678',
+          adminWhatsApp: (newUserRecord.adminWhatsApp as string | undefined) || process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678',
         });
         return;
       }

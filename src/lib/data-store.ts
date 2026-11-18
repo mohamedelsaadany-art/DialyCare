@@ -769,23 +769,24 @@ export function calculateArchiveDaysRemaining(archivedAt?: string, archiveExpire
 
 export function getArchivedPatientRecordsLocal(): ArchivedPatientRecord[] {
   initDataStore();
-  const rawRecords = readStorage<any[]>(STORAGE_KEYS.ARCHIVED_PATIENTS, []);
+  const rawRecords = readStorage<Record<string, unknown>[]>(STORAGE_KEYS.ARCHIVED_PATIENTS, []);
   const nowMs = Date.now();
-  const records: ArchivedPatientRecord[] = rawRecords.map((r) => {
+  const records: ArchivedPatientRecord[] = rawRecords.map((item) => {
+    const r = item as unknown as Record<string, unknown> & Partial<ArchivedPatientRecord> & Partial<Patient>;
     if (!r.patient && r.id) {
       const purgeAt =
-        r.purgeAt ||
-        r.archiveExpiresAt ||
-        (r.archivedAt ? new Date(new Date(r.archivedAt).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString() : new Date(nowMs + 14 * 24 * 60 * 60 * 1000).toISOString());
+        (r.purgeAt as string | undefined) ||
+        (r.archiveExpiresAt as string | undefined) ||
+        (r.archivedAt ? new Date(new Date(r.archivedAt as string).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString() : new Date(nowMs + 14 * 24 * 60 * 60 * 1000).toISOString());
       return {
-        archiveId: r.archiveId || `arch_${r.id}`,
-        id: r.id,
-        patientId: r.id,
-        fullName: r.fullName,
-        fullNameAr: r.fullNameAr,
-        phone: r.phone,
-        username: r.username,
-        patient: r,
+        archiveId: (r.archiveId as string | undefined) || `arch_${r.id}`,
+        id: r.id as string,
+        patientId: r.id as string,
+        fullName: (r.fullName as string | undefined) || '',
+        fullNameAr: (r.fullNameAr as string | undefined) || '',
+        phone: (r.phone as string | undefined) || '',
+        username: (r.username as string | undefined) || '',
+        patient: r as unknown as Patient,
         sessions: [],
         labResults: [],
         medications: [],
@@ -794,13 +795,13 @@ export function getArchivedPatientRecordsLocal(): ArchivedPatientRecord[] {
         dietLogs: [],
         adherenceLogs: [],
         reminders: [],
-        archivedAt: r.archivedAt || new Date().toISOString(),
+        archivedAt: (r.archivedAt as string | undefined) || new Date().toISOString(),
         purgeAt,
-        archivedBy: r.archivedBy || 'Super Admin',
-        reactivationStatus: r.reactivationStatus || 'none',
+        archivedBy: (r.archivedBy as string | undefined) || 'Super Admin',
+        reactivationStatus: (r.reactivationStatus as ArchivedPatientRecord['reactivationStatus']) || 'none',
       };
     }
-    return r as ArchivedPatientRecord;
+    return r as unknown as ArchivedPatientRecord;
   });
 
   const valid = records.filter((r) => {
@@ -830,20 +831,21 @@ export function getArchivedPatients(): Patient[] {
   initDataStore();
   const allPatients = readStorage<Patient[]>(STORAGE_KEYS.PATIENTS, INITIAL_DEMO_PATIENTS);
   const archivedInMain = allPatients.filter((p) => Boolean(p.isArchived));
-  const rawArchived = readStorage<any[]>(STORAGE_KEYS.ARCHIVED_PATIENTS, INITIAL_ARCHIVED_PATIENTS);
+  const rawArchived = readStorage<Record<string, unknown>[]>(STORAGE_KEYS.ARCHIVED_PATIENTS, INITIAL_ARCHIVED_PATIENTS as unknown as Record<string, unknown>[]);
   const map = new Map<string, Patient>();
 
-  rawArchived.forEach((raw) => {
-    const p: Patient = raw.patient ? raw.patient : raw;
+  rawArchived.forEach((rawItem) => {
+    const raw = rawItem as unknown as Record<string, unknown> & { patient?: Patient };
+    const p: Patient = (raw.patient ? raw.patient : raw) as unknown as Patient;
     if (p && p.id) {
       map.set(p.id, {
         ...p,
         isArchived: true,
-        archivedAt: p.archivedAt || raw.archivedAt,
-        archiveExpiresAt: p.archiveExpiresAt || raw.purgeAt,
-        archivedBy: p.archivedBy || raw.archivedBy,
-        reactivationStatus: p.reactivationStatus || raw.reactivationStatus,
-        reactivationRequestedAt: p.reactivationRequestedAt || raw.reactivationRequestedAt,
+        archivedAt: p.archivedAt || (raw.archivedAt as string | undefined),
+        archiveExpiresAt: p.archiveExpiresAt || (raw.purgeAt as string | undefined),
+        archivedBy: p.archivedBy || (raw.archivedBy as string | undefined),
+        reactivationStatus: p.reactivationStatus || (raw.reactivationStatus as Patient['reactivationStatus']),
+        reactivationRequestedAt: p.reactivationRequestedAt || (raw.reactivationRequestedAt as string | undefined),
       });
     }
   });

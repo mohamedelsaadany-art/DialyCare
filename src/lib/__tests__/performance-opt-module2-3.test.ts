@@ -41,7 +41,7 @@ if (typeof globalThis.window === 'undefined') {
     location: {
       origin: 'http://localhost:3000',
     },
-    dispatchEvent: (_event: Event) => true,
+    dispatchEvent: () => true,
     addEventListener: () => {},
     removeEventListener: () => {},
   };

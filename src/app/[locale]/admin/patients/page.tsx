@@ -156,24 +156,25 @@ export default function PatientsListPage() {
       if (res && res.ok) {
         const data = await res.json().catch(() => null);
         if (data && Array.isArray(data.archivedPatients)) {
-          const fetchedRows: PatientRow[] = data.archivedPatients.map((p: any, idx: number) => {
-            const innerPatient = p.patient || {};
-            const pid = p.id || innerPatient.id || p.patientId || `archived${idx + 1}`;
+          const fetchedRows: PatientRow[] = data.archivedPatients.map((rawItem: unknown, idx: number) => {
+            const p = (rawItem && typeof rawItem === 'object' ? rawItem : {}) as Record<string, unknown>;
+            const innerPatient = (p.patient && typeof p.patient === 'object' ? p.patient : {}) as Record<string, unknown>;
+            const pid = (p.id as string) || (innerPatient.id as string) || (p.patientId as string) || `archived${idx + 1}`;
             return {
-              ...innerPatient,
-              ...p,
+              ...(innerPatient as Partial<PatientRow>),
+              ...(p as Partial<PatientRow>),
               id: pid,
-              fullName: p.fullName || innerPatient.fullName || 'Patient',
-              fullNameAr: p.fullNameAr || innerPatient.fullNameAr,
-              phone: p.phone || innerPatient.phone,
-              username: p.username || innerPatient.username || getPatientUsername(pid) || `archived${idx + 1}`,
-              dialysisSchedule: innerPatient.dialysisSchedule || p.dialysisSchedule || 'SMW',
+              fullName: (p.fullName as string) || (innerPatient.fullName as string) || 'Patient',
+              fullNameAr: (p.fullNameAr as string) || (innerPatient.fullNameAr as string),
+              phone: (p.phone as string) || (innerPatient.phone as string),
+              username: (p.username as string) || (innerPatient.username as string) || getPatientUsername(pid) || `archived${idx + 1}`,
+              dialysisSchedule: ((innerPatient.dialysisSchedule as string) || (p.dialysisSchedule as string) || 'SMW') as PatientRow['dialysisSchedule'],
               metrics: getPatientMetrics(pid),
               daysRemaining:
-                p.daysRemaining ??
+                (p.daysRemaining as number | undefined) ??
                 calculateArchiveDaysRemaining(
-                  p.archivedAt || innerPatient.archivedAt,
-                  p.archiveExpiresAt || p.purgeAt || innerPatient.archiveExpiresAt
+                  (p.archivedAt as string | undefined) || (innerPatient.archivedAt as string | undefined),
+                  (p.archiveExpiresAt as string | undefined) || (p.purgeAt as string | undefined) || (innerPatient.archiveExpiresAt as string | undefined)
                 ),
             };
           });

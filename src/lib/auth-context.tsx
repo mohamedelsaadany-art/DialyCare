@@ -376,7 +376,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const serverUser = await registerOnServer('patient', { ...data });
-      if (serverUser.reactivationStatus === 'pending' || (serverUser as any).status === 'pending_reactivation') {
+      if (serverUser.reactivationStatus === 'pending' || (serverUser as unknown as Record<string, unknown>).status === 'pending_reactivation') {
         return serverUser;
       }
       return registerPatientAccount({ ...data, uid: serverUser.uid }, { skipCloudPush: true });

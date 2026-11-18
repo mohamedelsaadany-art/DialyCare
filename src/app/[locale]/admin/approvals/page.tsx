@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import {
   getAuthAccounts,
@@ -26,7 +26,6 @@ import TemporaryPasswordModal from '@/components/admin/TemporaryPasswordModal';
 export default function RegistrationApprovalsPage() {
   const locale = useLocale();
   const isAr = locale === 'ar';
-  const tAdmin = useTranslations('admin');
   const { user, isAdmin } = useAuth();
 
   const [users, setUsers] = useState<User[]>([]);
@@ -73,21 +72,25 @@ export default function RegistrationApprovalsPage() {
         if (res && res.ok) {
           const data = await res.json().catch(() => null);
           if (data && Array.isArray(data.reactivationRequests)) {
-            const mappedReactivations: Patient[] = data.reactivationRequests.map((r: any) => ({
-              ...((r && r.patient) || {}),
-              ...r,
-              id: r.id || r.patientId || (r.patient && r.patient.id),
-              fullName: r.fullName || (r.patient && r.patient.fullName),
-              fullNameAr: r.fullNameAr || (r.patient && (r.patient.fullNameAr || r.patient.fullName)),
-              phone: r.phone || (r.patient && r.patient.phone) || r.username,
-              username: r.username || (r.patient && r.patient.username),
-              dialysisSchedule: r.dialysisSchedule || (r.patient && r.patient.dialysisSchedule) || 'SMW',
-              archivedAt: r.archivedAt || (r.patient && r.patient.archivedAt),
-              archiveExpiresAt: r.archiveExpiresAt || r.purgeAt || (r.patient && r.patient.archiveExpiresAt),
-              daysRemaining: r.daysRemaining ?? calculateArchiveDaysRemaining(r.archivedAt, r.archiveExpiresAt || r.purgeAt),
-              reactivationStatus: r.reactivationStatus || (r.patient && r.patient.reactivationStatus) || 'pending',
-              reactivationRequestedAt: r.reactivationRequestedAt || (r.patient && r.patient.reactivationRequestedAt),
-            }));
+            const mappedReactivations: Patient[] = data.reactivationRequests.map((rawItem: unknown) => {
+              const r = (rawItem && typeof rawItem === 'object' ? rawItem : {}) as Record<string, unknown>;
+              const patientObj = (r.patient && typeof r.patient === 'object' ? r.patient : {}) as Record<string, unknown>;
+              return {
+                ...(patientObj as unknown as Partial<Patient>),
+                ...(r as unknown as Partial<Patient>),
+                id: (r.id as string) || (r.patientId as string) || (patientObj.id as string) || '',
+                fullName: (r.fullName as string) || (patientObj.fullName as string) || '',
+                fullNameAr: (r.fullNameAr as string) || (patientObj.fullNameAr as string) || (patientObj.fullName as string) || '',
+                phone: (r.phone as string) || (patientObj.phone as string) || (r.username as string) || '',
+                username: (r.username as string) || (patientObj.username as string) || '',
+                dialysisSchedule: ((r.dialysisSchedule as string) || (patientObj.dialysisSchedule as string) || 'SMW') as Patient['dialysisSchedule'],
+                archivedAt: (r.archivedAt as string | undefined) || (patientObj.archivedAt as string | undefined),
+                archiveExpiresAt: (r.archiveExpiresAt as string | undefined) || (r.purgeAt as string | undefined) || (patientObj.archiveExpiresAt as string | undefined),
+                daysRemaining: (r.daysRemaining as number | undefined) ?? calculateArchiveDaysRemaining(r.archivedAt as string | undefined, (r.archiveExpiresAt as string | undefined) || (r.purgeAt as string | undefined)),
+                reactivationStatus: ((r.reactivationStatus as string) || (patientObj.reactivationStatus as string) || 'pending') as Patient['reactivationStatus'],
+                reactivationRequestedAt: (r.reactivationRequestedAt as string | undefined) || (patientObj.reactivationRequestedAt as string | undefined),
+              } as Patient;
+            });
             setReactivationRequests(mappedReactivations);
           }
         }
@@ -401,21 +404,23 @@ export default function RegistrationApprovalsPage() {
         ) : (
           <div className="space-y-3">
             {reactivationRequests.map((patient) => {
-              const patientId = patient.id || (patient as any).patientId || (patient as any).patient?.id || '';
+              const pRec = patient as unknown as Record<string, unknown>;
+              const innerP = (pRec.patient && typeof pRec.patient === 'object' ? pRec.patient : {}) as Record<string, unknown>;
+              const patientId = patient.id || (pRec.patientId as string) || (innerP.id as string) || '';
               const daysRemaining =
-                (patient as any).daysRemaining ??
+                (pRec.daysRemaining as number | undefined) ??
                 calculateArchiveDaysRemaining(
-                  patient.archivedAt || (patient as any).patient?.archivedAt,
-                  patient.archiveExpiresAt || (patient as any).purgeAt || (patient as any).patient?.archiveExpiresAt
+                  patient.archivedAt || (innerP.archivedAt as string | undefined),
+                  patient.archiveExpiresAt || (pRec.purgeAt as string | undefined) || (innerP.archiveExpiresAt as string | undefined)
                 );
               const requestedDate =
                 patient.reactivationRequestedAt ||
-                (patient as any).patient?.reactivationRequestedAt ||
+                (innerP.reactivationRequestedAt as string | undefined) ||
                 patient.createdAt ||
-                (patient as any).patient?.createdAt;
+                (innerP.createdAt as string | undefined);
               const isUrgent = daysRemaining <= 3;
-              const phone = patient.phone || (patient as any).patient?.phone || patient.username || '—';
-              const schedule = patient.dialysisSchedule || (patient as any).patient?.dialysisSchedule || 'SMW';
+              const phone = patient.phone || (innerP.phone as string | undefined) || patient.username || '—';
+              const schedule = patient.dialysisSchedule || (innerP.dialysisSchedule as string | undefined) || 'SMW';
 
               return (
                 <div

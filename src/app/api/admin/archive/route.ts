@@ -64,13 +64,18 @@ export async function GET(request: Request) {
     }
 
     const formattedList = combinedList.map((rec) => {
-      const innerPatient = (rec as any).patient || {};
-      const archivedAt = rec.archivedAt || innerPatient.archivedAt || new Date().toISOString();
-      const purgeAt = rec.purgeAt || innerPatient.archiveExpiresAt || (rec as any).archiveExpiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      const recMap = rec as unknown as Record<string, unknown>;
+      const innerPatient = (recMap.patient as Record<string, unknown> | undefined) || {};
+      const archivedAt = rec.archivedAt || (innerPatient.archivedAt as string | undefined) || new Date().toISOString();
+      const purgeAt =
+        rec.purgeAt ||
+        (innerPatient.archiveExpiresAt as string | undefined) ||
+        (recMap.archiveExpiresAt as string | undefined) ||
+        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
       const daysRemaining = computeDaysRemaining(archivedAt, purgeAt);
-      const reactivationStatus = rec.reactivationStatus || innerPatient.reactivationStatus || 'none';
-      const reactivationRequestedAt = rec.reactivationRequestedAt || innerPatient.reactivationRequestedAt;
-      const pid = rec.id || innerPatient.id || rec.patientId || rec.archiveId;
+      const reactivationStatus = rec.reactivationStatus || (innerPatient.reactivationStatus as string | undefined) || 'none';
+      const reactivationRequestedAt = rec.reactivationRequestedAt || (innerPatient.reactivationRequestedAt as string | undefined);
+      const pid = rec.id || (innerPatient.id as string | undefined) || rec.patientId || rec.archiveId;
       const safeAccount = rec.account ? toPublicAccount(rec.account) : undefined;
 
       return {
@@ -78,11 +83,11 @@ export async function GET(request: Request) {
         ...rec,
         id: pid,
         patientId: pid,
-        fullName: rec.fullName || innerPatient.fullName || 'Patient',
-        fullNameAr: rec.fullNameAr || innerPatient.fullNameAr || innerPatient.fullName || 'مريض',
-        phone: rec.phone || innerPatient.phone || '',
-        username: rec.username || innerPatient.username || '',
-        dialysisSchedule: innerPatient.dialysisSchedule || (rec as any).dialysisSchedule || 'SMW',
+        fullName: rec.fullName || (innerPatient.fullName as string | undefined) || 'Patient',
+        fullNameAr: rec.fullNameAr || (innerPatient.fullNameAr as string | undefined) || (innerPatient.fullName as string | undefined) || 'مريض',
+        phone: rec.phone || (innerPatient.phone as string | undefined) || '',
+        username: rec.username || (innerPatient.username as string | undefined) || '',
+        dialysisSchedule: (innerPatient.dialysisSchedule as 'SMW' | 'STT' | undefined) || (recMap.dialysisSchedule as 'SMW' | 'STT' | undefined) || 'SMW',
         account: safeAccount,
         archivedAt,
         purgeAt,
