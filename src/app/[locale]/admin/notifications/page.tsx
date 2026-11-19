@@ -261,6 +261,21 @@ export default function NotificationsCenterPage() {
 
       addNotification(newNotif);
 
+      // Also alert the same patients' phones (only the ids chosen above).
+      void fetch('/api/admin/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          patientIds: recipients,
+          titleAr: newNotif.titleAr,
+          titleEn: newNotif.titleEn,
+          messageAr: newNotif.messageAr,
+          messageEn: newNotif.messageEn,
+          tag: newNotif.id,
+        }),
+      }).catch(() => undefined);
+
       setSuccessToast(true);
       setTitleEn('');
       setTitleAr('');
