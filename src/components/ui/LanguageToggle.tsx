@@ -40,14 +40,14 @@ export function LanguageToggle({ className = '', variant = 'button' }: LanguageT
         onClick={handleToggle}
         aria-label={`Switch to ${label}`}
         className={`
-          inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+          inline-flex items-center gap-1.5 px-2.5 min-[400px]:px-3 py-1.5 rounded-full
           bg-blue-50 text-[#1e6bb8] hover:bg-blue-100 text-xs font-bold
           border border-blue-200 transition-colors cursor-pointer select-none
           ${className}
         `}
       >
         <svg
-          className="w-3.5 h-3.5"
+          className="w-3.5 h-3.5 hidden min-[400px]:block"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"

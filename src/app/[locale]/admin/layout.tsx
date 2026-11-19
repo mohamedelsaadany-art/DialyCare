@@ -230,9 +230,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     <div className={`min-h-screen bg-slate-50 flex flex-col ${isRtl ? 'rtl' : 'ltr'}`} dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-xs h-16 flex items-center px-4 sm:px-6">
-        <div className="flex items-center justify-between w-full gap-4">
+        <div className="flex items-center justify-between w-full gap-2 sm:gap-4">
           {/* Left section: Hamburger (mobile) + Brand logo */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -242,13 +242,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <MenuIcon className="w-6 h-6" />
             </button>
 
-            <Link href={`/${locale}/admin`} className="flex items-center gap-2.5 group">
+            <Link href={`/${locale}/admin`} className="flex items-center gap-2 sm:gap-2.5 group min-w-0">
               <DialyCareLogo className="w-9 h-9 shrink-0 transition-transform group-hover:scale-105" />
-              <div className="flex flex-col">
-                <span className="font-bold text-slate-900 text-lg leading-tight tracking-tight">
+              <div className="flex flex-col min-w-0 overflow-hidden">
+                <span className="font-bold text-slate-900 text-lg leading-tight tracking-tight whitespace-nowrap">
                   {isRtl ? 'وَصْلِـ' : 'Wasli'}<span className="text-[#1e6bb8]">{isRtl ? 'تي' : 'ty'}</span>
                 </span>
-                <span className="text-[11px] font-semibold text-emerald-700 tracking-wider uppercase">
+                <span className="text-[11px] font-semibold text-emerald-700 tracking-wider uppercase truncate">
                   {isRtl ? 'بوابة الفريق الطبي' : 'Clinical Admin'}
                 </span>
               </div>
@@ -273,7 +273,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </form>
 
           {/* Right section: Cloud Sync Status + Language Toggle + Admin Info + Logout */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <button
               type="button"
               onClick={() => void runFullCloudSync()}
