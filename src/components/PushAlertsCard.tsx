@@ -1,103 +1,52 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  enablePushNotifications,
-  hasActivePushSubscription,
-  isIosNotInstalled,
-  isPushSupported,
-} from '@/lib/push-client';
+import { enablePushNotifications, isIosNotInstalled } from '@/lib/push-client';
 
-type View = 'hidden' | 'offer' | 'ios' | 'blocked';
+/** Fired by PatientNotificationPermissionBanner when the patient allows notifications. */
+export const NOTIF_PERMISSION_GRANTED_EVENT = 'waslity:notif-permission-granted';
 
 /**
- * Patient dashboard card: turns on phone alerts (Web Push) for this device.
- * Hidden once alerts are on. An existing grant is refreshed silently on mount.
+ * Registers this device for Web Push (phone alerts while the app is closed).
+ * Asking for permission stays with PatientNotificationPermissionBanner, so the
+ * patient sees one alerts card, not two. This component subscribes silently
+ * once permission is granted (on mount and right after the grant), and only
+ * renders on iPhone/iPad Safari outside the installed app, where push cannot
+ * work until the app is added to the home screen.
  */
 export function PushAlertsCard({ language }: { language: 'ar' | 'en' }) {
   const isAr = language === 'ar';
-  const [view, setView] = useState<View>('hidden');
-  const [busy, setBusy] = useState(false);
+  const [iosHint, setIosHint] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => {
       if (isIosNotInstalled()) {
-        if (!cancelled) setView('ios');
+        setIosHint(true);
         return;
       }
-      if (!isPushSupported()) return;
-      if (Notification.permission === 'denied') {
-        if (!cancelled) setView('blocked');
-        return;
-      }
-      if (Notification.permission === 'granted') {
-        // keep the server copy fresh (new language, rotated endpoint)
-        const r = await enablePushNotifications(language, false);
-        if (!cancelled && r !== 'enabled' && !(await hasActivePushSubscription())) setView('offer');
-        return;
-      }
-      if (!cancelled) setView('offer');
+      void enablePushNotifications(language, false);
     }, 0);
+    const onGranted = () => void enablePushNotifications(language, false);
+    window.addEventListener(NOTIF_PERMISSION_GRANTED_EVENT, onGranted);
     return () => {
-      cancelled = true;
       clearTimeout(t);
+      window.removeEventListener(NOTIF_PERMISSION_GRANTED_EVENT, onGranted);
     };
   }, [language]);
 
-  if (view === 'hidden') return null;
-
-  const onEnable = async () => {
-    setBusy(true);
-    const r = await enablePushNotifications(language, true);
-    setBusy(false);
-    if (r === 'enabled') setView('hidden');
-    else if (r === 'denied') setView('blocked');
-  };
+  if (!iosHint) return null;
 
   return (
     <section
-      data-testid="push-alerts-card"
-      className="rounded-3xl border border-blue-200 bg-blue-50 p-4 flex items-start gap-3"
+      data-testid="push-ios-hint"
+      className="rounded-2xl border border-blue-200 bg-blue-50 p-3 px-4 flex items-start gap-3 text-xs text-slate-700 leading-snug"
     >
-      <span className="text-2xl" aria-hidden="true">🔔</span>
-      <div className="min-w-0 flex-1">
-        {view === 'offer' && (
-          <>
-            <p className="font-bold text-slate-800 text-sm">
-              {isAr ? 'تنبيهات الهاتف' : 'Phone alerts'}
-            </p>
-            <p className="text-slate-600 text-xs mt-1 leading-snug">
-              {isAr
-                ? 'استقبل تذكير يوم الغسيل الكلوي على هاتفك حتى لو كان التطبيق مغلقًا.'
-                : 'Get your dialysis-day reminder on your phone, even when the app is closed.'}
-            </p>
-            <button
-              type="button"
-              onClick={() => void onEnable()}
-              disabled={busy}
-              data-testid="enable-push-btn"
-              className="mt-3 min-h-[44px] px-4 rounded-xl bg-[#1e6bb8] text-white text-sm font-bold disabled:opacity-60 cursor-pointer"
-            >
-              {busy ? (isAr ? 'جاري التفعيل...' : 'Turning on...') : isAr ? 'تفعيل تنبيهات الهاتف' : 'Turn on phone alerts'}
-            </button>
-          </>
-        )}
-        {view === 'ios' && (
-          <p className="text-slate-700 text-xs leading-snug">
-            {isAr
-              ? 'على الآيفون: مشاركة ← إضافة إلى الشاشة الرئيسية، ثم افتح التطبيق من الأيقونة لتفعيل التنبيهات.'
-              : 'On iPhone: Share → Add to Home Screen, then open the app from the icon to enable alerts.'}
-          </p>
-        )}
-        {view === 'blocked' && (
-          <p className="text-slate-700 text-xs leading-snug">
-            {isAr
-              ? 'التنبيهات محظورة لهذا الموقع. فعّلها من إعدادات المتصفح أو الهاتف لاستقبال تذكير يوم الغسيل.'
-              : 'Notifications are blocked for this site. Allow them in your browser or phone settings to get dialysis-day reminders.'}
-          </p>
-        )}
-      </div>
+      <span className="text-lg" aria-hidden="true">📲</span>
+      <p>
+        {isAr
+          ? 'لاستقبال تذكير يوم الغسيل على الآيفون: مشاركة ← إضافة إلى الشاشة الرئيسية، ثم افتح التطبيق من الأيقونة.'
+          : 'To get dialysis-day alerts on iPhone: Share → Add to Home Screen, then open the app from the icon.'}
+      </p>
     </section>
   );
 }

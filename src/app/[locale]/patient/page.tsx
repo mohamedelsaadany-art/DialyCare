@@ -532,6 +532,7 @@ export default function PatientDashboardPage() {
 
       {/* Device Notification Permission Banner (Allows device push/local notifications & troubleshooting) */}
       <PatientNotificationPermissionBanner onPermissionGranted={() => loadData()} />
+      <PushAlertsCard language={isAr ? 'ar' : 'en'} />
 
       {/* Adherence Survey Section & First Login Pop-Up Modal (R7 Questionnaire) */}
       <PatientAdherenceSurveySection patientId={activePatientId} autoOpenOnFirstLogin={true} />
@@ -552,7 +553,6 @@ export default function PatientDashboardPage() {
 
       {/* Dialysis Day vs Non-Dialysis Day Smart Awareness Card */}
       <DialysisDayCard dialysisSchedule={patientRecord?.dialysisSchedule} />
-      <PushAlertsCard language={isAr ? 'ar' : 'en'} />
 
       {/* Today's Overall Progress Ring */}
       <Card className="p-6 bg-white border border-slate-200/90 rounded-3xl shadow-xs text-center">

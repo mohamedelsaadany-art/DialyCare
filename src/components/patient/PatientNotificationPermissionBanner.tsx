@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
 import { requestNotificationPermission, showLocalNotification } from '@/lib/notifications';
 import Button from '@/components/ui/Button';
+import { NOTIF_PERMISSION_GRANTED_EVENT } from '@/components/PushAlertsCard';
 
 export interface PatientNotificationPermissionBannerProps {
   compact?: boolean;
@@ -47,6 +48,8 @@ export function PatientNotificationPermissionBanner({
       setPermission(res);
 
       if (res === 'granted') {
+        // register this device for phone alerts (PushAlertsCard listens)
+        window.dispatchEvent(new Event(NOTIF_PERMISSION_GRANTED_EVENT));
         showLocalNotification(
           isAr ? 'وَصْلِتي (Waslity)' : 'Waslity',
           isAr
