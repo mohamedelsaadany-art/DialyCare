@@ -292,7 +292,7 @@ export function PatientMedicationManager({
         <div className="flex flex-wrap items-center gap-3">
           {/* Patient dropdown if not locked to single patient */}
           {!initialPatientId && patients.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0 max-w-full">
               <label htmlFor="patient-select" className="text-xs font-bold text-slate-600 shrink-0">
                 {isAr ? 'المريض:' : 'Patient:'}
               </label>
@@ -300,7 +300,7 @@ export function PatientMedicationManager({
                 id="patient-select"
                 value={selectedPatientId}
                 onChange={(e) => setSelectedPatientId(e.target.value)}
-                className="min-h-[48px] px-3 py-2 text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8] cursor-pointer"
+                className="min-w-0 max-w-full flex-1 truncate min-h-[48px] px-3 py-2 text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e6bb8] cursor-pointer"
               >
                 {patients.map((p) => (
                   <option key={p.id} value={p.id}>

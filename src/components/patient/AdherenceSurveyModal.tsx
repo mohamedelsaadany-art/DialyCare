@@ -156,8 +156,8 @@ export function AdherenceSurveyModal({
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-[#1e6bb8] to-[#0284c7] text-white p-4 sm:p-5 shrink-0">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="inline-flex items-center gap-2 mb-1">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
                 <span className="text-xl">📋</span>
                 <Badge variant="info" size="sm" className="bg-white/20 text-white border-white/30">
                   {isAr ? cycleMeta.cycleLabelAr : cycleMeta.cycleLabelEn}
@@ -189,7 +189,7 @@ export function AdherenceSurveyModal({
               onClick={handleClose}
               data-testid="survey-modal-close-btn"
               aria-label={isAr ? 'إغلاق' : 'Close'}
-              className="w-12 h-12 min-h-[48px] min-w-[48px] rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-xl cursor-pointer"
+              className="shrink-0 w-12 h-12 min-h-[48px] min-w-[48px] rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-xl cursor-pointer"
             >
               ✕
             </button>
