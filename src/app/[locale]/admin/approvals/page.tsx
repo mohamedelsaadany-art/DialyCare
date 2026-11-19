@@ -24,6 +24,13 @@ import TemporaryPasswordModal from '@/components/admin/TemporaryPasswordModal';
 
 type PendingStaffUser = User & { hasIdCard?: boolean };
 
+// Synced local accounts no longer carry ID-card images (they are fetched on
+// demand), so remember which pending users have one from /api/admin/approvals.
+const idCardOwners = new Set<string>();
+function withIdCardFlags(list: User[]): PendingStaffUser[] {
+  return list.map((u) => (idCardOwners.has(u.uid) || u.idCardDataUrl ? { ...u, hasIdCard: true } : u));
+}
+
 export default function RegistrationApprovalsPage() {
   const locale = useLocale();
   const isAr = locale === 'ar';
@@ -58,7 +65,7 @@ export default function RegistrationApprovalsPage() {
       // 1. Immediately read local accounts so UI renders without delay
       const localAccs = getAuthAccounts();
       if (localAccs.length > 0) {
-        setUsers(localAccs.map((a) => a.user));
+        setUsers(withIdCardFlags(localAccs.map((a) => a.user)));
       }
       // Read local pending reactivations
       const localReactivations = getPendingReactivations();
@@ -84,6 +91,7 @@ export default function RegistrationApprovalsPage() {
               registeredAt: (p.registeredAt as string) || '',
               hasIdCard: Boolean(p.hasIdCard),
             }));
+            for (const p of remotePending) if (p.hasIdCard) idCardOwners.add(p.uid);
             setUsers(remotePending);
           }
         }
@@ -152,7 +160,7 @@ export default function RegistrationApprovalsPage() {
     const handleLocalUpdate = () => {
       if (!mounted) return;
       const localAccs = getAuthAccounts();
-      setUsers(localAccs.map((a) => a.user));
+      setUsers(withIdCardFlags(localAccs.map((a) => a.user)));
       const localReactivations = getPendingReactivations();
       setReactivationRequests(localReactivations);
     };
