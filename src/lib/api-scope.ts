@@ -46,7 +46,15 @@ function arr<T>(v: unknown): T[] {
 
 /** Public (password-less) accounts typed as StoredAccount[] for the existing wire shape. */
 export function publicAccounts(accounts: StoredAccount[]): StoredAccount[] {
-  return accounts.map((a) => toPublicAccount(a)) as unknown as StoredAccount[];
+  // ID-card images are large base64 blobs; they are served one at a time by
+  // /api/admin/approvals/id-card, never in bulk lists (sync, accounts).
+  return accounts.map((a) => {
+    const pub = toPublicAccount(a);
+    if (!pub.user || pub.user.idCardDataUrl === undefined) return pub;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { idCardDataUrl, ...user } = pub.user;
+    return { ...pub, user };
+  }) as unknown as StoredAccount[];
 }
 
 function isSttSchedule(schedule?: string): boolean {
