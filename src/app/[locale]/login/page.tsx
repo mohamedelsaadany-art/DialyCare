@@ -190,7 +190,7 @@ export default function LoginPage() {
         setReactivationNotice({
           name: res.patientName || identifier,
           phone: res.phone || identifier,
-          adminWhatsApp: res.adminWhatsApp || process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678',
+          adminWhatsApp: ADMIN_CONFIG.seniorResidentPhone,
         });
       } else if (res.status === 'pending' && res.user) {
         setPendingAccount(res.user);
@@ -356,7 +356,7 @@ export default function LoginPage() {
         setReactivationNotice({
           name: patFullName.trim(),
           phone: patPhone.trim(),
-          adminWhatsApp: (newUserRecord.adminWhatsApp as string | undefined) || process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678',
+          adminWhatsApp: ADMIN_CONFIG.seniorResidentPhone,
         });
         return;
       }
@@ -388,10 +388,8 @@ export default function LoginPage() {
 
   // Format WhatsApp message for archived patient reactivation
   const getReactivationWhatsAppUrl = (notice: { name?: string; phone?: string; adminWhatsApp?: string }) => {
-    const rawAdmin = notice.adminWhatsApp || process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678';
-    let cleanPhone = rawAdmin.replace(/\D/g, '');
-    if (cleanPhone.startsWith('01')) cleanPhone = '20' + cleanPhone.slice(1);
-    if (!cleanPhone) cleanPhone = '201012345678';
+    // Always the Senior Resident; never a number from the response.
+    const cleanPhone = ADMIN_CONFIG.seniorResidentPhone.replace(/\D/g, '');
 
     const pName = notice.name || '';
     const pPhone = notice.phone || '';

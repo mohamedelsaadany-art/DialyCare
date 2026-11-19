@@ -1348,26 +1348,23 @@ export async function archivePatients(
     patient.archiveExpiresAt = purgeAt;
     patient.reactivationStatus = 'none';
 
-    // Extract matching accounts (remove all copies from db.accounts)
+    // Extract this patient's own account only. Other people who share the
+    // phone number keep theirs.
     const cleanPatientPhone = (patient.phone || '').replace(/[\s\-\(\)\+]/g, '');
-    const accIndices: number[] = [];
-    db.accounts.forEach((a, idx) => {
-      const aCleanPhone = (a.phone || a.user?.phone || '').replace(/[\s\-\(\)\+]/g, '');
-      if (
-        a.user.uid === patient!.id ||
-        (patient!.username && a.username && a.username.toLowerCase() === patient!.username.toLowerCase()) ||
-        (cleanPatientPhone && aCleanPhone && (cleanPatientPhone === aCleanPhone || isPhoneMatch(a.phone || a.user?.phone || '', patient!.phone || '')))
-      ) {
-        accIndices.push(idx);
-      }
-    });
-
-    let account: StoredAccount | undefined;
-    for (let i = accIndices.length - 1; i >= 0; i--) {
-      const idx = accIndices[i];
-      const extracted = db.accounts.splice(idx, 1)[0];
-      if (!account) account = extracted;
+    let accIdx = db.accounts.findIndex((a) => a.user.uid === patient!.id);
+    if (accIdx === -1 && patient.username) {
+      const uname = patient.username.toLowerCase();
+      accIdx = db.accounts.findIndex((a) => a.user.role === 'patient' && (a.username || '').toLowerCase() === uname);
     }
+    if (accIdx === -1 && cleanPatientPhone) {
+      accIdx = db.accounts.findIndex((a) => {
+        if (a.user.role !== 'patient') return false;
+        const ph = a.phone || a.user?.phone || '';
+        const clean = ph.replace(/[\s\-\(\)\+]/g, '');
+        return Boolean(clean) && (clean === cleanPatientPhone || isPhoneMatch(ph, patient!.phone || ''));
+      });
+    }
+    const account: StoredAccount | undefined = accIdx >= 0 ? db.accounts.splice(accIdx, 1)[0] : undefined;
 
     if (account) {
       account.user.isArchived = true;
@@ -1450,9 +1447,7 @@ export async function restoreArchivedPatient(
 ): Promise<{ success: boolean; patient?: Patient; account?: StoredAccount }> {
   invalidateCloudStoreCache();
   const db = await getCloudDatabase({ forWrite: true });
-  if (!db.archivedPatients || db.archivedPatients.length === 0) {
-    return { success: false };
-  }
+  if (!db.archivedPatients) db.archivedPatients = [];
 
   const cleanTarget = patientId.trim();
   const cleanTargetPhone = cleanTarget.replace(/[\s\-\(\)\+]/g, '');
@@ -1475,7 +1470,7 @@ export async function restoreArchivedPatient(
   });
 
   if (recordIndex === -1) {
-    return { success: false };
+    return restoreAccountOnlyArchive(db, cleanTarget, reviewerName);
   }
 
   const [record] = db.archivedPatients.splice(recordIndex, 1);
@@ -1643,6 +1638,60 @@ export async function purgeExpiredArchivedPatients(now: Date = new Date()): Prom
   }
   invalidateCloudStoreCache();
   return purgedCount;
+}
+
+/** An active account flagged as archived with no archive record behind it. */
+export function isAccountOnlyArchived(acc: StoredAccount): boolean {
+  const status = acc.user?.status as string | undefined;
+  return acc.user?.role === 'patient' && (acc.user.isArchived === true || status === 'archived');
+}
+
+/**
+ * Restore a patient whose account was flagged as archived but who has no
+ * archive record (so nothing was moved out). Clears the flags in place.
+ */
+async function restoreAccountOnlyArchive(
+  db: UnifiedCloudDatabase,
+  target: string,
+  reviewerName: string
+): Promise<{ success: boolean; patient?: Patient; account?: StoredAccount }> {
+  const idx = db.accounts.findIndex((a) => a.user.uid === target && isAccountOnlyArchived(a));
+  if (idx === -1) return { success: false };
+  const prev = db.accounts[idx];
+  const acc: StoredAccount = {
+    ...prev,
+    user: {
+      ...prev.user,
+      status: 'active',
+      isArchived: false,
+      archivedAt: undefined,
+      archiveExpiresAt: undefined,
+      archivedBy: undefined,
+      reactivationStatus: undefined,
+      reactivationRequestedAt: undefined,
+      reviewedBy: reviewerName,
+      reviewedAt: new Date().toISOString(),
+    },
+  };
+  db.accounts[idx] = acc;
+  let patient: Patient | undefined;
+  const pIdx = db.patients.findIndex((p) => p.id === target);
+  if (pIdx >= 0) {
+    patient = {
+      ...db.patients[pIdx],
+      isActive: true,
+      isArchived: false,
+      archivedAt: undefined,
+      archiveExpiresAt: undefined,
+      archivedBy: undefined,
+      reactivationStatus: undefined,
+      reactivationRequestedAt: undefined,
+    };
+    db.patients[pIdx] = patient;
+  }
+  await saveCloudDatabase(db);
+  invalidateCloudStoreCache();
+  return { success: true, patient, account: acc };
 }
 
 /**

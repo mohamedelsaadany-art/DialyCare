@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ADMIN_WHATSAPP } from '@/lib/admin-config';
 import { v4 as uuidv4 } from 'uuid';
 import {
   addCloudAccountIfAbsent,
@@ -178,7 +179,7 @@ export async function POST(request: Request) {
           {
             success: true,
             status: 'pending_reactivation',
-            adminWhatsApp: process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678',
+            adminWhatsApp: ADMIN_WHATSAPP,
           },
           200
         );

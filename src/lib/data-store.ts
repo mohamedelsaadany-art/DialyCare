@@ -31,12 +31,8 @@ import defaultCoachingTips from '@/data/coaching-tips.json';
 import defaultReminderTemplates from '@/data/reminder-templates.json';
 import defaultDietChecklist from '@/data/diet-checklist.json';
 
-// Administrator contacts
-export const ADMIN_CONFIG = {
-  primaryPhone: '+201080641670', // Senior Resident contact (Primary Administrator)
-  seniorResidentPhone: '+201080641670', // Senior Resident contact
-  technicalAdminPhone: '+201552885823', // Technical administrator
-};
+import { ADMIN_CONFIG } from './admin-config';
+export { ADMIN_CONFIG };
 
 /**
  * Resilient phone normalizer for Egyptian (+20) and canonical phone numbers.

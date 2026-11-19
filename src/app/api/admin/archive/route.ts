@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getArchivedPatients, archivePatients, getCloudDatabase } from '@/lib/cloud-store';
+import { getArchivedPatients, archivePatients, getCloudDatabase, isAccountOnlyArchived } from '@/lib/cloud-store';
 import { getSession, isCrossOriginRequest, NO_STORE_HEADERS, sessionErrorResponse, toPublicAccount } from '@/lib/server-auth';
 
 function computeDaysRemaining(archivedAt?: string, archiveExpiresAt?: string): number {
@@ -61,6 +61,36 @@ export async function GET(request: Request) {
           });
         }
       }
+    }
+
+    // Accounts flagged as archived with no archive record: list them so they can be restored.
+    for (const acc of db.accounts || []) {
+      if (!isAccountOnlyArchived(acc)) continue;
+      const uid = acc.user.uid;
+      if (combinedList.some((a) => a.id === uid || a.patient?.id === uid || a.account?.user.uid === uid)) continue;
+      const p = (db.patients || []).find((x) => x.id === uid);
+      combinedList.push({
+        archiveId: `acct-${uid}`,
+        id: uid,
+        patientId: uid,
+        fullName: p?.fullName || acc.user.displayName,
+        fullNameAr: p?.fullNameAr || acc.user.displayName,
+        phone: p?.phone || acc.phone || acc.user.phone,
+        username: acc.username,
+        patient: p,
+        sessions: [],
+        labResults: [],
+        medications: [],
+        adherenceSurveys: [],
+        fluidLogs: [],
+        dietLogs: [],
+        adherenceLogs: [],
+        reminders: [],
+        archivedAt: acc.user.archivedAt || acc.user.createdAt || new Date().toISOString(),
+        purgeAt: acc.user.archiveExpiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        archivedBy: acc.user.archivedBy || 'Super Admin',
+        reactivationStatus: acc.user.reactivationStatus || 'none',
+      } as (typeof combinedList)[number]);
     }
 
     const formattedList = combinedList.map((rec) => {

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ADMIN_WHATSAPP } from '@/lib/admin-config';
 import { getArchivedPatients, getCloudAccounts } from '@/lib/cloud-store';
 import { isPhoneMatch } from '@/lib/phone';
 import {
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     if (result.kind === 'invalid') {
       // Check if credentials match an account that is currently archived
       const archivedList = await getArchivedPatients();
-      const adminWhatsApp = process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678';
+      const adminWhatsApp = ADMIN_WHATSAPP;
 
       for (const rec of archivedList) {
         const purgeTime = new Date(rec.purgeAt).getTime();
@@ -135,7 +136,7 @@ export async function POST(request: Request) {
 
     // Also check if active accounts list had this account marked as archived
     if (user.isArchived || (user.status as string) === 'archived') {
-      const adminWhatsApp = process.env.NEXT_PUBLIC_ADMIN_WHATSAPP || '+201012345678';
+      const adminWhatsApp = ADMIN_WHATSAPP;
       return json(
         {
           success: false,
