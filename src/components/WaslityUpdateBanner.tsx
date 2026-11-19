@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getNotifications } from '@/lib/data-store';
-import { showLocalNotification, testNotificationTrigger } from '@/lib/notifications';
+import { testNotificationTrigger } from '@/lib/notifications';
 import { CURRENT_USER_KEY } from '@/lib/session-client';
 import type { Notification, User } from '@/lib/types';
 
@@ -22,14 +21,6 @@ function getSignedInUser(): User | null {
     }
   }
   return null;
-}
-
-function hasSeenUpdate(id: string): boolean {
-  try {
-    return window.localStorage.getItem(UPDATE_SEEN_PREFIX + id) === '1';
-  } catch {
-    return false;
-  }
 }
 
 function markUpdateSeen(id: string): void {
@@ -65,44 +56,10 @@ export function WaslityUpdateBanner() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // The banner only appears for a real new release (new service worker).
+    // Old "update" broadcast announcements no longer trigger it.
     const checkForUpdateNotice = () => {
-      try {
-        const user = getSignedInUser();
-        if (!user) {
-          // Visitors and signed-out users never see the update notice.
-          setShowBanner(false);
-          return;
-        }
-        const notifs = getNotifications();
-        const updateNotif = notifs.find(
-          (n) =>
-            n &&
-            n.type === 'broadcast' &&
-            (n.id.includes('update') ||
-              n.titleAr?.includes('تحديث') ||
-              n.titleEn?.toLowerCase().includes('update'))
-        );
-        if (updateNotif && shouldShowUpdateNotice(user, updateNotif, hasSeenUpdate(updateNotif.id))) {
-          setNoticeId(updateNotif.id);
-          setShowBanner(true);
-
-          // Trigger native device notification if permissions granted and not alerted yet
-          const alertedKey = `WASLITY_ALERTED_${updateNotif.id}`;
-          if (
-            typeof window !== 'undefined' &&
-            'Notification' in window &&
-            window.Notification.permission === 'granted' &&
-            !window.localStorage.getItem(alertedKey)
-          ) {
-            window.localStorage.setItem(alertedKey, 'true');
-            const title = isAr ? updateNotif.titleAr || updateNotif.titleEn : updateNotif.titleEn || updateNotif.titleAr;
-            const message = isAr ? updateNotif.messageAr || updateNotif.messageEn : updateNotif.messageEn || updateNotif.messageAr;
-            showLocalNotification(title, message);
-          }
-        }
-      } catch {
-        // ignore
-      }
+      if (!getSignedInUser()) setShowBanner(false);
     };
 
     checkForUpdateNotice();
@@ -126,6 +83,12 @@ export function WaslityUpdateBanner() {
       window.removeEventListener('dialycare_cloud_sync_completed', checkForUpdateNotice);
     };
   }, [isAr]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (showBanner) document.documentElement.dataset.waslityBanner = '1';
+    else delete document.documentElement.dataset.waslityBanner;
+  }, [showBanner]);
 
   const handleApplyUpdate = async () => {
     setIsUpdating(true);
@@ -180,13 +143,13 @@ export function WaslityUpdateBanner() {
           <div>
             <p className="font-extrabold text-sm sm:text-base leading-snug">
               {isAr
-                ? 'تحديث هام متاح لتطبيق وَصْلِتي!'
-                : 'Important Update Available for Waslity!'}
+                ? 'نسخة جديدة من وَصْلِتي جاهزة'
+                : 'A new version of Waslity is ready'}
             </p>
             <p className="text-xs text-sky-100 mt-0.5 leading-relaxed">
               {isAr
-                ? 'يتوفر الآن إصدار جديد يدعم العمل بدون إنترنت، وأعلى معايير الأمان وسرعة مزامنة البيانات السريرية.'
-                : 'A new release is available with offline support, top-tier security, and real-time clinical sync.'}
+                ? 'اضغط تحديث لتحميل أحدث نسخة.'
+                : 'Tap update to load the latest version.'}
             </p>
             {testStatus && (
               <p className="text-xs font-bold text-amber-200 mt-1 bg-black/30 px-2 py-0.5 rounded-lg inline-block animate-in fade-in">

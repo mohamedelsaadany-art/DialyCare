@@ -321,11 +321,11 @@ export default function PatientProfilePage() {
             </span>
           </div>
 
-          <div className="pt-2 flex items-center justify-between">
-            <span className="text-slate-500 font-medium">
+          <div className="pt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+            <span className="text-slate-500 font-medium whitespace-nowrap">
               {isAr ? 'جدول جلسات الغسيل:' : 'Dialysis Schedule:'}
             </span>
-            <Badge variant="info" size="sm" className="font-extrabold">
+            <Badge variant="info" size="sm" className="font-extrabold whitespace-normal text-center">
               {scheduleLabel}
             </Badge>
           </div>

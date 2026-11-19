@@ -9,6 +9,12 @@ const STORAGE_KEY = 'dialycare_pwa_prompt_dismissed';
 // Empty subscriber for hydration-safe client mounting check (React 19 compliant)
 const emptySubscribe = () => () => {};
 
+/** True while the update banner or any dialog is on screen. */
+function otherPopupOpen(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.dataset.waslityBanner === '1' || Boolean(document.querySelector('[role="dialog"], [aria-modal="true"]'));
+}
+
 export function InstallPwaPrompt() {
   const isMounted = useSyncExternalStore(
     emptySubscribe,
@@ -45,9 +51,13 @@ export function InstallPwaPrompt() {
     }
 
     // Show prompt after a short delay so page finishes initial load smoothly
-    const timer = setTimeout(() => {
+    // ...and never on top of the update banner or another pop-up: wait until
+    // the screen is clear, checking every few seconds.
+    const timer = setInterval(() => {
+      if (otherPopupOpen()) return;
+      clearInterval(timer);
       setIsVisible(true);
-    }, 1200);
+    }, 4000);
 
     // 3. Listen for app installed event
     const handleInstalled = () => {
@@ -61,7 +71,7 @@ export function InstallPwaPrompt() {
 
     // 4. Listen for prompt availability event
     const handleInstallPromptAvailable = () => {
-      if (dismissed !== 'true') {
+      if (dismissed !== 'true' && !otherPopupOpen()) {
         setIsVisible(true);
       }
     };
@@ -71,7 +81,7 @@ export function InstallPwaPrompt() {
     window.addEventListener('dialycare:install-prompt', handleInstallPromptAvailable);
 
     return () => {
-      clearTimeout(timer);
+      clearInterval(timer);
       window.removeEventListener('appinstalled', handleInstalled);
       window.removeEventListener('dialycare:app-installed', handleInstalled);
       window.removeEventListener('dialycare:install-prompt', handleInstallPromptAvailable);
