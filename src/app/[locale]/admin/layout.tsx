@@ -57,7 +57,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           setPendingApprovalsCount(pending.length);
         }
         if (user?.uid) {
-          const notifs = getNotifications();
+          // Staff see every notification (they manage them), but only ones
+          // addressed to them should pop up; patient alerts stay with patients.
+          const notifs = getNotifications().filter(
+            (n) => n && n.senderId !== user.uid && Array.isArray(n.recipientIds) && n.recipientIds.includes(user.uid)
+          );
           checkAndTriggerLocalNotifications(user.uid, notifs, isRtl);
         }
       }
