@@ -38,6 +38,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DialysisDayCard } from '@/components/DialysisDayCard';
+import { PushAlertsCard } from '@/components/PushAlertsCard';
 import { DoctorNotificationsInboxModal } from '@/components/DoctorNotificationsInboxModal';
 import { PatientMedicationSection } from '@/components/patient/PatientMedicationSection';
 import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
@@ -551,6 +552,7 @@ export default function PatientDashboardPage() {
 
       {/* Dialysis Day vs Non-Dialysis Day Smart Awareness Card */}
       <DialysisDayCard dialysisSchedule={patientRecord?.dialysisSchedule} />
+      <PushAlertsCard language={isAr ? 'ar' : 'en'} />
 
       {/* Today's Overall Progress Ring */}
       <Card className="p-6 bg-white border border-slate-200/90 rounded-3xl shadow-xs text-center">
