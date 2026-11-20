@@ -166,8 +166,7 @@ export function PatientMedicationSection({
 
     // Second tap on the chosen button: undo it, back to "not chosen".
     if (slot.status === newStatus) {
-      let last = null;
-      for (const id of previousIds) last = undoAdherenceLog(id) || last;
+      const last = undoAdherenceLog(previousIds);
       setDoseStatuses((prev) => ({ ...prev, [slotKey]: 'pending' }));
       setDoseLogIds((prev) => ({ ...prev, [slotKey]: [] }));
       if (last) onAdherenceLogged?.(last);
@@ -176,7 +175,7 @@ export function PatientMedicationSection({
     }
 
     // Switching between "took it" and "not taken": the old choice is cancelled first.
-    for (const id of previousIds) undoAdherenceLog(id);
+    undoAdherenceLog(previousIds);
 
     // Optimistically update UI
     setDoseStatuses((prev) => ({

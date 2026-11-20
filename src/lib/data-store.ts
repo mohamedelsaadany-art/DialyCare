@@ -1219,12 +1219,16 @@ export function addAdherenceLog(log: Omit<AdherenceLog, 'id'> | AdherenceLog): A
   return newLog;
 }
 
-/** Cancel an earlier tap (e.g. "I took it" pressed again). Returns the undo record, or null if not found. */
-export function undoAdherenceLog(logId: string | undefined | null): AdherenceLog | null {
-  if (!logId) return null;
-  const original = getAdherenceLogs().find((l) => l.id === logId);
-  if (!original) return null;
-  return addAdherenceLog(buildUndoLog(original));
+/**
+ * Cancel earlier taps (e.g. "I took it" pressed again) with ONE undo record.
+ * Returns the undo record, or null if none of the ids exist.
+ */
+export function undoAdherenceLog(logIds: string | string[] | undefined | null): AdherenceLog | null {
+  const ids = new Set((Array.isArray(logIds) ? logIds : [logIds]).filter((x): x is string => !!x));
+  if (ids.size === 0) return null;
+  const originals = getAdherenceLogs().filter((l) => ids.has(l.id));
+  if (originals.length === 0) return null;
+  return addAdherenceLog(buildUndoLog(originals));
 }
 
 // ==========================================

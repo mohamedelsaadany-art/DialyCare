@@ -1072,18 +1072,18 @@ export async function mergeCloudDatabase(
         if (arch) {
           if (!Array.isArray(arch.adherenceLogs)) arch.adherenceLogs = [];
           const exists = arch.adherenceLogs.some(
-            (a) => (a.id && inc.id && a.id === inc.id) || (a.type === inc.type && String(a.loggedAt) === String(inc.loggedAt))
+            (a) => (a.id && inc.id ? a.id === inc.id : a.type === inc.type && String(a.loggedAt) === String(inc.loggedAt))
           );
           if (!exists) arch.adherenceLogs.push(inc);
         }
         continue;
       }
-      const exists = mergedAdherence.some(
-        (a) =>
-          (a.id && inc.id && a.id === inc.id) ||
-          (a.patientId === inc.patientId &&
-            a.type === inc.type &&
-            String(a.loggedAt) === String(inc.loggedAt))
+      // Rows with ids are matched by id only (an undo and a new tap can share a
+      // timestamp); the same-time check is only for old rows without an id.
+      const exists = mergedAdherence.some((a) =>
+        a.id && inc.id
+          ? a.id === inc.id
+          : a.patientId === inc.patientId && a.type === inc.type && String(a.loggedAt) === String(inc.loggedAt)
       );
       if (!exists) {
         mergedAdherence.push(inc);

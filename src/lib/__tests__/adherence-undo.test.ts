@@ -56,4 +56,27 @@ const db = {
 const plan = planPatientAlerts({ db, now: at, state: { ...emptyAlertState('2026-11-21'), labsBaselined: true }, reachablePatientIds: new Set(['p1']), recentlyActiveIds: new Set(['p1']) });
 eq(plan.alerts[0]?.kind, 'med', 'undone dose still gets its medicine alert');
 
-console.log(`ADHERENCE-UNDO SUITE PASSED: ${n} assertions.`);
+// --- one undo cancels many taps on the same dose ---
+const taps = [1, 2, 3].map((i) => addAdherenceLog({ patientId: PID, type: 'ttt', status: i % 2 ? 'done' : 'skipped', loggedAt: new Date(Date.now() + i).toISOString(), data: { medicationId: 'm2', scheduleTime: '14:00' } }));
+const one = undoAdherenceLog(taps.map((x) => x.id));
+eq([...(one?.data.undoes as string[])].sort(), taps.map((x) => x.id).sort(), 'single undo record lists every tap');
+eq(getAdherenceLogs(PID).filter((l) => l.data?.medicationId === 'm2'), [], 'all taps on that dose undone');
+
+// --- server merge keeps different records that share a timestamp ---
+(async () => {
+  for (const k of ['BLOB_READ_WRITE_TOKEN', 'VERCEL_OIDC_TOKEN', 'BLOB_STORE_ID', 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY']) delete process.env[k];
+  const { mergeCloudDatabase, getCloudDatabase } = await import('../cloud-store');
+  const same = '2026-11-21T09:00:00.000Z';
+  await mergeCloudDatabase({
+    adherenceLogs: [
+      { id: 'srv-undo', patientId: 'srv-p', type: 'ttt', status: 'done', loggedAt: same, data: { undoes: 'srv-old' } },
+      { id: 'srv-new', patientId: 'srv-p', type: 'ttt', status: 'skipped', loggedAt: same, data: { medicationId: 'm' } },
+    ],
+  } as Partial<UnifiedCloudDatabase>);
+  const stored = (await getCloudDatabase()).adherenceLogs.filter((l) => l.patientId === 'srv-p').map((l) => l.id).sort();
+  eq(stored, ['srv-new', 'srv-undo'], 'undo and new tap with the same time are both kept');
+  await mergeCloudDatabase({ adherenceLogs: [{ id: 'srv-new', patientId: 'srv-p', type: 'ttt', status: 'skipped', loggedAt: same, data: {} }] } as Partial<UnifiedCloudDatabase>);
+  eq((await getCloudDatabase()).adherenceLogs.filter((l) => l.patientId === 'srv-p').length, 2, 're-sending the same id is not duplicated');
+  console.log(`ADHERENCE-UNDO SUITE PASSED: ${n} assertions.`);
+})().catch((e) => { console.log(e); process.exit(1); });
+void 0;
