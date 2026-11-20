@@ -4,11 +4,11 @@
  */
 import assert from 'node:assert';
 
-for (const k of ['BLOB_READ_WRITE_TOKEN', 'VERCEL_OIDC_TOKEN', 'BLOB_STORE_ID', 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'SESSION_SECRET', 'VERCEL', 'AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION']) delete process.env[k];
+for (const k of ['BLOB_READ_WRITE_TOKEN', 'VERCEL_OIDC_TOKEN', 'BLOB_STORE_ID', 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'SESSION_SECRET', 'VERCEL', 'AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION', 'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_ID']) delete process.env[k];
 
 import { todayScript, medsScript, labsScript, tipScript } from '../avatar-scripts';
 import { DRAFT_LAB_ADVICE, mergeLabAdvice, approvedLabAdvice, isLabAdviceKey } from '../lab-advice';
-import { buildSsml } from '../tts-ssml';
+import { buildSsml, ttsProviders } from '../tts-ssml';
 import { clampAvatarPosition } from '../../components/patient/TalkingAvatar';
 import { CLINICAL_12_LAB_TESTS } from '../../components/admin/PatientLabResultsModal';
 import { saveCloudAccounts } from '../cloud-store';
@@ -77,6 +77,15 @@ async function run(): Promise<void> {
 
   // ---- SSML is escaped ----
   ok(buildSsml('a < b & "c"', 'ar-EG-SalmaNeural').includes('a &lt; b &amp; &quot;c&quot;'), 'text escaped in SSML');
+
+  // ---- which voice ----
+  eq(ttsProviders(), [], 'no keys -> phone voice');
+  process.env.AZURE_SPEECH_KEY = 'a'; process.env.AZURE_SPEECH_REGION = 'eastus';
+  eq(ttsProviders().map((p) => p.name), ['azure'], 'Azure alone');
+  process.env.ELEVENLABS_API_KEY = 'e'; process.env.ELEVENLABS_VOICE_ID = 'v1';
+  eq(ttsProviders().map((p) => p.name), ['elevenlabs', 'azure'], 'ElevenLabs first, Azure as backup');
+  ok(ttsProviders()[0].voiceTag.includes('v1'), 'changing the voice changes the saved clips');
+  for (const k of ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION', 'ELEVENLABS_API_KEY', 'ELEVENLABS_VOICE_ID']) delete process.env[k];
 
   // ---- routes ----
   const acct = (uid: string, role: User['role']): StoredAccount => ({ username: uid, phone: `0100000${uid.length}${role.length}`, password: hashPassword('x-Pass-123'), user: { uid, role, username: uid, displayName: uid, language: 'ar', status: 'active', createdAt: '2026-01-01' } });
