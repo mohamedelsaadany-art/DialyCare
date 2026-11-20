@@ -120,62 +120,48 @@ export function PatientNotificationPermissionBanner({
     return (
       <div
         data-testid="notification-denied-guide"
-        className="p-4 sm:p-5 rounded-2xl bg-amber-50/90 border-2 border-amber-300 text-slate-800 space-y-3 shadow-xs animate-in fade-in"
+        className="p-4 rounded-3xl bg-amber-50 border-2 border-amber-300 text-slate-800 space-y-2"
       >
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 text-lg">
-            ⚠️
-          </div>
-          <div className="flex-1">
-            <h4 className="text-sm font-bold text-amber-900 leading-snug">
-              {isAr ? 'تنبيهات الهاتف محظورة في متصفحك' : 'Device notifications are blocked'}
+        <div className="flex items-center gap-3">
+          <span className="text-4xl shrink-0" aria-hidden="true">🔕</span>
+          <div className="min-w-0">
+            <h4 className="text-lg font-black text-amber-950 leading-snug">
+              {isAr ? 'التنبيهات مقفولة على هاتفك' : 'Alerts are off on your phone'}
             </h4>
-            <p className="text-xs text-amber-800/90 mt-1 leading-relaxed">
+            <p className="text-base text-amber-900 mt-0.5 leading-snug">
               {isAr
-                ? 'المتصفح يمنع وصول الإشعارات إلى جهازك افتراضياً. لتصلك مواعيد الأدوية والجلسات، يرجى السماح بالإشعارات من إعدادات المتصفح:'
-                : 'Your browser is currently blocking notifications. To receive medication and dialysis alerts, please enable notifications in your browser settings:'}
+                ? 'اطلب من الممرض في جلستك القادمة أن يشغّلها لك.'
+                : 'Ask the nurse at your next session to turn them on for you.'}
             </p>
           </div>
         </div>
 
-        <div className="bg-white/90 p-3 rounded-xl border border-amber-200 text-xs text-slate-700 space-y-1.5 font-medium">
-          <p className="font-bold text-slate-900">
-            {isAr ? 'خطوات التفعيل السريعة:' : 'Quick activation steps:'}
-          </p>
-          <ul className="list-disc list-inside space-y-1 text-slate-600">
-            <li>
-              {isAr
-                ? 'اضغط على أيقونة القفل أو الإعدادات 🔒 بجوار عنوان الموقع (URL) بأعلى الشاشة.'
-                : 'Tap the lock/settings icon 🔒 next to the website URL at the top.'}
-            </li>
-            <li>
-              {isAr
-                ? 'اختر "الأذونات" (Permissions) ⬅ "الإشعارات" (Notifications).'
-                : 'Select "Permissions" ⬅ "Notifications".'}
-            </li>
-            <li>
-              {isAr
-                ? 'اختر "السماح" (Allow) ثم اضغط على زر التحقق بالأسفل.'
-                : 'Select "Allow" and then click the check button below.'}
-            </li>
-          </ul>
-        </div>
-
-        <div className="flex items-center gap-2 pt-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (typeof window !== 'undefined' && 'Notification' in window) {
-                setPermission(window.Notification.permission);
-              }
-            }}
-            className="flex-1 bg-white hover:bg-slate-50 text-xs font-bold py-2 min-h-[44px]"
-          >
-            {isAr ? '🔄 فحص الإذن مرة أخرى' : '🔄 Re-check Permission'}
-          </Button>
-        </div>
+        {/* Steps for the nurse or a family member helping the patient */}
+        <details className="rounded-2xl bg-white/90 border border-amber-200 text-sm">
+          <summary className="cursor-pointer select-none px-3 py-2.5 font-bold text-slate-700 min-h-[44px] flex items-center">
+            {isAr ? 'طريقة التشغيل (للممرض أو المرافق)' : 'How to turn on (for the nurse or a helper)'}
+          </summary>
+          <ol className="list-decimal list-inside space-y-1 px-3 pb-3 text-slate-700">
+            <li>{isAr ? 'اضغط على 🔒 بجوار عنوان الموقع.' : 'Tap 🔒 next to the website address.'}</li>
+            <li>{isAr ? 'اختر الأذونات ثم الإشعارات.' : 'Open Permissions, then Notifications.'}</li>
+            <li>{isAr ? 'اختر «سماح» ثم اضغط الزر بالأسفل.' : 'Choose “Allow”, then tap the button below.'}</li>
+          </ol>
+          <div className="px-3 pb-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (typeof window !== 'undefined' && 'Notification' in window) {
+                  setPermission(window.Notification.permission);
+                }
+              }}
+              className="w-full bg-white text-sm font-bold min-h-[44px]"
+            >
+              {isAr ? '🔄 تحقق مرة أخرى' : '🔄 Check again'}
+            </Button>
+          </div>
+        </details>
       </div>
     );
   }

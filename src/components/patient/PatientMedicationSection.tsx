@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { friendlyDose, friendlyTime } from '@/lib/plain-words';
 import { useLocale, useTranslations } from 'next-intl';
 import type { PatientMedication, AdherenceLog, AdherenceStatus } from '@/lib/types';
 import {
@@ -219,22 +220,20 @@ export function PatientMedicationSection({
               💊
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                  {tMeds('todayMedications') || (isAr ? 'أدوية اليوم الموصوفة' : "Today's Prescribed Medications")}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h2 className="text-xl font-black text-slate-900 tracking-tight whitespace-nowrap">
+                  {isAr ? 'أدويتك اليوم' : 'Your medicines today'}
                 </h2>
                 <Badge
                   variant={completedCount === doseSlots.length && doseSlots.length > 0 ? 'success' : 'info'}
                   size="sm"
-                  className="font-mono font-bold"
+                  className="font-bold whitespace-nowrap"
                 >
-                  {completedCount}/{doseSlots.length} {isAr ? 'جرعة' : 'Taken'}
+                  {isAr ? `أخذت ${completedCount} من ${doseSlots.length}` : `${completedCount} of ${doseSlots.length} taken`}
                 </Badge>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                {isAr
-                  ? 'سجل التزامك بجرعات الأدوية الموصوفة بدقة للحفاظ على صحة الكلى والأوعية'
-                  : 'Track each prescribed dose with exact drug name, dose, and schedule'}
+                {isAr ? 'اضغط «أخذته» بعد كل دواء' : 'Tap “I took it” after each medicine'}
               </p>
             </div>
           </div>
@@ -282,14 +281,9 @@ export function PatientMedicationSection({
                 {/* Medication Details */}
                 <div className="space-y-1 min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-black text-slate-900 text-base leading-snug">
+                    <h3 className="font-black text-slate-900 text-lg leading-snug">
                       {isAr && slot.medicationNameAr ? slot.medicationNameAr : slot.medicationName}
                     </h3>
-                    {isAr && slot.medicationNameAr && slot.medicationName !== slot.medicationNameAr && (
-                      <span className="text-xs font-semibold text-slate-500">
-                        ({slot.medicationName})
-                      </span>
-                    )}
                     {!isAr && slot.medicationNameAr && (
                       <span className="text-xs font-semibold text-slate-400 font-arabic">
                         ({slot.medicationNameAr})
@@ -297,32 +291,34 @@ export function PatientMedicationSection({
                     )}
                     {isCompleted && (
                       <Badge variant="success" size="sm" className="font-bold">
-                        {isAr ? 'تم التناول ✅' : 'Taken ✅'}
+                        {isAr ? 'أخذته ✅' : 'Taken ✅'}
                       </Badge>
                     )}
                     {isSkipped && (
                       <Badge variant="neutral" size="sm" className="font-bold">
-                        {isAr ? 'تم التخطي ⏭️' : 'Skipped ⏭️'}
+                        {isAr ? 'لم يُؤخذ' : 'Not taken'}
                       </Badge>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    <span className="inline-flex items-center gap-1 font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
-                      ⚖️ {isAr ? 'الجرعة:' : 'Dose:'}{' '}
-                      <strong className="font-mono text-[#1e6bb8]">{slot.dose}</strong>
-                    </span>
-
-                    <span className="inline-flex items-center gap-1 font-bold text-slate-700 bg-blue-50/70 text-[#1e6bb8] px-2.5 py-0.5 rounded-lg border border-blue-200">
-                      🕒{' '}
-                      <span className="font-mono">
-                        {slot.time || (isAr ? 'حسب الإرشادات' : 'As directed')}
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    {slot.dose && (
+                      <span className="inline-flex items-center gap-1 font-bold text-slate-800 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200">
+                        💊 {friendlyDose(slot.dose, isAr)}
                       </span>
-                    </span>
+                    )}
+                    {(() => {
+                      const ft = friendlyTime(slot.time);
+                      return (
+                        <span className="inline-flex items-center gap-1 font-bold text-[#1e6bb8] bg-blue-50 px-3 py-1 rounded-xl border border-blue-200">
+                          {ft ? `${ft.icon} ${isAr ? ft.ar : ft.en}` : `🕒 ${slot.time || (isAr ? 'حسب كلام الطبيب' : 'As directed')}`}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {(slot.instructions || slot.instructionsAr) && (
-                    <p className="text-xs text-slate-600 font-medium pt-1">
+                    <p className="text-sm text-slate-700 font-medium pt-1">
                       💡 {isAr ? slot.instructionsAr || slot.instructions : slot.instructions || slot.instructionsAr}
                     </p>
                   )}
@@ -336,7 +332,7 @@ export function PatientMedicationSection({
                       onClick={() => handleRecordDose(slot, 'done')}
                       aria-label={`${isAr ? 'تم تناول' : 'Mark taken'} ${slot.medicationName}`}
                       className={`
-                        min-h-[48px] px-4 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95
+                        flex-1 sm:flex-none min-h-[56px] px-5 py-3 rounded-2xl font-black text-base flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95
                         ${
                           isCompleted
                             ? 'bg-emerald-600 text-white ring-2 ring-emerald-300 shadow-md scale-102'
@@ -345,7 +341,7 @@ export function PatientMedicationSection({
                       `}
                     >
                       <span>✅</span>
-                      <span>{isAr ? 'تم' : 'Done'}</span>
+                      <span>{isAr ? 'أخذته' : 'I took it'}</span>
                     </button>
 
                     <button
@@ -353,7 +349,7 @@ export function PatientMedicationSection({
                       onClick={() => handleRecordDose(slot, 'skipped')}
                       aria-label={`${isAr ? 'تخطي' : 'Skip dose'} ${slot.medicationName}`}
                       className={`
-                        min-h-[48px] px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95
+                        min-h-[56px] px-4 py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95
                         ${
                           isSkipped
                             ? 'bg-slate-700 text-white ring-2 ring-slate-400 shadow-md'
@@ -361,8 +357,7 @@ export function PatientMedicationSection({
                         }
                       `}
                     >
-                      <span>⏭️</span>
-                      <span>{isAr ? 'تخطي' : 'Skip'}</span>
+                      <span>{isAr ? 'لم آخذه' : 'Not taken'}</span>
                     </button>
                   </div>
                 )}

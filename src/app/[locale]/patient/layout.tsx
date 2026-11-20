@@ -36,7 +36,7 @@ function PatientBottomNav() {
     },
     {
       href: `/${locale}/patient/reminders`,
-      label: tNav('reminders') || (isAr ? 'التنبيهات' : 'Reminders'),
+      label: isAr ? 'المواعيد' : 'Reminders',
       emoji: '🔔',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -47,7 +47,7 @@ function PatientBottomNav() {
     },
     {
       href: `/${locale}/patient/log`,
-      label: tNav('logs') || (isAr ? 'السجل' : 'Log'),
+      label: isAr ? 'سجلّي' : 'My log',
       emoji: '📝',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -58,7 +58,7 @@ function PatientBottomNav() {
     },
     {
       href: `/${locale}/patient/tips`,
-      label: tNav('coachingTips') || (isAr ? 'النصائح' : 'Tips'),
+      label: isAr ? 'نصائح' : 'Tips',
       emoji: '💡',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -69,7 +69,7 @@ function PatientBottomNav() {
     },
     {
       href: `/${locale}/patient/profile`,
-      label: tNav('profile') || (isAr ? 'حسابي' : 'Profile'),
+      label: isAr ? 'حسابي' : 'Profile',
       emoji: '👤',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

@@ -37,7 +37,6 @@ import type {
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { DialysisDayCard } from '@/components/DialysisDayCard';
 import { PushAlertsCard } from '@/components/PushAlertsCard';
 import { EnableAlertsPrompt } from '@/components/patient/EnableAlertsPrompt';
 import { DoctorNotificationsInboxModal } from '@/components/DoctorNotificationsInboxModal';
@@ -48,6 +47,8 @@ import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
 import { PatientCoachingAvatar } from '@/components/PatientCoachingAvatar';
 import { PatientAdherenceSurveySection } from '@/components/patient/PatientAdherenceSurveySection';
 import { PatientNotificationPermissionBanner } from '@/components/patient/PatientNotificationPermissionBanner';
+import { PatientTodayCard } from '@/components/patient/PatientTodayCard';
+import { mlToCups } from '@/lib/plain-words';
 import { scheduleLocalReminder, cancelScheduledReminder } from '@/lib/notifications';
 
 function formatNotifTime(sentAt?: Date | string | null, isAr: boolean = false): string {
@@ -393,10 +394,6 @@ export default function PatientDashboardPage() {
     });
   };
 
-  // SVG circular progress calculation
-  const circleRadius = 58;
-  const circleCircumference = 2 * Math.PI * circleRadius;
-  const strokeDashoffset = circleCircumference - (circleCircumference * adherenceScore) / 100;
 
   // Name extraction (first name localized)
   const patientFirstName = useMemo(() => {
@@ -531,199 +528,45 @@ export default function PatientDashboardPage() {
         </div>
       )}
 
-      {/* Device Notification Permission Banner (Allows device push/local notifications & troubleshooting) */}
-      <PatientNotificationPermissionBanner onPermissionGranted={() => loadData()} />
-      <PushAlertsCard language={isAr ? 'ar' : 'en'} />
-      {user?.uid && <EnableAlertsPrompt uid={user.uid} language={isAr ? 'ar' : 'en'} />}
+      {/* Today: dialysis or rest day */}
+      <PatientTodayCard schedule={patientRecord?.dialysisSchedule} isAr={isAr} />
 
-      {/* Adherence Survey Section & First Login Pop-Up Modal (R7 Questionnaire) */}
-      <PatientAdherenceSurveySection patientId={activePatientId} autoOpenOnFirstLogin={true} />
-
-      {/* Patient Coaching Avatar Hero Placement (R1, R2, R3, R4) */}
-      <PatientCoachingAvatar
+      {/* Prescribed Named Medications Section (R1) */}
+      <PatientMedicationSection
         patientId={activePatientId}
-        dialysisSchedule={patientRecord?.dialysisSchedule}
-        dryWeightKg={dryWeightKg}
-        adherenceMetrics={{
-          adherenceScore,
-          fluidPercentage: fluidStats.percentage,
-          medicationsTaken: medStats.completed,
-          medicationsTotal: medStats.total,
-          mealsLogged: dietStats.mealsLogged,
-        }}
+        onAdherenceLogged={() => loadData()}
       />
 
-      {/* Dialysis Day vs Non-Dialysis Day Smart Awareness Card */}
-      <DialysisDayCard dialysisSchedule={patientRecord?.dialysisSchedule} />
-
-      {/* Today's Overall Progress Ring */}
-      <Card className="p-6 bg-white border border-slate-200/90 rounded-3xl shadow-xs text-center">
-        <div className="flex flex-col items-center justify-center">
-          <div className="relative w-40 h-40 flex items-center justify-center my-2">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
-              {/* Background track */}
-              <circle
-                cx="70"
-                cy="70"
-                r={circleRadius}
-                className="stroke-slate-100"
-                strokeWidth="12"
-                fill="transparent"
-              />
-              {/* Animated Progress ring */}
-              <circle
-                cx="70"
-                cy="70"
-                r={circleRadius}
-                className="transition-all duration-700 ease-out"
-                stroke={adherenceScore >= 80 ? '#10b981' : adherenceScore >= 50 ? '#1e6bb8' : '#ef4444'}
-                strokeWidth="12"
-                strokeDasharray={circleCircumference}
-                strokeDashoffset={strokeDashoffset}
-                strokeLinecap="round"
-                fill="transparent"
-              />
-            </svg>
-
-            <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-3xl font-black text-slate-900 tracking-tight">
-                {adherenceScore}%
-              </span>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                {tPatient('todayAdherence') || (isAr ? 'التزام اليوم' : 'Adherence')}
-              </span>
-            </div>
-          </div>
-
-          <p className="text-sm text-slate-600 mt-2 font-medium">
-            {processedReminders.length === 0
-              ? (isAr ? 'لا توجد مهام مجدولة لهذا اليوم' : 'No tasks scheduled for today')
-              : adherenceScore === 100
-              ? (isAr ? '🎉 أحسنت! أتممت جميع المهام المقررة لليوم' : '🎉 Fantastic! All reminders completed today')
-              : (isAr ? 'أكمل ما تبقى من التنبيهات لتحقيق 100%' : 'Complete your pending tasks to reach 100%')}
-          </p>
-        </div>
-      </Card>
-
-      {/* Quick Status Cards (3 cards in a row) */}
-      <div className="grid grid-cols-3 gap-2.5">
-        {/* TTT Status Card: "X/Y medications taken" with green/yellow/red indicator */}
-        <Link
-          href={`/${locale}/patient/log?tab=medication`}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs hover:border-[#1e6bb8] transition-all flex flex-col justify-between min-h-[118px]"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-2xl" role="img" aria-label="Medication">💊</span>
-            <span
-              className={`w-3 h-3 rounded-full ${
-                medStats.total > 0 && medStats.completed === medStats.total
-                  ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                  : medStats.completed > 0
-                  ? 'bg-amber-500 ring-2 ring-amber-200'
-                  : medStats.total === 0
-                  ? 'bg-slate-300'
-                  : 'bg-red-500 ring-2 ring-red-200'
-              }`}
-              title={
-                medStats.completed === medStats.total
-                  ? 'Complete'
-                  : medStats.completed > 0
-                  ? 'In Progress'
-                  : 'Needs Attention'
-              }
-            />
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">
-              {isAr ? 'أدوية TTT' : 'TTT Meds'}
-            </p>
-            <p className="text-base font-black text-slate-900 leading-tight">
-              {medStats.completed}/{medStats.total}
-            </p>
-            <p className="text-[10px] text-slate-500 font-semibold leading-tight mt-0.5">
-              {isAr ? 'أدوية متناولة' : 'medications taken'}
-            </p>
-          </div>
-        </Link>
-
-        {/* Fluid Status Card: "X mL / Y mL limit" with progress bar */}
+      {/* Today so far, in plain words */}
+      <section data-testid="patient-today-summary" className="grid grid-cols-2 gap-2.5">
         <Link
           href={`/${locale}/patient/log?tab=fluid`}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs hover:border-[#1e6bb8] transition-all flex flex-col justify-between min-h-[118px]"
+          className={`p-3 rounded-2xl border-2 flex flex-col items-center text-center gap-1 min-h-[112px] justify-center active:scale-95 transition ${
+            fluidStats.isOver ? 'bg-red-50 border-red-300' : fluidStats.isWarning ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200'
+          }`}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-2xl" role="img" aria-label="Fluid">💧</span>
-            <span
-              className={`w-3 h-3 rounded-full ${
-                fluidStats.percentage <= 70
-                  ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                  : fluidStats.percentage <= 90
-                  ? 'bg-amber-500 ring-2 ring-amber-200'
-                  : 'bg-red-500 ring-2 ring-red-200'
-              }`}
-              title={`${fluidStats.percentage}% consumed`}
-            />
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">
-              {isAr ? 'السوائل' : 'Fluid'}
-            </p>
-            <p className="text-sm font-black text-slate-900 truncate leading-tight">
-              {fluidStats.totalConsumed} / {fluidStats.limit}
-              <span className="text-[10px] font-semibold text-slate-500 ms-0.5">mL</span>
-            </p>
-            <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1.5 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  fluidStats.percentage <= 70
-                    ? 'bg-emerald-500'
-                    : fluidStats.percentage <= 90
-                    ? 'bg-amber-500'
-                    : 'bg-red-500'
-                }`}
-                style={{ width: `${Math.min(100, fluidStats.percentage)}%` }}
-              />
-            </div>
-          </div>
+          <span className="text-3xl" aria-hidden="true">💧</span>
+          <span className="text-sm font-black text-slate-900 leading-snug">
+            {isAr
+              ? `شربت ${mlToCups(fluidStats.totalConsumed)} من ${mlToCups(fluidStats.limit)} أكواب`
+              : `${mlToCups(fluidStats.totalConsumed)} of ${mlToCups(fluidStats.limit)} cups`}
+          </span>
+          {fluidStats.isOver && (
+            <span className="text-xs font-bold text-red-700">{isAr ? 'توقف عن الشرب اليوم' : 'Stop drinking today'}</span>
+          )}
         </Link>
-
-        {/* Diet Status Card: "X/Y meals logged" with green/yellow/red indicator */}
         <Link
           href={`/${locale}/patient/log?tab=diet`}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs hover:border-[#1e6bb8] transition-all flex flex-col justify-between min-h-[118px]"
+          className="bg-white p-3 rounded-2xl border-2 border-slate-200 flex flex-col items-center text-center gap-1 min-h-[112px] justify-center active:scale-95 transition"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-2xl" role="img" aria-label="Diet">🥗</span>
-            <span
-              className={`w-3 h-3 rounded-full ${
-                dietStats.mealsLogged >= 3
-                  ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                  : dietStats.mealsLogged > 0
-                  ? 'bg-amber-500 ring-2 ring-amber-200'
-                  : 'bg-red-500 ring-2 ring-red-200'
-              }`}
-              title={
-                dietStats.mealsLogged >= 3
-                  ? 'Goal reached'
-                  : dietStats.mealsLogged > 0
-                  ? 'In progress'
-                  : 'Not logged'
-              }
-            />
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">
-              {isAr ? 'الوجبات' : 'Diet'}
-            </p>
-            <p className="text-base font-black text-slate-900 leading-tight">
-              {dietStats.mealsLogged}/{dietStats.targetMeals}
-            </p>
-            <p className="text-[10px] text-slate-500 font-semibold leading-tight mt-0.5">
-              {isAr ? 'وجبات مسجلة' : 'meals logged'}
-            </p>
-          </div>
+          <span className="text-3xl" aria-hidden="true">🥗</span>
+          <span className="text-sm font-black text-slate-900 leading-snug">
+            {isAr
+              ? `${dietStats.mealsLogged} من ${dietStats.targetMeals} وجبات`
+              : `${dietStats.mealsLogged} of ${dietStats.targetMeals} meals`}
+          </span>
         </Link>
-      </div>
+      </section>
 
       {/* Next Upcoming Reminder */}
       <Card className="p-5 border-l-4 border-l-[#1e6bb8] rtl:border-l-0 rtl:border-r-4 rtl:border-r-[#1e6bb8] bg-white rounded-2xl shadow-xs">
@@ -772,109 +615,43 @@ export default function PatientDashboardPage() {
         </div>
       </Card>
 
-      {/* Quick Action Buttons (Large buttons linking to respective forms) */}
+      {/* Big log buttons: medicine, water, food */}
       <section className="space-y-2">
-        <h2 className="text-sm font-black text-slate-700 uppercase tracking-wider px-1">
-          {tPatient('quickActions') || (isAr ? 'تسجيل سريع' : 'Quick Actions')}
+        <h2 className="text-lg font-black text-slate-900 px-1">
+          {isAr ? 'سجّل الآن' : 'Log now'}
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-3 gap-2.5">
           <Link
             href={`/${locale}/patient/log?tab=medication`}
-            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:bg-blue-50/50 hover:border-[#1e6bb8] active:scale-95 transition-all min-h-[58px]"
+            className="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl bg-white border-2 border-slate-200 active:scale-95 transition min-h-[96px]"
           >
-            <span className="text-xl">💊</span>
-            <span className="text-xs font-black text-slate-900 mt-1 text-center">
-              {isAr ? 'تسجيل الدواء' : 'Log Medication'}
-            </span>
+            <span className="text-3xl" aria-hidden="true">💊</span>
+            <span className="text-base font-black text-slate-900">{isAr ? 'دواء' : 'Medicine'}</span>
           </Link>
-
           <Link
             href={`/${locale}/patient/log?tab=fluid`}
-            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:bg-blue-50/50 hover:border-[#1e6bb8] active:scale-95 transition-all min-h-[58px]"
+            className="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl bg-white border-2 border-slate-200 active:scale-95 transition min-h-[96px]"
           >
-            <span className="text-xl">💧</span>
-            <span className="text-xs font-black text-slate-900 mt-1 text-center">
-              {isAr ? 'تسجيل السوائل' : 'Log Fluid'}
-            </span>
+            <span className="text-3xl" aria-hidden="true">💧</span>
+            <span className="text-base font-black text-slate-900">{isAr ? 'مياه' : 'Water'}</span>
           </Link>
-
           <Link
             href={`/${locale}/patient/log?tab=diet`}
-            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:bg-blue-50/50 hover:border-[#1e6bb8] active:scale-95 transition-all min-h-[58px]"
+            className="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl bg-white border-2 border-slate-200 active:scale-95 transition min-h-[96px]"
           >
-            <span className="text-xl">🥗</span>
-            <span className="text-xs font-black text-slate-900 mt-1 text-center">
-              {isAr ? 'تسجيل الوجبة' : 'Log Diet'}
-            </span>
+            <span className="text-3xl" aria-hidden="true">🥗</span>
+            <span className="text-base font-black text-slate-900">{isAr ? 'أكل' : 'Food'}</span>
           </Link>
-
-          <button
-            type="button"
-            onClick={() => setIsDialysisModalOpen(true)}
-            data-testid="patient-quick-record-dialysis-btn"
-            aria-label={isAr ? 'تسجيل جلسة غسيل كلوي اليوم (14 معيار)' : "Record Today's Dialysis Session (14 Fields)"}
-            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-blue-200/80 shadow-xs hover:bg-blue-50/70 hover:border-[#1e6bb8] active:scale-95 transition-all min-h-[58px] cursor-pointer"
-          >
-            <span className="text-xl">🩺</span>
-            <span className="text-xs font-black text-[#1e6bb8] mt-1 text-center">
-              {isAr ? 'جلسة الغسيل' : 'Dialysis Session'}
-            </span>
-          </button>
         </div>
-
-        {/* Read-only Patient Lab Results Shortcut */}
-        <Link
-          href={`/${locale}/patient/log?tab=labs`}
-          data-testid="patient-quick-view-labs-link"
-          className="flex items-center justify-between gap-3 px-4 py-3 min-h-[48px] rounded-2xl bg-teal-50/80 hover:bg-teal-100/80 border border-teal-200/80 transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl" aria-hidden="true">🔬</span>
-            <div>
-              <p className="text-xs sm:text-sm font-black text-teal-950">
-                {isAr ? 'نتائج التحاليل المخبرية (12 تحليل)' : 'Laboratory Test Results (12 Tests)'}
-              </p>
-              <p className="text-[11px] font-semibold text-teal-700">
-                {isAr ? 'مسجلة بواسطة الطبيب المعالج — للعرض فقط' : 'Recorded by your doctor — Read-only view'}
-              </p>
-            </div>
-          </div>
-          <span className="text-xs font-black text-teal-800 shrink-0">
-            {isAr ? 'عرض ←' : 'View →'}
-          </span>
-        </Link>
       </section>
 
+      {/* Device Notification Permission Banner (Allows device push/local notifications & troubleshooting) */}
+      <PatientNotificationPermissionBanner onPermissionGranted={() => loadData()} />
+      <PushAlertsCard language={isAr ? 'ar' : 'en'} />
+      {user?.uid && <EnableAlertsPrompt uid={user.uid} language={isAr ? 'ar' : 'en'} />}
 
-      {/* Prescribed Named Medications Section (R1) */}
-      <PatientMedicationSection
-        patientId={activePatientId}
-        onAdherenceLogged={() => loadData()}
-      />
-
-      {/* Dialysis Treatment Session History (R2) */}
-      <DialysisSessionHistory
-        patientId={activePatientId}
-        patientName={isAr ? patientRecord?.fullNameAr || patientRecord?.fullName : patientRecord?.fullName}
-        canRecord={true}
-        canManage={false}
-        onRecordClick={() => setIsDialysisModalOpen(true)}
-      />
-
-      {/* Bilingual Clinical Laboratory Results Section (R5 — Read-Only for Patient) */}
-      <section id="patient-labs-section" className="space-y-2 scroll-mt-20">
-        <div className="px-3 py-2 rounded-xl bg-teal-50 border border-teal-200/80 text-xs font-bold text-teal-900 flex items-center gap-2">
-          <span aria-hidden="true">🔬</span>
-          <span>
-            {isAr
-              ? 'نتائج التحاليل المخبرية — يتم إدخالها وتحديثها بواسطة الطبيب المعالج فقط (عرض فقط)'
-              : 'Laboratory Results — Entered & updated exclusively by your doctor (Read-only)'}
-          </span>
-        </div>
-        <PatientLabResultsView
-          patientId={activePatientId}
-        />
-      </section>
+      {/* Adherence Survey Section & First Login Pop-Up Modal (R7 Questionnaire) */}
+      <PatientAdherenceSurveySection patientId={activePatientId} autoOpenOnFirstLogin={true} />
 
       {/* Daily Coaching Tip */}
       {dailyTip && (
@@ -907,6 +684,74 @@ export default function PatientDashboardPage() {
           </div>
         </Card>
       )}
+
+      {/* My medical file: session history and lab results, folded away */}
+      <details data-testid="patient-medical-file" className="group rounded-3xl bg-white border-2 border-slate-200 overflow-hidden">
+        <summary className="list-none cursor-pointer select-none flex items-center justify-between gap-3 p-5 min-h-[64px]">
+          <span className="flex items-center gap-3">
+            <span className="text-3xl" aria-hidden="true">📁</span>
+            <span>
+              <span className="block text-lg font-black text-slate-900">{isAr ? 'ملفي الطبي' : 'My medical file'}</span>
+              <span className="block text-sm text-slate-600">{isAr ? 'جلسات الغسيل ونتائج التحاليل' : 'Dialysis sessions and lab results'}</span>
+            </span>
+          </span>
+          <span className="text-xl text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true">▼</span>
+        </summary>
+        <div className="px-3 pb-4 space-y-4">
+          <div className="grid">
+          <button
+            type="button"
+            onClick={() => setIsDialysisModalOpen(true)}
+            data-testid="patient-quick-record-dialysis-btn"
+            aria-label={isAr ? 'تسجيل جلسة غسيل كلوي اليوم (14 معيار)' : "Record Today's Dialysis Session (14 Fields)"}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white border border-blue-200/80 shadow-xs hover:bg-blue-50/70 hover:border-[#1e6bb8] active:scale-95 transition-all min-h-[58px] cursor-pointer"
+          >
+            <span className="text-xl">🩺</span>
+            <span className="text-xs font-black text-[#1e6bb8] mt-1 text-center">
+              {isAr ? 'جلسة الغسيل' : 'Dialysis Session'}
+            </span>
+          </button>
+          </div>
+      {/* Dialysis Treatment Session History (R2) */}
+      <DialysisSessionHistory
+        patientId={activePatientId}
+        patientName={isAr ? patientRecord?.fullNameAr || patientRecord?.fullName : patientRecord?.fullName}
+        canRecord={true}
+        canManage={false}
+        onRecordClick={() => setIsDialysisModalOpen(true)}
+      />
+
+      {/* Bilingual Clinical Laboratory Results Section (R5 — Read-Only for Patient) */}
+      <section id="patient-labs-section" className="space-y-2 scroll-mt-20">
+        <div className="px-3 py-2 rounded-xl bg-teal-50 border border-teal-200/80 text-xs font-bold text-teal-900 flex items-center gap-2">
+          <span aria-hidden="true">🔬</span>
+          <span>
+            {isAr
+              ? 'نتائج التحاليل المخبرية — يتم إدخالها وتحديثها بواسطة الطبيب المعالج فقط (عرض فقط)'
+              : 'Laboratory Results — Entered & updated exclusively by your doctor (Read-only)'}
+          </span>
+        </div>
+        <PatientLabResultsView
+          patientId={activePatientId}
+        />
+      </section>
+
+        </div>
+      </details>
+
+      {/* Patient Coaching Avatar Hero Placement (R1, R2, R3, R4) */}
+      <PatientCoachingAvatar
+        patientId={activePatientId}
+        dialysisSchedule={patientRecord?.dialysisSchedule}
+        dryWeightKg={dryWeightKg}
+        adherenceMetrics={{
+          adherenceScore,
+          fluidPercentage: fluidStats.percentage,
+          medicationsTaken: medStats.completed,
+          medicationsTotal: medStats.total,
+          mealsLogged: dietStats.mealsLogged,
+        }}
+      />
 
       {/* Interactive Doctor Notifications Inbox Modal */}
       <DoctorNotificationsInboxModal
