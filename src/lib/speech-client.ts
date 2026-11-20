@@ -1,5 +1,7 @@
 'use client';
 
+import { withTashkeel } from './spoken-arabic';
+
 /**
  * Speaking for the talking avatar.
  *  1. The phone's own Arabic voice (chosen: it sounds better than Azure's).
@@ -50,7 +52,7 @@ function pickArabicVoice(): SpeechSynthesisVoice | null {
 function speakWithPhone(text: string, id: number): Promise<void> {
   return new Promise((resolve) => {
     if (id !== runId || typeof window === 'undefined' || !window.speechSynthesis) return resolve();
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(withTashkeel(text));
     const v = pickArabicVoice();
     if (v) u.voice = v;
     u.lang = v?.lang || 'ar-EG';

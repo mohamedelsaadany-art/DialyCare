@@ -9,6 +9,7 @@ for (const k of ['BLOB_READ_WRITE_TOKEN', 'VERCEL_OIDC_TOKEN', 'BLOB_STORE_ID', 
 import { todayScript, medsScript, labsScript, tipScript } from '../avatar-scripts';
 import { DRAFT_LAB_ADVICE, mergeLabAdvice, approvedLabAdvice, isLabAdviceKey } from '../lab-advice';
 import { buildSsml, ttsProviders } from '../tts-ssml';
+import { withTashkeel } from '../spoken-arabic';
 import { clampAvatarPosition } from '../../components/patient/TalkingAvatar';
 import { CLINICAL_12_LAB_TESTS } from '../../components/admin/PatientLabResultsModal';
 import { saveCloudAccounts } from '../cloud-store';
@@ -77,6 +78,11 @@ async function run(): Promise<void> {
 
   // ---- SSML is escaped ----
   ok(buildSsml('a < b & "c"', 'ar-EG-SalmaNeural').includes('a &lt; b &amp; &quot;c&quot;'), 'text escaped in SSML');
+
+  // ---- diacritics for the spoken copy only ----
+  eq(withTashkeel('النهارده يوم راحة. جلستك الجاية بكرة.'), 'النَّهَارْدَه يُوم رَاحَة. جَلْسِتَك الجَّايَّة بُكْرَة.', 'known words get diacritics');
+  eq(withTashkeel('سيفيلامير، الصبح الساعة 8'), 'سيفيلامير، الصُّبْح السَّاعَة 8', 'medicine names and numbers kept as written');
+  ok(todayScript({ firstName: 'أحمد', schedule: 'SMW', now: sat, nowMinutes: 600, meds: [], todayLogs: [], waterMl: 0, waterLimitMl: 0 }).every((p) => !/[ِْ]/.test(p)), 'on-screen text stays plain');
 
   // ---- which voice ----
   eq(ttsProviders(), [], 'no keys -> phone voice');
