@@ -44,7 +44,7 @@ import { PatientMedicationSection } from '@/components/patient/PatientMedication
 import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
-import { PatientCoachingAvatar } from '@/components/PatientCoachingAvatar';
+import { TalkingAvatar } from '@/components/patient/TalkingAvatar';
 import { PatientAdherenceSurveySection } from '@/components/patient/PatientAdherenceSurveySection';
 import { PatientNotificationPermissionBanner } from '@/components/patient/PatientNotificationPermissionBanner';
 import { PatientTodayCard } from '@/components/patient/PatientTodayCard';
@@ -739,19 +739,8 @@ export default function PatientDashboardPage() {
         </div>
       </details>
 
-      {/* Patient Coaching Avatar Hero Placement (R1, R2, R3, R4) */}
-      <PatientCoachingAvatar
-        patientId={activePatientId}
-        dialysisSchedule={patientRecord?.dialysisSchedule}
-        dryWeightKg={dryWeightKg}
-        adherenceMetrics={{
-          adherenceScore,
-          fluidPercentage: fluidStats.percentage,
-          medicationsTaken: medStats.completed,
-          medicationsTotal: medStats.total,
-          mealsLogged: dietStats.mealsLogged,
-        }}
-      />
+      {/* Talking avatar: floats over the page, can be dragged, tap to talk */}
+      <TalkingAvatar patientId={activePatientId} patient={patientRecord} firstName={patientFirstName} isAr={isAr} />
 
       {/* Interactive Doctor Notifications Inbox Modal */}
       <DoctorNotificationsInboxModal

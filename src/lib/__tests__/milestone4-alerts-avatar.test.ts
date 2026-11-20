@@ -438,7 +438,7 @@ registerTest('7.3: Patient Coaching Avatar is integrated into both patient dashb
   const dashContent = fs.readFileSync(dashPagePath, 'utf8');
 
   assert.ok(logContent.includes('<PatientCoachingAvatar'), 'Avatar must be rendered in patient log page');
-  assert.ok(dashContent.includes('<PatientCoachingAvatar'), 'Avatar must be rendered in patient dashboard page');
+  assert.ok(dashContent.includes('<TalkingAvatar'), 'Floating talking avatar must be rendered in patient dashboard page');
 });
 
 // =============================================================

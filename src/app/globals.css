@@ -209,3 +209,17 @@ textarea {
     scroll-behavior: auto !important;
   }
 }
+
+/* Talking avatar: the mouth opens and closes while it speaks */
+.avatar-talking .avatar-mouth {
+  transform-box: fill-box;
+  transform-origin: center top;
+  animation: avatar-talk 0.26s ease-in-out infinite alternate;
+}
+@keyframes avatar-talk {
+  from { transform: scaleY(0.55); }
+  to { transform: scaleY(1.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-talking .avatar-mouth { animation-duration: 0.6s; }
+}

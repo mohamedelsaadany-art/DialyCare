@@ -175,6 +175,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       icon: TipsIcon,
     },
     {
+      href: `/${locale}/admin/lab-advice`,
+      exact: false,
+      label: isRtl ? 'نصائح التحاليل' : 'Lab advice',
+      icon: TipsIcon,
+    },
+    {
       href: `/${locale}/admin/settings`,
       exact: false,
       label: tNav('settings') || (isRtl ? 'الإعدادات' : 'Settings'),

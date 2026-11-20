@@ -520,29 +520,18 @@ test('3.3: Fluid Alert DOM markers and touch targets in patient/log/page.tsx', (
 // SUITE 4: DUAL PORTAL MOUNTING INTEGRITY (R4)
 // ============================================================================
 
-test('4.1: Patient Dashboard (patient/page.tsx) imports and mounts PatientCoachingAvatar', () => {
+test('4.1: Patient Dashboard (patient/page.tsx) mounts the floating talking avatar', () => {
   const code = fs.readFileSync(
     path.join(PROJECT_ROOT, 'src/app/[locale]/patient/page.tsx'),
     'utf8'
   );
-
-  // Check import statement
   assert.ok(
-    code.includes("import { PatientCoachingAvatar } from '@/components/PatientCoachingAvatar'") ||
-      code.includes('PatientCoachingAvatar'),
-    'patient/page.tsx must import PatientCoachingAvatar'
+    code.includes("import { TalkingAvatar } from '@/components/patient/TalkingAvatar'"),
+    'patient/page.tsx must import TalkingAvatar'
   );
-
-  // Check JSX mounting
   assert.ok(
-    code.includes('<PatientCoachingAvatar'),
-    'patient/page.tsx must mount <PatientCoachingAvatar />'
-  );
-
-  // Check props passed
-  assert.ok(
-    code.includes('patientId=') && code.includes('adherenceMetrics='),
-    'patient/page.tsx must supply patientId and adherenceMetrics props to PatientCoachingAvatar'
+    code.includes('<TalkingAvatar') && code.includes('patientId={activePatientId}'),
+    'patient/page.tsx must mount <TalkingAvatar patientId=... />'
   );
 });
 

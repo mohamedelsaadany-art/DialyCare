@@ -184,7 +184,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
 
           {/* Nose & Friendly Smile */}
           <path d="M50 42V47L48 48" stroke="#d49b78" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M43 51C45 55 55 55 57 51" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
+          <path className="avatar-mouth" d="M43 51C45 55 55 55 57 51" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
           <circle cx="38" cy="48" r="2.5" fill="#f43f5e" opacity="0.3" />
           <circle cx="62" cy="48" r="2.5" fill="#f43f5e" opacity="0.3" />
         </svg>
@@ -239,7 +239,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
             fill="#44403c"
             opacity="0.85"
           />
-          <path d="M44 52C46 56 54 56 56 52" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+          <path className="avatar-mouth" d="M44 52C46 56 54 56 56 52" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
         </svg>
       );
 
@@ -289,7 +289,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
 
           {/* Nose & Warm Smile */}
           <path d="M50 42V48L48 49" stroke="#b68968" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M43 53C45 57 55 57 57 53" stroke="#991b1b" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
+          <path className="avatar-mouth" d="M43 53C45 57 55 57 57 53" stroke="#991b1b" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
         </svg>
       );
 
@@ -337,7 +337,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
 
           {/* Nose & Big Cheerful Smile */}
           <path d="M50 41V46H48" stroke="#d49b78" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M41 49C44 56 56 56 59 49" stroke="#b91c1c" strokeWidth="2.2" strokeLinecap="round" fill="#ffffff" />
+          <path className="avatar-mouth" d="M41 49C44 56 56 56 59 49" stroke="#b91c1c" strokeWidth="2.2" strokeLinecap="round" fill="#ffffff" />
           <circle cx="37" cy="47" r="3" fill="#f43f5e" opacity="0.3" />
           <circle cx="63" cy="47" r="3" fill="#f43f5e" opacity="0.3" />
         </svg>
@@ -388,7 +388,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
 
           {/* Nose & Warm Gentle Smile */}
           <path d="M50 44V49H48" stroke="#d49b78" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M43 53C45 57 55 57 57 53" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
+          <path className="avatar-mouth" d="M43 53C45 57 55 57 57 53" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
           <circle cx="39" cy="50" r="3" fill="#f43f5e" opacity="0.35" />
           <circle cx="61" cy="50" r="3" fill="#f43f5e" opacity="0.35" />
         </svg>
@@ -434,7 +434,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
 
           {/* Nose & Smile */}
           <path d="M50 44V49L48 50" stroke="#d49b78" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M44 54C46 58 54 58 56 54" stroke="#991b1b" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
+          <path className="avatar-mouth" d="M44 54C46 58 54 58 56 54" stroke="#991b1b" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
           <circle cx="39" cy="50" r="2.8" fill="#f43f5e" opacity="0.4" />
           <circle cx="61" cy="50" r="2.8" fill="#f43f5e" opacity="0.4" />
         </svg>
@@ -479,7 +479,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
 
           {/* Nose & Peaceful Smile */}
           <path d="M50 44V49L48 50" stroke="#c49774" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M43 54C45 58 55 58 57 54" stroke="#991b1b" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
+          <path className="avatar-mouth" d="M43 54C45 58 55 58 57 54" stroke="#991b1b" strokeWidth="2" strokeLinecap="round" fill="#ffffff" />
         </svg>
       );
 
@@ -523,7 +523,7 @@ export function PatientAvatarSvg({ presetId, className = 'w-full h-full', gender
 
           {/* Nose & Big Cheerful Smile */}
           <path d="M50 43V48H48" stroke="#d49b78" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M42 51C45 58 55 58 58 51" stroke="#b91c1c" strokeWidth="2.2" strokeLinecap="round" fill="#ffffff" />
+          <path className="avatar-mouth" d="M42 51C45 58 55 58 58 51" stroke="#b91c1c" strokeWidth="2.2" strokeLinecap="round" fill="#ffffff" />
           <circle cx="38" cy="49" r="3" fill="#f43f5e" opacity="0.4" />
           <circle cx="62" cy="49" r="3" fill="#f43f5e" opacity="0.4" />
         </svg>

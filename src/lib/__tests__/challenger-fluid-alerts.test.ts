@@ -558,7 +558,7 @@ export async function runChallengerM4Suite(): Promise<void> {
   check(logCode.includes('PatientCoachingAvatar'), 'Patient log page must include PatientCoachingAvatar');
 
   // 6.3: Patient Dashboard checks
-  check(dashCode.includes('PatientCoachingAvatar'), 'Patient dashboard page must include PatientCoachingAvatar');
+  check(dashCode.includes('<TalkingAvatar'), 'Patient dashboard page must include the floating TalkingAvatar');
   check(dashCode.includes('getPatientFluidLimits'), 'Patient dashboard page must use getPatientFluidLimits');
 
   // 6.4: Avatar Component checks
