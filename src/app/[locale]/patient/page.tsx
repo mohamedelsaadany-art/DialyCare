@@ -39,6 +39,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DialysisDayCard } from '@/components/DialysisDayCard';
 import { PushAlertsCard } from '@/components/PushAlertsCard';
+import { EnableAlertsPrompt } from '@/components/patient/EnableAlertsPrompt';
 import { DoctorNotificationsInboxModal } from '@/components/DoctorNotificationsInboxModal';
 import { PatientMedicationSection } from '@/components/patient/PatientMedicationSection';
 import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
@@ -533,6 +534,7 @@ export default function PatientDashboardPage() {
       {/* Device Notification Permission Banner (Allows device push/local notifications & troubleshooting) */}
       <PatientNotificationPermissionBanner onPermissionGranted={() => loadData()} />
       <PushAlertsCard language={isAr ? 'ar' : 'en'} />
+      {user?.uid && <EnableAlertsPrompt uid={user.uid} language={isAr ? 'ar' : 'en'} />}
 
       {/* Adherence Survey Section & First Login Pop-Up Modal (R7 Questionnaire) */}
       <PatientAdherenceSurveySection patientId={activePatientId} autoOpenOnFirstLogin={true} />
