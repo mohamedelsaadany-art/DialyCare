@@ -59,9 +59,12 @@ export function mergeLabAdvice(stored: LabAdviceMap | null | undefined): LabAdvi
   return out;
 }
 
-/** What a patient may hear: approved lines only. */
+/**
+ * What a patient hears. No approval needed any more (owner's decision,
+ * 20 Nov 2026): every line is spoken unless the super admin refused it.
+ */
 export function approvedLabAdvice(all: LabAdviceMap): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(all)) if (v.status === 'approved' && v.text.trim()) out[k] = v.text.trim();
+  for (const [k, v] of Object.entries(all)) if (v.status !== 'rejected' && v.text.trim()) out[k] = v.text.trim();
   return out;
 }

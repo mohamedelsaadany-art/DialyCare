@@ -9,7 +9,7 @@ import { speakParts, stopSpeaking } from '@/lib/speech-client';
 import type { LabAdviceMap, LabAdviceStatus } from '@/lib/lab-advice';
 
 const STATUS_LABEL: Record<LabAdviceStatus, { ar: string; en: string; cls: string }> = {
-  pending: { ar: 'بانتظار المراجعة', en: 'Waiting for review', cls: 'bg-amber-100 text-amber-800 border-amber-300' },
+  pending: { ar: 'شغالة (مش متراجعة)', en: 'In use (not reviewed)', cls: 'bg-amber-100 text-amber-800 border-amber-300' },
   approved: { ar: 'معتمدة', en: 'Approved', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
   rejected: { ar: 'مرفوضة', en: 'Refused', cls: 'bg-slate-200 text-slate-700 border-slate-300' },
 };
@@ -75,8 +75,8 @@ export default function LabAdviceReviewPage() {
         <h1 className="text-2xl font-bold text-slate-900">🧪 {isAr ? 'نصائح التحاليل للمساعد المتكلم' : 'Lab advice for the talking assistant'}</h1>
         <p className="text-sm text-slate-600 mt-1 max-w-3xl">
           {isAr
-            ? 'لما تحليل المريض يكون عالي أو قليل، المساعد بيقول الجملة دي بعد النتيجة. المريض بيسمع الجمل المعتمدة بس. عدّل الجملة لو حابب، وبعدين اعتمدها أو ارفضها.'
-            : 'When a result is high or low, the assistant says this line after it. Patients only hear approved lines. Edit a line if needed, then approve or refuse it.'}
+            ? 'لما تحليل المريض يكون عالي أو قليل، المساعد بيقول الجملة دي بعد النتيجة. المريض بيسمع كل الجمل دي، ماعدا اللي اترفضت. عدّل الجملة لو حابب، أو ارفضها عشان ما تتقالش.'
+            : 'When a result is high or low, the assistant says this line after it. Patients hear every line except refused ones. Edit a line, or refuse it so it is never said.'}
         </p>
         <div className="flex flex-wrap gap-2 mt-3 text-xs font-bold">
           {(Object.keys(STATUS_LABEL) as LabAdviceStatus[]).map((s) => (

@@ -214,8 +214,12 @@ export function TalkingAvatar({ patientId, patient, firstName, isAr }: { patient
             className="w-full h-full rounded-full bg-white border-4 border-[#1e6bb8] shadow-xl select-none cursor-grab active:cursor-grabbing"
           >
             {avatar}
-            <span className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#1e6bb8] text-white text-sm flex items-center justify-center shadow" aria-hidden="true">
-              🔊
+            <span
+              data-testid="talking-avatar-label"
+              className="absolute left-1/2 -translate-x-1/2 -bottom-3 whitespace-nowrap rounded-full bg-[#1e6bb8] text-white text-[13px] font-bold leading-none px-2.5 py-1.5 shadow-md"
+              aria-hidden="true"
+            >
+              🔊 {isAr ? 'اسمع هنا' : 'Listen'}
             </span>
           </button>
         </div>

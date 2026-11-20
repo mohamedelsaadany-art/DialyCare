@@ -21,7 +21,7 @@ async function readStored(): Promise<LabAdviceMap> {
 
 /**
  * GET /api/lab-advice
- *  - patients: { advice: { "phosphorus:high": "..." } }  approved lines only
+ *  - patients: { advice: { "phosphorus:high": "..." } }  every line except refused ones
  *  - staff:    { items: { key: { text, status, ... } } } every line with its review status
  */
 export async function GET(request: Request) {

@@ -70,7 +70,7 @@ async function run(): Promise<void> {
   // ---- advice drafts ----
   eq(Object.keys(DRAFT_LAB_ADVICE).length, 24, '12 tests x high/low');
   ok(CLINICAL_12_LAB_TESTS.every((tt) => isLabAdviceKey(`${tt.key}:high`) && isLabAdviceKey(`${tt.key}:low`)), 'a draft for every test');
-  eq(approvedLabAdvice(mergeLabAdvice({})), {}, 'drafts are not approved');
+  eq(Object.keys(approvedLabAdvice(mergeLabAdvice({}))).length, 24, 'all drafts are spoken without approval');
 
   // ---- position ----
   eq(clampAvatarPosition(-50, -50, 375, 812), { x: 8, y: 72 }, 'kept on screen (top-left)');
@@ -101,7 +101,7 @@ async function run(): Promise<void> {
 
   eq((await adviceGet(new Request(`${B}/api/lab-advice`))).status, 401, 'advice needs sign-in');
   let j = await (await adviceGet(new Request(`${B}/api/lab-advice`, { headers: auth('pat', 'patient') }))).json();
-  eq(j.advice, {}, 'patient hears nothing before approval');
+  eq(Object.keys(j.advice).length, 24, 'patient hears every line without approval');
   ok(!('items' in j), 'patient never sees drafts');
   j = await (await adviceGet(new Request(`${B}/api/lab-advice`, { headers: auth('doc', 'doctor') }))).json();
   ok(j.items['phosphorus:high'].status === 'pending' && j.canReview === false, 'doctor sees drafts but cannot review');
@@ -113,7 +113,8 @@ async function run(): Promise<void> {
   eq((await put(auth('boss', 'admin'), { key: 'phosphorus:high', text: 'قلل الجبن والألبان.', status: 'approved' })).status, 200, 'super admin approves an edited line');
   await put(auth('boss', 'admin'), { key: 'hemoglobin:low', text: DRAFT_LAB_ADVICE['hemoglobin:low'], status: 'rejected' });
   j = await (await adviceGet(new Request(`${B}/api/lab-advice`, { headers: auth('pat', 'patient') }))).json();
-  eq(j.advice, { 'phosphorus:high': 'قلل الجبن والألبان.' }, 'patient hears only the approved, edited line');
+  eq(j.advice['phosphorus:high'], 'قلل الجبن والألبان.', 'patient hears the edited line');
+  ok(!('hemoglobin:low' in j.advice), 'a refused line is never said');
 
   // ---- voice ----
   const tts = (h: Record<string, string>, body: unknown) => ttsPost(new Request(`${B}/api/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) }));
