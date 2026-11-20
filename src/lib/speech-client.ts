@@ -2,8 +2,8 @@
 
 /**
  * Speaking for the talking avatar.
- *  1. Azure's Egyptian voice through /api/tts (natural voice, cached clips).
- *  2. If that is not set up or fails: the phone's own Arabic voice.
+ *  1. The phone's own Arabic voice (chosen: it sounds better than Azure's).
+ *  2. Server voice (/api/tts) only if USE_SERVER_VOICE is turned back on.
  *  3. If the phone has no Arabic voice: nothing is said, the text stays on screen.
  * One <audio> element is reused, so after the first tap phones keep playing.
  */
@@ -14,6 +14,8 @@ const SILENCE =
 let audioEl: HTMLAudioElement | null = null;
 let runId = 0;
 let azureUnavailable = false;
+/** Off: the phone's own voice sounded better than Azure's for our patients. */
+const USE_SERVER_VOICE = false;
 
 function getAudio(): HTMLAudioElement {
   if (!audioEl) {
@@ -62,7 +64,7 @@ function speakWithPhone(text: string, id: number): Promise<void> {
 }
 
 async function speakWithAzure(text: string, id: number): Promise<boolean> {
-  if (azureUnavailable) return false;
+  if (!USE_SERVER_VOICE || azureUnavailable) return false;
   try {
     const res = await fetch('/api/tts', {
       method: 'POST',
