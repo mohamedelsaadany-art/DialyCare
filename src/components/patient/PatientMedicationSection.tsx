@@ -8,6 +8,7 @@ import {
   getPatientMedications,
   getAdherenceLogs,
   addAdherenceLog,
+  undoAdherenceLog,
 } from '@/lib/data-store';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -45,6 +46,8 @@ export function PatientMedicationSection({
 
   const [medications, setMedications] = useState<PatientMedication[]>([]);
   const [doseStatuses, setDoseStatuses] = useState<Record<string, AdherenceStatus | 'pending'>>({});
+  // slotKey -> ids of today's taps for that dose (newest first), so a second tap can undo them
+  const [doseLogIds, setDoseLogIds] = useState<Record<string, string[]>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Load medications & today's adherence logs
@@ -63,6 +66,10 @@ export function PatientMedicationSection({
 
     // Compute status map for each dose slot: key = `${medId}_${time}`
     const statuses: Record<string, AdherenceStatus | 'pending'> = {};
+    const logIds: Record<string, string[]> = {};
+    const newestFirst = [...logs].sort(
+      (a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime()
+    );
     activeMeds.forEach((med) => {
       const times =
         med.scheduleTimes && med.scheduleTimes.length > 0
@@ -73,7 +80,7 @@ export function PatientMedicationSection({
       times.forEach((t) => {
         const slotKey = `${med.id}_${t}`;
         // Find matching adherence log for this med & time, or any log for this med today
-        const matchingLog = logs.find((l) => {
+        const matching = newestFirst.filter((l) => {
           if (l.data && typeof l.data === 'object') {
             if (l.data.medicationId === med.id) {
               return !l.data.scheduleTime || l.data.scheduleTime === t;
@@ -81,6 +88,8 @@ export function PatientMedicationSection({
           }
           return false;
         });
+        const matchingLog = matching[0];
+        logIds[slotKey] = matching.map((l) => l.id);
 
         if (matchingLog) {
           statuses[slotKey] = matchingLog.status;
@@ -91,6 +100,7 @@ export function PatientMedicationSection({
     });
 
     setDoseStatuses(statuses);
+    setDoseLogIds(logIds);
   }, [patientId]);
 
   useEffect(() => {
@@ -152,6 +162,21 @@ export function PatientMedicationSection({
     if (!isEditable) return;
 
     const slotKey = `${slot.medicationId}_${slot.time}`;
+    const previousIds = doseLogIds[slotKey] || [];
+
+    // Second tap on the chosen button: undo it, back to "not chosen".
+    if (slot.status === newStatus) {
+      let last = null;
+      for (const id of previousIds) last = undoAdherenceLog(id) || last;
+      setDoseStatuses((prev) => ({ ...prev, [slotKey]: 'pending' }));
+      setDoseLogIds((prev) => ({ ...prev, [slotKey]: [] }));
+      if (last) onAdherenceLogged?.(last);
+      showToast(isAr ? 'تم الإلغاء' : 'Undone');
+      return;
+    }
+
+    // Switching between "took it" and "not taken": the old choice is cancelled first.
+    for (const id of previousIds) undoAdherenceLog(id);
 
     // Optimistically update UI
     setDoseStatuses((prev) => ({
@@ -174,6 +199,7 @@ export function PatientMedicationSection({
       },
     });
 
+    setDoseLogIds((prev) => ({ ...prev, [slotKey]: [newLog.id] }));
     onAdherenceLogged?.(newLog);
 
     if (newStatus === 'done') {
@@ -330,6 +356,7 @@ export function PatientMedicationSection({
                     <button
                       type="button"
                       onClick={() => handleRecordDose(slot, 'done')}
+                      aria-pressed={isCompleted}
                       aria-label={`${isAr ? 'تم تناول' : 'Mark taken'} ${slot.medicationName}`}
                       className={`
                         flex-1 sm:flex-none min-h-[56px] px-5 py-3 rounded-2xl font-black text-base flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95
@@ -347,6 +374,7 @@ export function PatientMedicationSection({
                     <button
                       type="button"
                       onClick={() => handleRecordDose(slot, 'skipped')}
+                      aria-pressed={isSkipped}
                       aria-label={`${isAr ? 'تخطي' : 'Skip dose'} ${slot.medicationName}`}
                       className={`
                         min-h-[56px] px-4 py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95

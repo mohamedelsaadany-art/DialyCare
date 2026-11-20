@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { resolveAdherenceLogs, buildUndoLog } from './adherence-undo';
 import { isRetiredDemoLab } from './retired-demo-ids';
 import type {
   Patient,
@@ -1168,13 +1169,20 @@ export function requestPatientReactivation(idOrPhone: string): boolean {
 // ==========================================
 // ADHERENCE LOGS
 // ==========================================
+/** Every stored log, including undone taps and undo records (for syncing). */
+export function getAllAdherenceLogsRaw(): AdherenceLog[] {
+  initDataStore();
+  return readStorage<AdherenceLog[]>(STORAGE_KEYS.ADHERENCE_LOGS, []);
+}
+
 export function getAdherenceLogs(
   patientId?: string,
   type?: ReminderType,
   dateRange?: { start?: Date | string; end?: Date | string }
 ): AdherenceLog[] {
   initDataStore();
-  let logs = readStorage<AdherenceLog[]>(STORAGE_KEYS.ADHERENCE_LOGS, []);
+  // Undone taps are hidden everywhere (see adherence-undo.ts).
+  let logs = resolveAdherenceLogs(readStorage<AdherenceLog[]>(STORAGE_KEYS.ADHERENCE_LOGS, []));
 
   if (patientId) {
     logs = logs.filter((log) => log.patientId === patientId);
@@ -1198,7 +1206,8 @@ export function getAdherenceLogs(
 
 export function addAdherenceLog(log: Omit<AdherenceLog, 'id'> | AdherenceLog): AdherenceLog {
   initDataStore();
-  const logs = getAdherenceLogs();
+  // Raw list: undo records and the records they cancel must stay stored and synced.
+  const logs = readStorage<AdherenceLog[]>(STORAGE_KEYS.ADHERENCE_LOGS, []);
   const newLog: AdherenceLog = {
     ...log,
     id: 'id' in log && log.id ? log.id : uuidv4(),
@@ -1208,6 +1217,14 @@ export function addAdherenceLog(log: Omit<AdherenceLog, 'id'> | AdherenceLog): A
   writeStorage(STORAGE_KEYS.ADHERENCE_LOGS, logs);
   dispatchStorageEvent('dialycare_adherence_updated');
   return newLog;
+}
+
+/** Cancel an earlier tap (e.g. "I took it" pressed again). Returns the undo record, or null if not found. */
+export function undoAdherenceLog(logId: string | undefined | null): AdherenceLog | null {
+  if (!logId) return null;
+  const original = getAdherenceLogs().find((l) => l.id === logId);
+  if (!original) return null;
+  return addAdherenceLog(buildUndoLog(original));
 }
 
 // ==========================================
@@ -2186,7 +2203,7 @@ function gatherLocalSyncCollections(): Pick<UnifiedCloudDatabase, SyncRowCollect
     labResults: getPatientLabResults(),
     medications: getPatientMedications(),
     notifications: getNotifications(),
-    adherenceLogs: getAdherenceLogs(),
+    adherenceLogs: getAllAdherenceLogsRaw(),
     fluidLogs: readStorage<FluidLog[]>(STORAGE_KEYS.FLUID_LOGS, []),
     dietLogs: readStorage<DietLog[]>(STORAGE_KEYS.DIET_LOGS, []),
     adherenceSurveys: getAdherenceSurveys(),

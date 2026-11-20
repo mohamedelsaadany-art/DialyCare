@@ -7,6 +7,7 @@ import {
   getReminders,
   getReminderTemplates,
   getAdherenceLogs,
+  undoAdherenceLog,
   getFluidLogs,
   getDietLogs,
   getPatients,
@@ -239,8 +240,21 @@ export default function PatientRemindersPage() {
     if (!selectedReminder) return;
 
     const activeId = patientRecord?.id || patientId;
+    const current = selectedReminder.status;
+    const chosen = current === 'done' || current === 'skipped';
 
     startTransition(() => {
+      // Second tap on the chosen answer: undo it, back to "not chosen".
+      if (chosen && current === newStatus) {
+        undoAdherenceLog(selectedReminder.logId);
+        fetchData();
+        setIsModalOpen(false);
+        setSelectedReminder(null);
+        return;
+      }
+      // Changing the answer: the old one is cancelled first.
+      if (chosen) undoAdherenceLog(selectedReminder.logId);
+
       recordReminderAdherence({
         patientId: activeId,
         reminderId: selectedReminder.id,
@@ -480,13 +494,20 @@ export default function PatientRemindersPage() {
                 : 'Did you successfully complete this health task?'}
             </p>
 
+            {(selectedReminder.status === 'done' || selectedReminder.status === 'skipped') && (
+              <p className="text-xs text-slate-500 text-center">
+                {isAr ? 'اضغط على اختيارك مرة تانية لإلغائه' : 'Tap your choice again to undo it'}
+              </p>
+            )}
+
             <div className="grid grid-cols-2 gap-3 pt-2">
               <Button
                 variant="success"
                 size="lg"
                 onClick={() => handleUpdateStatus('done')}
                 disabled={isPending}
-                className="font-extrabold min-h-[52px]"
+                aria-pressed={selectedReminder.status === 'done'}
+                className={`font-extrabold min-h-[52px] ${selectedReminder.status === 'done' ? 'ring-4 ring-emerald-300' : ''}`}
               >
                 {isAr ? 'أنجزته ✅' : 'I did it ✅'}
               </Button>
@@ -496,7 +517,8 @@ export default function PatientRemindersPage() {
                 size="lg"
                 onClick={() => handleUpdateStatus('skipped')}
                 disabled={isPending}
-                className="font-extrabold min-h-[52px] text-amber-700 hover:bg-amber-50 border-amber-200"
+                aria-pressed={selectedReminder.status === 'skipped'}
+                className={`font-extrabold min-h-[52px] text-amber-700 hover:bg-amber-50 border-amber-200 ${selectedReminder.status === 'skipped' ? 'ring-4 ring-amber-300 bg-amber-50' : ''}`}
               >
                 {isAr ? 'تخطيته ⏭️' : 'I skipped ⏭️'}
               </Button>

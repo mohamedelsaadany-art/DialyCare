@@ -16,6 +16,7 @@
 import type { UnifiedCloudDatabase, Patient, PatientMedication, CoachingTip } from './types';
 import { getCairoDate, scheduleIncludesWeekday } from './dialysis-day';
 import { friendlyTime, mlToCups } from './plain-words';
+import { resolveAdherenceLogs } from './adherence-undo';
 
 export const QUIET_START_HOUR = 23;
 export const QUIET_END_HOUR = 7;
@@ -138,7 +139,7 @@ export function planPatientAlerts({ db, now, state: prev, reachablePatientIds, r
 
   const trackingOldEnough = daysBetween(state.trackingSince || clock.ymd, clock.ymd) >= INACTIVE_AFTER_DAYS;
   const meds = (db.medications || []).filter((m) => m && m.isActive !== false);
-  const logs = db.adherenceLogs || [];
+  const logs = resolveAdherenceLogs(db.adherenceLogs || []);
   const fluid = db.fluidLogs || [];
   const tips = (db.coachingTips || []).filter((t: CoachingTip) => t && t.isActive !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const dayIndex = Math.floor(Date.parse(`${clock.ymd}T00:00:00Z`) / 86400000);
