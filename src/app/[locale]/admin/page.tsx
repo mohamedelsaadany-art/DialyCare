@@ -27,6 +27,7 @@ import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { AdminClinicalQuickPanel } from '@/components/admin/AdminClinicalQuickPanel';
+import { AdminAppUsageCard } from '@/components/admin/AdminAppUsageCard';
 import { STORAGE_KEYS, syncFullCloudData } from '@/lib/data-store';
 import type { Patient } from '@/lib/types';
 import {
@@ -408,6 +409,8 @@ export default function AdminDashboardPage() {
         showEmbeddedViews={false}
         onDataUpdated={loadDashboardData}
       />
+
+      <AdminAppUsageCard isAr={isRtl} />
 
       {/* Overview Cards Row (4 cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

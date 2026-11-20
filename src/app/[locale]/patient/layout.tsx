@@ -11,6 +11,7 @@ import { PatientAvatarSvg } from '@/components/avatar/PatientAvatarPresets';
 import { getPatientAvatar, syncFullCloudData, getNotifications } from '@/lib/data-store';
 import { filterPatientNotifications, checkAndTriggerLocalNotifications } from './patient-utils';
 import { startVisibilityAwarePolling } from '@/lib/visibility-poll';
+import { usePatientAppOpen } from '@/components/patient/usePatientAppOpen';
 
 interface PatientLayoutProps {
   children: React.ReactNode;
@@ -150,6 +151,8 @@ export default function PatientLayout({ children }: PatientLayoutProps) {
   const tCommon = useTranslations('common');
 
   const [headerAvatarId, setHeaderAvatarId] = useState<string>('male_mature_1');
+
+  usePatientAppOpen(!loading && !!user && user.role === 'patient' && user.status === 'active');
 
   useEffect(() => {
     if (!loading) {

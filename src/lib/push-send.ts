@@ -30,7 +30,8 @@ export function isPushConfigured(): boolean {
 
 export async function sendPushToSubscriptions(
   subs: PushSubscriptionRecord[],
-  payloadFor: (lang: 'ar' | 'en') => PushPayload
+  payloadFor: (lang: 'ar' | 'en') => PushPayload,
+  options: { ttlSeconds?: number } = {}
 ): Promise<PushSendResult> {
   const result: PushSendResult = { sent: 0, failed: 0, removed: 0 };
   if (!senderOverride && !isPushConfigured()) return { ...result, disabled: true };
@@ -44,7 +45,7 @@ export async function sendPushToSubscriptions(
       process.env.VAPID_PUBLIC_KEY as string,
       process.env.VAPID_PRIVATE_KEY as string
     );
-    send = (sub, payload) => webpush.sendNotification(sub, payload, { TTL: 6 * 60 * 60 });
+    send = (sub, payload) => webpush.sendNotification(sub, payload, { TTL: options.ttlSeconds ?? 6 * 60 * 60 });
   }
 
   await Promise.all(
