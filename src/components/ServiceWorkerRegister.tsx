@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { shouldSilentlyReload } from '@/lib/silent-update';
 
 export interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -49,6 +50,24 @@ export function ServiceWorkerRegister() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    let updateWaiting = false;
+    let hiddenAt = 0;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      const hiddenFor = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      if (shouldSilentlyReload(updateWaiting, hiddenFor)) {
+        window.location.reload();
+        return;
+      }
+      // Look for a new version whenever the patient returns to the app.
+      navigator.serviceWorker?.getRegistration?.().then((r) => r?.update().catch(() => {})).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     // 1. Register Service Worker with readyState check to avoid missing load event
     if ('serviceWorker' in navigator) {
       const registerSW = () => {
@@ -63,8 +82,8 @@ export function ServiceWorkerRegister() {
                     installingWorker.state === 'installed' &&
                     navigator.serviceWorker.controller
                   ) {
-                    console.log('[DialyCare SW] New update installed; ready on reload.');
-                    window.dispatchEvent(new CustomEvent('dialycare:sw-updated'));
+                    // No banner: the app reloads itself next time it comes back to the screen.
+                    updateWaiting = true;
                   }
                 };
               }
@@ -116,6 +135,7 @@ export function ServiceWorkerRegister() {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('dialycare:trigger-install', handleTriggerRequest);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 

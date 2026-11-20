@@ -3,7 +3,6 @@ import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/lib/auth-context';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { InstallPwaPrompt } from '@/components/InstallPwaPrompt';
-import { WaslityUpdateBanner } from '@/components/WaslityUpdateBanner';
 import { InAppNotificationToast } from '@/components/InAppNotificationToast';
 import './globals.css';
 
@@ -52,7 +51,6 @@ export default function RootLayout({
         <AuthProvider>
           <ServiceWorkerRegister />
           <Suspense fallback={null}>
-            <WaslityUpdateBanner />
             <InAppNotificationToast />
           </Suspense>
           <InstallPwaPrompt />
