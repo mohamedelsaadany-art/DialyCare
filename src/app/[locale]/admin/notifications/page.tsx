@@ -21,8 +21,8 @@ import {
   NotificationsIcon,
   SearchIcon,
   EyeIcon,
-  CheckCircleIcon,
 } from '../admin-icons';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 interface PrewrittenTemplate {
   key: string;
@@ -328,28 +328,10 @@ export default function NotificationsCenterPage() {
       </div>
 
       {/* Success Banner */}
-      {successToast && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 animate-in fade-in">
-          <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-            <CheckCircleIcon className="w-6 h-6" />
-          </div>
-          <div>
-            <h4 className="font-bold text-emerald-900 text-sm">
-              {tNotifications('sentSuccess') || (isRtl ? 'تم إرسال الإشعار بنجاح!' : 'Notification dispatched successfully!')}
-            </h4>
-            <p className="text-xs text-emerald-700 mt-0.5">
-              {isRtl ? 'تم تسليم الرسالة وحفظها في سجل التاريخ أدناه' : 'Alert saved and registered in history.'}
-            </p>
-          </div>
-        </div>
-      )}
+      <FloatingToast message={successToast ? (tNotifications('sentSuccess') || (isRtl ? 'تم إرسال الإشعار بنجاح!' : 'Notification dispatched successfully!')) : null} detail={isRtl ? 'تم تسليم الرسالة وحفظها في سجل التاريخ أدناه' : 'Alert saved and registered in history.'} onClose={() => setSuccessToast(false)} />
 
       {/* Error Banner */}
-      {errorMessage && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-medium animate-in fade-in">
-          {errorMessage}
-        </div>
-      )}
+      <FloatingToast tone="error" message={errorMessage} onClose={() => setErrorMessage('')} />
 
       {/* Compose Section Card */}
       <Card

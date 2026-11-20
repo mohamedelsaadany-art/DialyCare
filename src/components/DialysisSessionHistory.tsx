@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DialysisSessionModal } from '@/components/DialysisSessionModal';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 export interface DialysisSessionHistoryProps {
   patientId?: string;
@@ -162,19 +163,7 @@ export function DialysisSessionHistory({
   return (
     <Card className={`p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/90 shadow-xs ${className}`}>
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="mb-4 p-3.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-sm shadow-md flex items-center justify-between gap-2 animate-in slide-in-from-top-2">
-          <span>{toastMessage}</span>
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="min-h-[48px] min-w-[48px] flex items-center justify-center p-2 hover:bg-emerald-700 rounded-xl text-white cursor-pointer shrink-0"
-            aria-label={isAr ? 'إغلاق الإشعار' : 'Dismiss notification'}
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <FloatingToast message={toastMessage} onClose={() => setToastMessage(null)} />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">

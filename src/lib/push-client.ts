@@ -21,15 +21,25 @@ export function isPushSupported(): boolean {
   );
 }
 
-/** iPhone/iPad Safari only delivers push to an app opened from the home screen. */
-export function isIosNotInstalled(): boolean {
+export function isIosDevice(): boolean {
   if (typeof window === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  const ios = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
-  const standalone =
+  return /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+}
+
+/** Opened from the home-screen icon (no browser address bar). */
+export function isInstalledApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
     window.matchMedia?.('(display-mode: standalone)').matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return ios && !standalone;
+    window.matchMedia?.('(display-mode: fullscreen)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+/** iPhone/iPad Safari only delivers push to an app opened from the home screen. */
+export function isIosNotInstalled(): boolean {
+  return isIosDevice() && !isInstalledApp();
 }
 
 export async function hasActivePushSubscription(): Promise<boolean> {

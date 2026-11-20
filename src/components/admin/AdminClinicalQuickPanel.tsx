@@ -24,6 +24,7 @@ import {
   formatPatientFriendlyId,
   formatPatientOptionLabel,
 } from '@/app/[locale]/patient/patient-utils';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 export interface AdminClinicalQuickPanelProps {
   /** Optional externally controlled patient ID */
@@ -245,16 +246,7 @@ export function AdminClinicalQuickPanel({
               </div>
             </div>
 
-            {toastMsg && (
-              <div
-                role="status"
-                aria-live="polite"
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow-sm flex items-center gap-2"
-              >
-                <span>✓</span>
-                <span>{toastMsg}</span>
-              </div>
-            )}
+            <FloatingToast message={toastMsg} onClose={() => setToastMsg(null)} />
           </div>
 
           {/* Patient Search & Selection Row */}

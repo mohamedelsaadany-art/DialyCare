@@ -18,6 +18,7 @@ import {
   QUESTIONNAIRE_SECTIONS,
 } from '@/lib/questionnaire-data';
 import type { PatientSurveyStatus, AdherenceSurveySubmission } from '@/lib/types';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 export interface DoctorPatientSurveyManagerProps {
   patientId: string;
@@ -172,21 +173,7 @@ export function DoctorPatientSurveyManager({
       }
     >
       {/* Toast Confirmation */}
-      {toastMessage && (
-        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <span>✓</span>
-            <span>{toastMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="text-emerald-700 hover:text-emerald-900"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <FloatingToast message={toastMessage} onClose={() => setToastMessage(null)} />
 
       {/* Quick Status Info Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

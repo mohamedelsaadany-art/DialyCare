@@ -42,6 +42,7 @@ import {
   CheckCircleIcon,
   TrashIcon,
 } from '../admin-icons';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 interface PatientRow extends Patient {
   username: string;
@@ -746,23 +747,7 @@ export default function PatientsListPage() {
         </div>
       </div>
 
-      {clinicalToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow-sm flex items-center justify-between gap-2"
-        >
-          <span>✓ {clinicalToast}</span>
-          <button
-            type="button"
-            onClick={() => setClinicalToast(null)}
-            className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-lg hover:bg-emerald-700"
-            aria-label={isRtl ? 'إغلاق الإشعار' : 'Dismiss'}
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <FloatingToast message={clinicalToast} onClose={() => setClinicalToast(null)} />
 
       {/* Super Admin Roster View Tabs: Active vs 14-Day Archive */}
       {isSuperAdmin && (

@@ -5,6 +5,8 @@ import { useLocale } from 'next-intl';
 import { requestNotificationPermission, showLocalNotification } from '@/lib/notifications';
 import Button from '@/components/ui/Button';
 import { NOTIF_PERMISSION_GRANTED_EVENT } from '@/components/PushAlertsCard';
+import { isInstalledApp, isIosDevice } from '@/lib/push-client';
+import { alertHelpPlace, alertHelpSteps } from '@/lib/alert-help';
 
 export interface PatientNotificationPermissionBannerProps {
   compact?: boolean;
@@ -30,15 +32,24 @@ export function PatientNotificationPermissionBanner({
   const [testSent, setTestSent] = useState<boolean>(false);
   const [isRequesting, setIsRequesting] = useState<boolean>(false);
 
-  // Listen for permission changes or tab re-focus to keep status fresh
+  // Re-check when the patient comes back from the phone settings; if alerts
+  // were turned on there, register this phone straight away.
   useEffect(() => {
+    let last = typeof window !== 'undefined' && 'Notification' in window ? window.Notification.permission : 'default';
     const checkStatus = () => {
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        setPermission(window.Notification.permission);
-      }
+      if (typeof window === 'undefined' || !('Notification' in window)) return;
+      if (document.visibilityState === 'hidden') return;
+      const now = window.Notification.permission;
+      setPermission(now);
+      if (now === 'granted' && last !== 'granted') window.dispatchEvent(new Event(NOTIF_PERMISSION_GRANTED_EVENT));
+      last = now;
     };
     window.addEventListener('focus', checkStatus);
-    return () => window.removeEventListener('focus', checkStatus);
+    document.addEventListener('visibilitychange', checkStatus);
+    return () => {
+      window.removeEventListener('focus', checkStatus);
+      document.removeEventListener('visibilitychange', checkStatus);
+    };
   }, []);
 
   const handleRequestPermission = async () => {
@@ -141,10 +152,10 @@ export function PatientNotificationPermissionBanner({
           <summary className="cursor-pointer select-none px-3 py-2.5 font-bold text-slate-700 min-h-[44px] flex items-center">
             {isAr ? 'طريقة التشغيل (للممرض أو المرافق)' : 'How to turn on (for the nurse or a helper)'}
           </summary>
-          <ol className="list-decimal list-inside space-y-1 px-3 pb-3 text-slate-700">
-            <li>{isAr ? 'اضغط على 🔒 بجوار عنوان الموقع.' : 'Tap 🔒 next to the website address.'}</li>
-            <li>{isAr ? 'اختر الأذونات ثم الإشعارات.' : 'Open Permissions, then Notifications.'}</li>
-            <li>{isAr ? 'اختر «سماح» ثم اضغط الزر بالأسفل.' : 'Choose “Allow”, then tap the button below.'}</li>
+          <ol className="list-decimal list-inside space-y-1 px-3 pb-3 text-slate-700" data-testid="notification-denied-steps">
+            {alertHelpSteps(alertHelpPlace(isInstalledApp(), isIosDevice()), isAr).map((step) => (
+              <li key={step}>{step}</li>
+            ))}
           </ol>
           <div className="px-3 pb-3">
             <Button

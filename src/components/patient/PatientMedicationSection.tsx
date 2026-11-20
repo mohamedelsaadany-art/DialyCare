@@ -12,6 +12,7 @@ import {
 } from '@/lib/data-store';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 export interface PatientMedicationSectionProps {
   patientId: string;
@@ -223,19 +224,7 @@ export function PatientMedicationSection({
   return (
     <Card className={`p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/90 shadow-xs ${className}`}>
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="mb-4 p-3.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-sm shadow-md flex items-center justify-between animate-in slide-in-from-top-2">
-          <span>{toastMessage}</span>
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="p-1 hover:bg-emerald-700 rounded-lg text-white"
-            aria-label="Dismiss notification"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <FloatingToast message={toastMessage} onClose={() => setToastMessage(null)} />
 
       {/* Section Header */}
       {showTitle && (
@@ -314,16 +303,6 @@ export function PatientMedicationSection({
                         ({slot.medicationNameAr})
                       </span>
                     )}
-                    {isCompleted && (
-                      <Badge variant="success" size="sm" className="font-bold">
-                        {isAr ? 'أخذته ✅' : 'Taken ✅'}
-                      </Badge>
-                    )}
-                    {isSkipped && (
-                      <Badge variant="neutral" size="sm" className="font-bold">
-                        {isAr ? 'لم يُؤخذ' : 'Not taken'}
-                      </Badge>
-                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -361,7 +340,7 @@ export function PatientMedicationSection({
                         flex-1 sm:flex-none min-h-[56px] px-5 py-3 rounded-2xl font-black text-base flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95
                         ${
                           isCompleted
-                            ? 'bg-emerald-600 text-white ring-2 ring-emerald-300 shadow-md scale-102'
+                            ? 'bg-emerald-600 border-2 border-emerald-600 text-white ring-2 ring-emerald-300 shadow-md'
                             : 'bg-white border-2 border-emerald-600 text-emerald-700 hover:bg-emerald-50'
                         }
                       `}
@@ -379,7 +358,7 @@ export function PatientMedicationSection({
                         min-h-[56px] px-4 py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95
                         ${
                           isSkipped
-                            ? 'bg-slate-700 text-white ring-2 ring-slate-400 shadow-md'
+                            ? 'bg-slate-700 border border-slate-700 text-white ring-2 ring-slate-400 shadow-md'
                             : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                         }
                       `}

@@ -36,6 +36,7 @@ import { DialysisSessionModal } from '@/components/DialysisSessionModal';
 import { DialysisSessionHistory } from '@/components/DialysisSessionHistory';
 import { CLINICAL_RANGES, isInRange } from '@/lib/clinical-validation';
 import { PatientLabResultsView } from '@/components/patient/PatientLabResultsView';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 type LogTab = 'medication' | 'fluid' | 'diet' | 'dialysis' | 'labs';
 const VALID_LOG_TABS: LogTab[] = ['medication', 'fluid', 'diet', 'dialysis', 'labs'];
@@ -348,18 +349,7 @@ function LogContent() {
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
       {/* Toast / Banner Notification */}
-      {successBanner && (
-        <div className="p-4 rounded-2xl bg-emerald-600 text-white font-extrabold text-sm shadow-md flex items-center justify-between animate-in slide-in-from-top-2">
-          <span>{successBanner}</span>
-          <button
-            type="button"
-            onClick={() => setSuccessBanner(null)}
-            className="p-1 hover:bg-emerald-700 rounded-lg text-white"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <FloatingToast message={successBanner} onClose={() => setSuccessBanner(null)} />
 
       {/* Patient Coaching Avatar Character "Dr. Dialy" (R4) */}
       <PatientCoachingAvatar

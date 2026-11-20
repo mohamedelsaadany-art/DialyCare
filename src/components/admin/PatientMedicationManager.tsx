@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { FloatingToast } from '@/components/ui/FloatingToast';
 
 export interface PatientMedicationManagerProps {
   patientId?: string;
@@ -252,19 +253,7 @@ export function PatientMedicationManager({
   return (
     <Card className={`p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/90 shadow-xs ${className}`}>
       {/* Toast Alert */}
-      {toastMessage && (
-        <div className="mb-4 p-3.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-sm shadow-md flex items-center justify-between animate-in slide-in-from-top-2">
-          <span>{toastMessage}</span>
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="p-1 hover:bg-emerald-700 rounded-lg text-white"
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <FloatingToast message={toastMessage} onClose={() => setToastMessage(null)} />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
