@@ -590,7 +590,7 @@ export default function PatientDashboardPage() {
                 {nextReminder
                   ? nextReminder.title
                   : isAr
-                  ? 'أحسنت! لا توجد تنبيهات متبقية اليوم'
+                  ? 'برافو! مفيش تنبيهات تانية النهارده'
                   : 'All reminders done for today!'}
               </h3>
               {nextReminder && (

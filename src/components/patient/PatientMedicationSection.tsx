@@ -205,7 +205,7 @@ export function PatientMedicationSection({
     if (newStatus === 'done') {
       showToast(
         isAr
-          ? `أحسنت! تم تسجيل تناول جرعة ${slot.medicationNameAr || slot.medicationName} بنجاح ✅`
+          ? `برافو! اتسجل إنك أخدت ${slot.medicationNameAr || slot.medicationName} ✅`
           : `Recorded dose for ${slot.medicationName} as completed ✅`
       );
     } else {
