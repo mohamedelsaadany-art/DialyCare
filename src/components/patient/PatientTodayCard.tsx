@@ -25,7 +25,7 @@ export function PatientTodayCard({ schedule, isAr }: { schedule?: string; isAr: 
   const info = useMemo(() => dialysisDayInfo(schedule), [schedule]);
   const nextName =
     info.nextWeekday === null ? '' : isAr ? DAY_AR[info.nextWeekday] : DAY_EN[info.nextWeekday];
-  const whenAr = info.inDays === 1 ? 'غداً' : `يوم ${nextName}`;
+  const whenAr = info.inDays === 1 ? 'بكرة' : `يوم ${nextName}`;
   const whenEn = info.inDays === 1 ? 'tomorrow' : `on ${nextName}`;
 
   if (info.today) {
@@ -37,10 +37,10 @@ export function PatientTodayCard({ schedule, isAr }: { schedule?: string; isAr: 
         <span className="text-5xl shrink-0" aria-hidden="true">🩺</span>
         <div className="min-w-0">
           <h2 className="text-2xl font-black leading-snug">
-            {isAr ? 'اليوم عندك جلسة غسيل' : 'You have dialysis today'}
+            {isAr ? 'النهارده عندك جلسة غسيل' : 'You have dialysis today'}
           </h2>
           <p className="text-base text-blue-50 mt-1 leading-snug">
-            {isAr ? 'لا تنسَ موعدك في المركز.' : "Don't miss your session at the center."}
+            {isAr ? 'ما تنساش معادك في المركز.' : "Don't miss your session at the center."}
           </p>
         </div>
       </section>
@@ -55,11 +55,11 @@ export function PatientTodayCard({ schedule, isAr }: { schedule?: string; isAr: 
       <span className="text-5xl shrink-0" aria-hidden="true">🏠</span>
       <div className="min-w-0">
         <h2 className="text-2xl font-black text-emerald-950 leading-snug">
-          {isAr ? 'اليوم يوم راحة' : 'Rest day today'}
+          {isAr ? 'النهارده يوم راحة' : 'Rest day today'}
         </h2>
         {nextName && (
           <p className="text-base font-bold text-emerald-800 mt-1 leading-snug">
-            {isAr ? `جلستك القادمة ${whenAr}` : `Next dialysis ${whenEn}`}
+            {isAr ? `جلستك الجاية ${whenAr}` : `Next dialysis ${whenEn}`}
           </p>
         )}
       </div>
